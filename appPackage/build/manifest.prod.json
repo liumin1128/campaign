@@ -1,0 +1,62 @@
+{
+    "$schema": "https://developer.microsoft.com/en-us/json-schemas/teams/v1.26/MicrosoftTeams.schema.json",
+    "manifestVersion": "1.26",
+    "version": "1.0.0",
+    "id": "e204ba93-54af-43dc-9929-6db73c85f0b1",
+    "developer": {
+        "name": "My Team",
+        "websiteUrl": "https://example.com",
+        "privacyUrl": "https://example.com/privacy",
+        "termsOfUseUrl": "https://example.com/terms"
+    },
+    "name": {
+        "short": "TeamDemo",
+        "full": "Teams Demo App"
+    },
+    "description": {
+        "short": "A demo Teams tab app with multiple UI views",
+        "full": "A demo Teams application that shows a tab in group chats with home, tasks, messaging and settings views."
+    },
+    "icons": {
+        "outline": "outline.png",
+        "color": "color.png"
+    },
+    "accentColor": "#5B5FC7",
+    "configurableTabs": [
+        {
+            "configurationUrl": "https://campaign.react.mobi/tab/config",
+            "canUpdateConfiguration": true,
+            "scopes": [
+                "team",
+                "groupChat"
+            ],
+            "context": [
+                "channelTab",
+                "privateChatTab",
+                "meetingChatTab",
+                "meetingDetailsTab"
+            ]
+        }
+    ],
+    "staticTabs": [
+        {
+            "entityId": "home",
+            "name": "Demo Tab",
+            "contentUrl": "https://campaign.react.mobi/tab",
+            "websiteUrl": "https://campaign.react.mobi/tab",
+            "scopes": [
+                "personal",
+                "groupChat",
+                "team"
+            ]
+        }
+    ],
+    "permissions": [
+        "identity",
+        "messageTeamMembers"
+    ],
+    "validDomains": [
+        "campaign.react.mobi"
+    ],
+    "supportsChannelFeatures": "tier1"
+}
