@@ -49,15 +49,18 @@ async function sendViaWebhook(
   webhookUrl: string,
   sender?: string,
 ) {
-  // 校验 webhook URL 必须是 Microsoft Teams 的合法域名
+  // 校验 webhook URL 必须是 Microsoft Teams / Power Automate 的合法域名
   try {
     const url = new URL(webhookUrl);
-    if (
-      !url.hostname.endsWith(".webhook.office.com") &&
-      !url.hostname.endsWith(".office.com")
-    ) {
+    const validDomains = [
+      ".webhook.office.com",
+      ".office.com",
+      ".powerplatform.com",
+      ".logic.azure.com",
+    ];
+    if (!validDomains.some((d) => url.hostname.endsWith(d))) {
       return Response.json(
-        { error: "webhookUrl 必须是 Teams Webhook 地址" },
+        { error: "webhookUrl 必须是 Teams Webhook 或 Power Automate 地址" },
         { status: 400 },
       );
     }
@@ -66,34 +69,53 @@ async function sendViaWebhook(
   }
 
   try {
-    const payload = {
-      type: "message",
-      attachments: [
+    const url = new URL(webhookUrl);
+    const isPowerAutomate =
+      url.hostname.endsWith(".powerplatform.com") ||
+      url.hostname.endsWith(".logic.azure.com");
+
+    const adaptiveCard = {
+      $schema: "http://adaptivecards.io/schemas/adaptive-card.json",
+      type: "AdaptiveCard",
+      version: "1.4",
+      body: [
         {
-          contentType: "application/vnd.microsoft.card.adaptive",
-          content: {
-            $schema: "http://adaptivecards.io/schemas/adaptive-card.json",
-            type: "AdaptiveCard",
-            version: "1.4",
-            body: [
-              {
-                type: "TextBlock",
-                text: "📨 来自 Tab 应用的消息",
-                weight: "Bolder",
-                size: "Medium",
-              },
-              { type: "TextBlock", text: message, wrap: true },
-              {
-                type: "TextBlock",
-                text: `发送者: ${sender ?? "Unknown"} | ${new Date().toLocaleString("zh-CN")}`,
-                size: "Small",
-                isSubtle: true,
-              },
-            ],
-          },
+          type: "TextBlock",
+          text: "📨 来自 Tab 应用的消息",
+          weight: "Bolder",
+          size: "Medium",
+        },
+        { type: "TextBlock", text: message, wrap: true },
+        {
+          type: "TextBlock",
+          text: `发送者: ${sender ?? "Unknown"} | ${new Date().toLocaleString("zh-CN")}`,
+          size: "Small",
+          isSubtle: true,
         },
       ],
     };
+
+    // Power Automate Workflows 使用不同的 payload 格式
+    const payload = isPowerAutomate
+      ? {
+          type: "message",
+          attachments: [
+            {
+              contentType: "application/vnd.microsoft.card.adaptive",
+              contentUrl: null,
+              content: adaptiveCard,
+            },
+          ],
+        }
+      : {
+          type: "message",
+          attachments: [
+            {
+              contentType: "application/vnd.microsoft.card.adaptive",
+              content: adaptiveCard,
+            },
+          ],
+        };
 
     const res = await fetch(webhookUrl, {
       method: "POST",
@@ -111,9 +133,10 @@ async function sendViaWebhook(
 
     return Response.json({ message: "消息已通过 Webhook 发送到群组" });
   } catch (err) {
-    console.error("Webhook 发送失败:", err);
+    const errorMessage = err instanceof Error ? err.message : String(err);
+    console.error("Webhook 发送失败:", errorMessage, err);
     return Response.json(
-      { error: "发送失败，请检查 Webhook URL" },
+      { error: `发送失败: ${errorMessage}` },
       { status: 500 },
     );
   }

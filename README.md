@@ -41,7 +41,9 @@ Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/bui
 teamsapp provision --env local
 
 # 启动本地预览（自动打开 Teams）
-teamsapp preview --env local --run-command "npx next dev --port 3000"
+lsof -ti:3000 | xargs kill -9
+
+teamsapp preview --env local --run-command "npx next dev --port 3000 --experimental-https --experimental-https-key certificates/localhost-key.pem --experimental-https-cert certificates/localhost.pem"
 
 
 # ========== 生产环境（Vercel）==========

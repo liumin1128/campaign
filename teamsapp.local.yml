@@ -18,6 +18,15 @@ provision:
       botId: BOT_ID
       botPassword: SECRET_BOT_PASSWORD
 
+  # 设置本地 Tab 域名和端口
+  - uses: script
+    with:
+      run:
+        echo "::set-teamsfx-env TAB_DOMAIN=localhost:3000";
+        echo "::set-teamsfx-env TAB_ENDPOINT=https://localhost:3000";
+        echo "::set-teamsfx-env BOT_ENDPOINT=https://placeholder.botframework.com";
+        echo "::set-teamsfx-env BOT_DOMAIN=placeholder.botframework.com";
+
   # 在 Bot Framework 注册 Bot（本地使用 localhost，preview 时会自动创建 tunnel）
   - uses: botFramework/create
     with:
@@ -25,13 +34,6 @@ provision:
       name: TeamDemo-Bot-local
       messagingEndpoint: ${{BOT_ENDPOINT}}/api/messages
       description: Teams Demo Bot (Local)
-
-  # 设置本地 Tab 域名和端口
-  - uses: script
-    with:
-      run:
-        echo "::set-teamsfx-env TAB_DOMAIN=localhost:3000";
-        echo "::set-teamsfx-env TAB_ENDPOINT=https://localhost:3000";
 
   - uses: teamsApp/zipAppPackage
     with:
