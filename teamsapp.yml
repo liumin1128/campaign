@@ -1,0 +1,38 @@
+# yaml-language-server: $schema=https://aka.ms/m365-agents-toolkits/v1.11/yaml.schema.json
+version: v1.11
+
+environmentFolderPath: ./env
+
+provision:
+  - uses: teamsApp/create
+    with:
+      name: TeamDemo-${{TEAMSFX_ENV}}
+    writeToEnvironmentFile:
+      teamsAppId: TEAMS_APP_ID
+
+  - uses: teamsApp/zipAppPackage
+    with:
+      manifestPath: ./appPackage/manifest.json
+      outputZipPath: ./appPackage/build/appPackage.${{TEAMSFX_ENV}}.zip
+      outputFolder: ./appPackage/build
+
+  - uses: teamsApp/validateAppPackage
+    with:
+      appPackagePath: ./appPackage/build/appPackage.${{TEAMSFX_ENV}}.zip
+
+  - uses: teamsApp/update
+    with:
+      appPackagePath: ./appPackage/build/appPackage.${{TEAMSFX_ENV}}.zip
+
+deploy:
+  - uses: cli/runNpmCommand
+    name: install dependencies
+    with:
+      args: install --frozen-lockfile
+      npmClient: pnpm
+
+  - uses: cli/runNpmCommand
+    name: build app
+    with:
+      args: run build
+projectId: 997bcaad-5038-455f-9880-cf2ef6bd5080

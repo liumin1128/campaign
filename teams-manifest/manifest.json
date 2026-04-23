@@ -1,0 +1,51 @@
+{
+  "$schema": "https://developer.microsoft.com/en-us/json-schemas/teams/v1.19/MicrosoftTeams.schema.json",
+  "manifestVersion": "1.19",
+  "version": "1.0.0",
+  "id": "${{TEAMS_APP_ID}}",
+  "developer": {
+    "name": "My Team",
+    "websiteUrl": "https://example.com",
+    "privacyUrl": "https://example.com/privacy",
+    "termsOfUseUrl": "https://example.com/terms"
+  },
+  "name": {
+    "short": "TeamDemo",
+    "full": "Teams Demo App"
+  },
+  "description": {
+    "short": "A demo Teams tab app with automated messaging",
+    "full": "A demo Teams application that shows a tab in group chats and can send automated messages to users."
+  },
+  "icons": {
+    "color": "color.png",
+    "outline": "outline.png"
+  },
+  "accentColor": "#5B5FC7",
+  "staticTabs": [
+    {
+      "entityId": "home",
+      "name": "Demo Tab",
+      "contentUrl": "${{BOT_ENDPOINT}}/tab",
+      "scopes": ["personal"]
+    }
+  ],
+  "configurableTabs": [
+    {
+      "configurationUrl": "${{BOT_ENDPOINT}}/tab/config",
+      "canUpdateConfiguration": true,
+      "scopes": ["team", "groupChat"],
+      "context": ["channelTab", "privateChatTab", "meetingChatTab", "meetingDetailsTab"]
+    }
+  ],
+  "bots": [
+    {
+      "botId": "${{BOT_ID}}",
+      "scopes": ["team", "groupChat"],
+      "supportsFiles": false,
+      "isNotificationOnly": false
+    }
+  ],
+  "permissions": ["identity", "messageTeamMembers"],
+  "validDomains": ["${{TAB_DOMAIN}}"]
+}

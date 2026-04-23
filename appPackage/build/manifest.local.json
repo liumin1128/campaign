@@ -1,0 +1,62 @@
+{
+    "$schema": "https://developer.microsoft.com/en-us/json-schemas/teams/v1.26/MicrosoftTeams.schema.json",
+    "manifestVersion": "1.26",
+    "version": "1.0.0",
+    "id": "3d870099-018d-43dc-8ae7-6f9ce8ec3ccc",
+    "developer": {
+        "name": "My Team",
+        "websiteUrl": "https://example.com",
+        "privacyUrl": "https://example.com/privacy",
+        "termsOfUseUrl": "https://example.com/terms"
+    },
+    "name": {
+        "short": "TeamDemolocal",
+        "full": "Teams Demo App"
+    },
+    "description": {
+        "short": "A demo Teams tab app with multiple UI views",
+        "full": "A demo Teams application that shows a tab in group chats with home, tasks, messaging and settings views."
+    },
+    "icons": {
+        "outline": "outline.png",
+        "color": "color.png"
+    },
+    "accentColor": "#5B5FC7",
+    "configurableTabs": [
+        {
+            "configurationUrl": "https://localhost:3000/tab/config",
+            "canUpdateConfiguration": true,
+            "scopes": [
+                "team",
+                "groupChat"
+            ],
+            "context": [
+                "channelTab",
+                "privateChatTab",
+                "meetingChatTab",
+                "meetingDetailsTab"
+            ]
+        }
+    ],
+    "staticTabs": [
+        {
+            "entityId": "home",
+            "name": "Demo Tab",
+            "contentUrl": "https://localhost:3000/tab",
+            "websiteUrl": "https://localhost:3000/tab",
+            "scopes": [
+                "personal",
+                "groupChat",
+                "team"
+            ]
+        }
+    ],
+    "permissions": [
+        "identity",
+        "messageTeamMembers"
+    ],
+    "validDomains": [
+        "localhost:3000"
+    ],
+    "supportsChannelFeatures": "tier1"
+}
