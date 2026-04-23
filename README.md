@@ -34,3 +34,19 @@ You can check out [the Next.js GitHub repository](https://github.com/vercel/next
 The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
 
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+
+
+# ========== 测试环境（本地开发）==========
+# 注册/更新本地 Teams App
+teamsapp provision --env local
+
+# 启动本地预览（自动打开 Teams）
+teamsapp preview --env local --run-command "npx next dev --port 3000"
+
+
+# ========== 生产环境（Vercel）==========
+# 注册/更新生产 Teams App
+teamsapp provision --env prod
+
+# 部署代码（push 到 GitHub，Vercel 自动构建）
+git push origin main

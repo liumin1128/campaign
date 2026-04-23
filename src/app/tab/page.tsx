@@ -20,7 +20,7 @@ import {
   Settings24Regular,
   Send24Regular,
 } from "@fluentui/react-icons";
-import { useTeams } from "@/lib/useTeams";
+import { useTeams, extractUserInfo } from "@/lib/useTeams";
 
 const useStyles = makeStyles({
   container: {
@@ -186,22 +186,47 @@ function TasksView() {
   );
 }
 
-// ========== 发消息视图（触发自动化消息） ==========
+// ========== 发消息视图（Bot + Webhook 双模式）==========
+type SendMode = "bot" | "webhook";
+
 function MessageView() {
   const styles = useStyles();
+  const { context } = useTeams();
   const [message, setMessage] = useState("");
+  const [webhookUrl, setWebhookUrl] = useState("");
+  const [sendMode, setSendMode] = useState<SendMode>("bot");
   const [status, setStatus] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
 
+  // 从 localStorage 恢复 webhook URL
+  useState(() => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("teams_webhook_url");
+      if (saved) setWebhookUrl(saved);
+    }
+  });
+
   const sendMessage = async () => {
     if (!message.trim()) return;
+    if (sendMode === "webhook" && !webhookUrl.trim()) return;
     setSending(true);
     setStatus(null);
+
+    if (sendMode === "webhook") {
+      localStorage.setItem("teams_webhook_url", webhookUrl);
+    }
+
     try {
+      const body: Record<string, string> = { message: message.trim() };
+      if (sendMode === "webhook") {
+        body.webhookUrl = webhookUrl.trim();
+        body.sender = context?.user?.displayName ?? "Unknown";
+      }
+
       const res = await fetch("/api/notify", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: message.trim() }),
+        body: JSON.stringify(body),
       });
       const data = await res.json();
       if (res.ok) {
@@ -217,12 +242,54 @@ function MessageView() {
     }
   };
 
+  const canSend = message.trim() && (sendMode === "bot" || webhookUrl.trim());
+
   return (
     <div>
       <Card className={styles.card}>
-        <CardHeader
-          header={<Text weight="semibold">向群组发送自动化消息</Text>}
-        />
+        <CardHeader header={<Text weight="semibold">发送模式</Text>} />
+        <div style={{ display: "flex", gap: "8px", marginTop: "8px" }}>
+          <Button
+            appearance={sendMode === "bot" ? "primary" : "secondary"}
+            size="small"
+            onClick={() => setSendMode("bot")}
+          >
+            🤖 Bot 主动消息
+          </Button>
+          <Button
+            appearance={sendMode === "webhook" ? "primary" : "secondary"}
+            size="small"
+            onClick={() => setSendMode("webhook")}
+          >
+            🔗 Incoming Webhook
+          </Button>
+        </div>
+        <Text size={200} style={{ marginTop: "8px", display: "block" }}>
+          {sendMode === "bot"
+            ? "通过 Bot Framework 发送。需要先在群组中 @Bot 发送一条消息建立会话。"
+            : "通过 Incoming Webhook 发送到频道。需要先在频道中创建 Webhook。"}
+        </Text>
+      </Card>
+
+      {sendMode === "webhook" && (
+        <Card className={styles.card}>
+          <CardHeader header={<Text weight="semibold">Webhook 配置</Text>} />
+          <div className={styles.form}>
+            <Text size={200}>
+              频道设置 → Connectors → Incoming Webhook → 创建 → 复制 URL
+            </Text>
+            <Input
+              placeholder="粘贴 Incoming Webhook URL..."
+              value={webhookUrl}
+              onChange={(_, data) => setWebhookUrl(data.value)}
+              type="url"
+            />
+          </div>
+        </Card>
+      )}
+
+      <Card className={styles.card}>
+        <CardHeader header={<Text weight="semibold">发送消息到群组</Text>} />
         <div className={styles.form}>
           <Textarea
             placeholder="输入要发送给群组的消息..."
@@ -234,34 +301,19 @@ function MessageView() {
             appearance="primary"
             icon={<Send24Regular />}
             onClick={sendMessage}
-            disabled={sending || !message.trim()}
+            disabled={sending || !canSend}
           >
             {sending ? "发送中..." : "发送到群组"}
           </Button>
           {status && (
             <Text
               size={300}
-              style={{
-                color: status.startsWith("✅") ? "green" : "red",
-              }}
+              style={{ color: status.startsWith("✅") ? "green" : "red" }}
             >
               {status}
             </Text>
           )}
         </div>
-      </Card>
-
-      <Card className={styles.card}>
-        <CardHeader header={<Text weight="semibold">自动化规则</Text>} />
-        <Text size={300}>
-          💡 提示：可以配置定时任务，让 Bot 自动向群组发送提醒消息。
-        </Text>
-        <br />
-        <Text size={300}>当前已配置的规则：</Text>
-        <br />
-        <Text size={300}>• 每日 9:00 发送站会提醒</Text>
-        <br />
-        <Text size={300}>• 每周五 17:00 发送周报提醒</Text>
       </Card>
     </div>
   );
@@ -310,37 +362,88 @@ export default function TabPage() {
   );
 }
 
-// ========== 设置视图 ==========
+// ========== 设置视图（详细用户 & 环境信息）==========
 function SettingsView() {
   const styles = useStyles();
   const { inTeams, context } = useTeams();
+  const info = extractUserInfo(context);
+
+  const infoItems = [
+    { label: "Teams 环境", value: inTeams ? "✅ 是" : "❌ 否（浏览器模式）" },
+    { label: "用户名", value: info.displayName },
+    { label: "User ID", value: info.userId },
+    { label: "UPN (邮箱)", value: info.userPrincipalName },
+    { label: "租户 ID", value: info.tenantId },
+    { label: "Team ID", value: info.teamId },
+    { label: "Team 名称", value: info.teamName },
+    { label: "Channel ID", value: info.channelId },
+    { label: "Channel 名称", value: info.channelName },
+    { label: "Chat ID", value: info.chatId },
+    { label: "Group ID", value: info.groupId },
+    { label: "语言", value: info.locale },
+    { label: "主题", value: info.theme },
+    { label: "Session ID", value: info.sessionId },
+    { label: "App Host", value: info.appHost },
+  ];
+
+  // 同时展示原始 context JSON
+  const [showRaw, setShowRaw] = useState(false);
 
   return (
     <div>
       <Card className={styles.card}>
-        <CardHeader header={<Text weight="semibold">应用信息</Text>} />
-        <Text size={300}>
-          Teams 环境: {inTeams ? "✅ 是" : "❌ 否（浏览器模式）"}
-        </Text>
-        <br />
-        <Text size={300}>用户: {context?.user?.displayName ?? "未知"}</Text>
-        <br />
-        <Text size={300}>租户 ID: {context?.user?.tenant?.id ?? "未知"}</Text>
-        <br />
-        <Text size={300}>频道: {context?.channel?.displayName ?? "N/A"}</Text>
+        <CardHeader header={<Text weight="semibold">用户 & 环境信息</Text>} />
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "140px 1fr",
+            gap: "4px 12px",
+            marginTop: "8px",
+          }}
+        >
+          {infoItems.map((item) => (
+            <div key={item.label} style={{ display: "contents" }}>
+              <Text
+                size={200}
+                weight="semibold"
+                style={{ color: tokens.colorNeutralForeground3 }}
+              >
+                {item.label}
+              </Text>
+              <Text size={200} style={{ wordBreak: "break-all" }}>
+                {item.value || "—"}
+              </Text>
+            </div>
+          ))}
+        </div>
       </Card>
 
       <Card className={styles.card}>
-        <CardHeader header={<Text weight="semibold">Bot 配置</Text>} />
-        <div className={styles.form}>
-          <Input
-            placeholder="Bot ID"
-            defaultValue={process.env.NEXT_PUBLIC_BOT_ID ?? ""}
-          />
-          <Text size={200}>
-            在 Azure Bot Service 中注册你的 Bot 以启用主动消息功能。
-          </Text>
-        </div>
+        <CardHeader header={<Text weight="semibold">原始 Context</Text>} />
+        <Button
+          size="small"
+          appearance="secondary"
+          onClick={() => setShowRaw(!showRaw)}
+          style={{ marginBottom: "8px" }}
+        >
+          {showRaw ? "收起" : "展开"} JSON
+        </Button>
+        {showRaw && (
+          <pre
+            style={{
+              fontSize: "11px",
+              background: tokens.colorNeutralBackground3,
+              padding: "12px",
+              borderRadius: "6px",
+              overflow: "auto",
+              maxHeight: "400px",
+              whiteSpace: "pre-wrap",
+              wordBreak: "break-all",
+            }}
+          >
+            {JSON.stringify(context, null, 2)}
+          </pre>
+        )}
       </Card>
     </div>
   );

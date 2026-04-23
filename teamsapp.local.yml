@@ -10,6 +10,22 @@ provision:
     writeToEnvironmentFile:
       teamsAppId: TEAMS_APP_ID
 
+  # 创建 Bot 的 Entra ID App Registration
+  - uses: botAadApp/create
+    with:
+      name: TeamDemo-Bot-${{TEAMSFX_ENV}}
+    writeToEnvironmentFile:
+      botId: BOT_ID
+      botPassword: SECRET_BOT_PASSWORD
+
+  # 在 Bot Framework 注册 Bot（本地使用 localhost，preview 时会自动创建 tunnel）
+  - uses: botFramework/create
+    with:
+      botId: ${{BOT_ID}}
+      name: TeamDemo-Bot-local
+      messagingEndpoint: ${{BOT_ENDPOINT}}/api/messages
+      description: Teams Demo Bot (Local)
+
   # 设置本地 Tab 域名和端口
   - uses: script
     with:
@@ -52,3 +68,5 @@ deploy:
         PORT: 3000
         SSL_CRT_FILE: ${{SSL_CRT_FILE}}
         SSL_KEY_FILE: ${{SSL_KEY_FILE}}
+        BOT_ID: ${{BOT_ID}}
+        BOT_PASSWORD: ${{SECRET_BOT_PASSWORD}}

@@ -7,10 +7,11 @@ import {
   ConversationReference,
 } from "botbuilder";
 
-// Bot 认证配置
+// Bot 认证配置（BOT_ID 和 SECRET_BOT_PASSWORD 由 Teams Toolkit provision 自动生成）
 const botAuthConfig: ConfigurationBotFrameworkAuthenticationOptions = {
   MicrosoftAppId: process.env.BOT_ID ?? "",
-  MicrosoftAppPassword: process.env.BOT_PASSWORD ?? "",
+  MicrosoftAppPassword:
+    process.env.BOT_PASSWORD ?? process.env.SECRET_BOT_PASSWORD ?? "",
   MicrosoftAppType: "MultiTenant",
 };
 

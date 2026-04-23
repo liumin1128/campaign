@@ -51,6 +51,37 @@
             ]
         }
     ],
+    "bots": [
+        {
+            "botId": "3694561a-89e7-4992-bb41-02cf87cfe7f0",
+            "isNotificationOnly": false,
+            "supportsFiles": false,
+            "scopes": [
+                "personal",
+                "team",
+                "groupChat"
+            ],
+            "commandLists": [
+                {
+                    "scopes": [
+                        "personal",
+                        "team",
+                        "groupChat"
+                    ],
+                    "commands": [
+                        {
+                            "title": "帮助",
+                            "description": "显示可用命令"
+                        },
+                        {
+                            "title": "状态",
+                            "description": "查看应用状态"
+                        }
+                    ]
+                }
+            ]
+        }
+    ],
     "permissions": [
         "identity",
         "messageTeamMembers"

@@ -10,10 +10,29 @@ provision:
     writeToEnvironmentFile:
       teamsAppId: TEAMS_APP_ID
 
+  # 创建 Bot 的 Entra ID App Registration（不需要 Azure 订阅）
+  - uses: botAadApp/create
+    with:
+      name: TeamDemo-Bot${{APP_NAME_SUFFIX}}
+    writeToEnvironmentFile:
+      botId: BOT_ID
+      botPassword: SECRET_BOT_PASSWORD
+
+  # 先设置域名和端点（botFramework/create 需要 BOT_ENDPOINT）
   - uses: script
     with:
       run: echo "::set-teamsfx-env TAB_DOMAIN=campaign.react.mobi"; echo
-        "::set-teamsfx-env TAB_ENDPOINT=https://campaign.react.mobi";
+        "::set-teamsfx-env TAB_ENDPOINT=https://campaign.react.mobi"; echo
+        "::set-teamsfx-env BOT_ENDPOINT=https://campaign.react.mobi"; echo
+        "::set-teamsfx-env BOT_DOMAIN=campaign.react.mobi";
+
+  # 在 Bot Framework 注册 Bot
+  - uses: botFramework/create
+    with:
+      botId: ${{BOT_ID}}
+      name: TeamDemo-Bot
+      messagingEndpoint: ${{BOT_ENDPOINT}}/api/messages
+      description: Teams Demo Bot
 
   - uses: teamsApp/zipAppPackage
     with:

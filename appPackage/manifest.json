@@ -40,6 +40,29 @@
       "context": ["channelTab", "privateChatTab", "meetingChatTab", "meetingDetailsTab"]
     }
   ],
+  "bots": [
+    {
+      "botId": "${{BOT_ID}}",
+      "scopes": ["personal", "team", "groupChat"],
+      "supportsFiles": false,
+      "isNotificationOnly": false,
+      "commandLists": [
+        {
+          "scopes": ["personal", "team", "groupChat"],
+          "commands": [
+            {
+              "title": "帮助",
+              "description": "显示可用命令"
+            },
+            {
+              "title": "状态",
+              "description": "查看应用状态"
+            }
+          ]
+        }
+      ]
+    }
+  ],
   "permissions": ["identity", "messageTeamMembers"],
   "validDomains": ["${{TAB_DOMAIN}}"]
 }
