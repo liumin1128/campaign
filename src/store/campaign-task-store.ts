@@ -22,8 +22,15 @@ type CampaignTaskState = {
   loading: boolean;
   error: string | null;
   activeCampaignID: string | null;
+  creatingTask: boolean;
   updatingTaskIDs: number[];
   loadTasks: (campaignID: string) => Promise<void>;
+  createTask: (input: {
+    campaignID: string;
+    step: string;
+    content: string;
+    deadline: string | null;
+  }) => Promise<boolean>;
   updateTaskStatus: (
     campaignID: string,
     taskID: number,
@@ -42,6 +49,7 @@ export const useCampaignTaskStore = create<CampaignTaskState>()((set, get) => ({
   loading: false,
   error: null,
   activeCampaignID: null,
+  creatingTask: false,
   updatingTaskIDs: [],
   loadTasks: async (campaignID) => {
     if (!campaignID) {
@@ -102,6 +110,66 @@ export const useCampaignTaskStore = create<CampaignTaskState>()((set, get) => ({
             : "Failed to load campaign tasks",
         activeCampaignID: campaignID,
       });
+    }
+  },
+  createTask: async ({ campaignID, step, content, deadline }) => {
+    const trimmedContent = content.trim();
+
+    if (!campaignID || !step || !trimmedContent) {
+      set({
+        error: "Missing task fields",
+      });
+      return false;
+    }
+
+    set({
+      error: null,
+      creatingTask: true,
+    });
+
+    try {
+      const response = await fetch(
+        `/api/campaign/${encodeURIComponent(campaignID)}/tasks`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            content: trimmedContent,
+            step,
+            deadline,
+          }),
+        },
+      );
+
+      const payload = (await response.json()) as {
+        ok: boolean;
+        error?: string;
+        task?: CampaignTask;
+      };
+
+      if (!response.ok || !payload.ok || !payload.task) {
+        throw new Error(payload.error ?? "Failed to create task");
+      }
+
+      set((state) => ({
+        creatingTask: false,
+        error: null,
+        tasks:
+          state.activeCampaignID === campaignID
+            ? [payload.task!, ...state.tasks]
+            : state.tasks,
+      }));
+
+      return true;
+    } catch (error) {
+      set({
+        creatingTask: false,
+        error: error instanceof Error ? error.message : "Failed to create task",
+      });
+
+      return false;
     }
   },
   updateTaskStatus: async (campaignID, taskID, status) => {
@@ -234,6 +302,7 @@ export const useCampaignTaskStore = create<CampaignTaskState>()((set, get) => ({
       loading: false,
       error: null,
       activeCampaignID: null,
+      creatingTask: false,
       updatingTaskIDs: [],
     }),
 }));

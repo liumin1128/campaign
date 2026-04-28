@@ -1,7 +1,16 @@
 "use client";
 
-import { useEffect } from "react";
-import { CheckCircle } from "flowbite-react-icons/outline";
+import { useEffect, useRef, useState } from "react";
+import {
+  Button,
+  Label,
+  Modal,
+  ModalBody,
+  ModalFooter,
+  ModalHeader,
+  TextInput,
+} from "flowbite-react";
+import { CheckCircle, Plus } from "flowbite-react-icons/outline";
 import {
   useCampaignTaskStore,
   type CampaignTask,
@@ -18,6 +27,8 @@ const stepDefinitions = [
   { key: "Execution", label: "Step 4: Execution" },
   { key: "Go Live & Monitor", label: "Step 5: Go Live & Monitor" },
 ] as const;
+
+type StepKey = (typeof stepDefinitions)[number]["key"];
 
 type StepStatus = "not-started" | "in-progress" | "completed";
 
@@ -62,27 +73,30 @@ export default function CampaignTaskList({
 }: {
   campaignID: string;
 }) {
+  const contentInputRef = useRef<HTMLInputElement | null>(null);
   const tasks = useCampaignTaskStore((state) => state.tasks);
   const loading = useCampaignTaskStore((state) => state.loading);
   const error = useCampaignTaskStore((state) => state.error);
+  const creatingTask = useCampaignTaskStore((state) => state.creatingTask);
   const activeCampaignID = useCampaignTaskStore(
     (state) => state.activeCampaignID,
   );
   const loadTasks = useCampaignTaskStore((state) => state.loadTasks);
+  const createTask = useCampaignTaskStore((state) => state.createTask);
+  const [activeStepKey, setActiveStepKey] = useState<StepKey | null>(null);
+  const [taskContent, setTaskContent] = useState("");
+  const [taskDeadline, setTaskDeadline] = useState("");
+  const [formError, setFormError] = useState<string | null>(null);
 
-  const groupedTasks = stepDefinitions
-    .map((stepDefinition) => {
-      const stepTasks = tasks.filter(
-        (task) => task.step === stepDefinition.key,
-      );
+  const groupedTasks = stepDefinitions.map((stepDefinition) => {
+    const stepTasks = tasks.filter((task) => task.step === stepDefinition.key);
 
-      return {
-        ...stepDefinition,
-        tasks: stepTasks,
-        status: getStepStatus(stepTasks),
-      };
-    })
-    .filter((group) => group.tasks.length > 0);
+    return {
+      ...stepDefinition,
+      tasks: stepTasks,
+      status: getStepStatus(stepTasks),
+    };
+  });
 
   const uncategorizedTasks = tasks.filter(
     (task) =>
@@ -95,6 +109,50 @@ export default function CampaignTaskList({
   useEffect(() => {
     void loadTasks(campaignID);
   }, [campaignID, loadTasks]);
+
+  function openCreateTaskModal(stepKey: StepKey) {
+    setActiveStepKey(stepKey);
+    setTaskContent("");
+    setTaskDeadline("");
+    setFormError(null);
+  }
+
+  function closeCreateTaskModal() {
+    if (creatingTask) {
+      return;
+    }
+
+    setActiveStepKey(null);
+    setTaskContent("");
+    setTaskDeadline("");
+    setFormError(null);
+  }
+
+  async function handleCreateTask() {
+    if (!activeStepKey) {
+      return;
+    }
+
+    const trimmedContent = taskContent.trim();
+
+    if (!trimmedContent) {
+      setFormError("Task content is required");
+      return;
+    }
+
+    setFormError(null);
+
+    const didCreate = await createTask({
+      campaignID,
+      step: activeStepKey,
+      content: trimmedContent,
+      deadline: taskDeadline || null,
+    });
+
+    if (didCreate) {
+      closeCreateTaskModal();
+    }
+  }
 
   return (
     <div className="flex flex-col gap-4">
@@ -129,14 +187,15 @@ export default function CampaignTaskList({
             </div>
           ) : null}
 
-          {!loading && !error && tasks.length === 0 ? (
-            <div className="rounded-md border border-dashed border-gray-300 px-4 py-8 text-center text-sm text-gray-500 dark:border-slate-700 dark:text-slate-400">
-              No tasks found for this campaign.
-            </div>
-          ) : null}
-
-          {!loading && !error && tasks.length > 0 ? (
+          {!loading && !error ? (
             <div className="space-y-4">
+              {tasks.length === 0 ? (
+                <div className="rounded-md border border-dashed border-gray-300 px-4 py-4 text-sm text-gray-500 dark:border-slate-700 dark:text-slate-400">
+                  No tasks found for this campaign yet. Use the add button on
+                  any step to create the first one.
+                </div>
+              ) : null}
+
               {groupedTasks.map((group) => (
                 <section
                   key={group.key}
@@ -150,21 +209,38 @@ export default function CampaignTaskList({
                           {group.label}
                         </h4>
                       </div>
-                      <span className="rounded-full bg-white px-2.5 py-1 text-xs font-medium text-gray-600 dark:bg-slate-800 dark:text-slate-300">
-                        {group.tasks.length} task
-                        {group.tasks.length === 1 ? "" : "s"}
-                      </span>
+                      <div className="flex items-center gap-2">
+                        <span className="rounded-full bg-white px-2.5 py-1 text-xs font-medium text-gray-600 dark:bg-slate-800 dark:text-slate-300">
+                          {group.tasks.length} task
+                          {group.tasks.length === 1 ? "" : "s"}
+                        </span>
+                        <button
+                          type="button"
+                          aria-label={`Add task to ${group.label}`}
+                          title={`Add task to ${group.label}`}
+                          className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-indigo-200 bg-indigo-50 text-indigo-700 transition hover:border-indigo-300 hover:bg-indigo-100 dark:border-indigo-500/30 dark:bg-indigo-500/10 dark:text-indigo-200 dark:hover:border-indigo-500/50 dark:hover:bg-indigo-500/15"
+                          onClick={() => openCreateTaskModal(group.key)}
+                        >
+                          <Plus className="size-4" />
+                        </button>
+                      </div>
                     </div>
                   </div>
 
                   <ul className="space-y-3 bg-gray-50 px-4 py-4 dark:bg-slate-950/30">
-                    {group.tasks.map((task) => (
-                      <CampaignTaskRow
-                        key={task.id}
-                        task={task}
-                        campaignID={campaignID}
-                      />
-                    ))}
+                    {group.tasks.length > 0 ? (
+                      group.tasks.map((task) => (
+                        <CampaignTaskRow
+                          key={task.id}
+                          task={task}
+                          campaignID={campaignID}
+                        />
+                      ))
+                    ) : (
+                      <li className="rounded-xl border border-dashed border-slate-300 bg-white px-4 py-6 text-sm text-slate-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400">
+                        No tasks yet for this step.
+                      </li>
+                    )}
                   </ul>
                 </section>
               ))}
@@ -198,6 +274,95 @@ export default function CampaignTaskList({
           ) : null}
         </div>
       </div>
+
+      <Modal
+        dismissible
+        show={activeStepKey !== null}
+        size="lg"
+        initialFocus={contentInputRef}
+        onClose={closeCreateTaskModal}
+      >
+        <ModalHeader>Add task</ModalHeader>
+        <ModalBody>
+          <form
+            className="space-y-4"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void handleCreateTask();
+            }}
+          >
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="campaign-task-campaign" value="Campaign" />
+                <TextInput
+                  id="campaign-task-campaign"
+                  readOnly
+                  value={campaignID}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="campaign-task-step" value="Step" />
+                <TextInput
+                  id="campaign-task-step"
+                  readOnly
+                  value={activeStepKey ?? ""}
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="campaign-task-content" value="Task content" />
+              <TextInput
+                id="campaign-task-content"
+                ref={contentInputRef}
+                placeholder="Input task content"
+                value={taskContent}
+                onChange={(event) => setTaskContent(event.target.value)}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="campaign-task-deadline" value="Deadline" />
+              <TextInput
+                id="campaign-task-deadline"
+                type="date"
+                value={taskDeadline}
+                onChange={(event) => setTaskDeadline(event.target.value)}
+              />
+            </div>
+
+            {formError ? (
+              <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-300">
+                {formError}
+              </p>
+            ) : null}
+
+            {error ? (
+              <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-300">
+                {error}
+              </p>
+            ) : null}
+          </form>
+        </ModalBody>
+        <ModalFooter>
+          <Button
+            color="light"
+            disabled={creatingTask}
+            onClick={closeCreateTaskModal}
+          >
+            Cancel
+          </Button>
+          <Button
+            isProcessing={creatingTask}
+            disabled={creatingTask}
+            onClick={() => {
+              void handleCreateTask();
+            }}
+          >
+            Create task
+          </Button>
+        </ModalFooter>
+      </Modal>
     </div>
   );
 }

@@ -16,6 +16,30 @@ type RouteContext = {
 
 type TaskStatus = "todo" | "done";
 
+function normalizeDeadline(deadline: string | null | undefined) {
+  if (!deadline) {
+    return null;
+  }
+
+  const trimmedDeadline = deadline.trim();
+
+  if (!trimmedDeadline) {
+    return null;
+  }
+
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(trimmedDeadline)) {
+    return { error: "Invalid deadline" };
+  }
+
+  const parsedDate = new Date(`${trimmedDeadline}T00:00:00`);
+
+  if (Number.isNaN(parsedDate.getTime())) {
+    return { error: "Invalid deadline" };
+  }
+
+  return { value: trimmedDeadline };
+}
+
 export async function GET(_request: Request, context: RouteContext) {
   const { campaignID } = await context.params;
   const supabase = getSupabaseAdminClient();
@@ -39,6 +63,70 @@ export async function GET(_request: Request, context: RouteContext) {
   return Response.json({
     ok: true,
     tasks: data ?? [],
+  });
+}
+
+export async function POST(request: Request, context: RouteContext) {
+  const { campaignID } = await context.params;
+  const payload = (await request.json()) as {
+    content?: string;
+    step?: string | null;
+    deadline?: string | null;
+  };
+
+  const content = payload.content?.trim();
+
+  if (!content) {
+    return Response.json(
+      {
+        ok: false,
+        error: "Task content is required",
+      },
+      { status: 400 },
+    );
+  }
+
+  const normalizedDeadline = normalizeDeadline(payload.deadline);
+
+  if (normalizedDeadline && "error" in normalizedDeadline) {
+    return Response.json(
+      {
+        ok: false,
+        error: normalizedDeadline.error,
+      },
+      { status: 400 },
+    );
+  }
+
+  const step = payload.step?.trim() || null;
+  const supabase = getSupabaseAdminClient();
+
+  const { data, error } = await supabase
+    .from("task")
+    .insert({
+      campaign: campaignID,
+      content,
+      step,
+      deadline: normalizedDeadline?.value ?? null,
+      status: "todo",
+      text: normalizeRichTextValue(null),
+    })
+    .select(taskSelectFields)
+    .single();
+
+  if (error) {
+    return Response.json(
+      {
+        ok: false,
+        error: error.message,
+      },
+      { status: 500 },
+    );
+  }
+
+  return Response.json({
+    ok: true,
+    task: data,
   });
 }
 
