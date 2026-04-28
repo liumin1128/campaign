@@ -25,12 +25,15 @@ export async function checkSupabaseBrowserConnection(): Promise<{
   ok: boolean;
   error?: string;
 }> {
-  const supabase = getSupabaseBrowserClient();
-  const response = await fetch(`${supabase.supabaseUrl}/auth/v1/settings`, {
+  getSupabaseBrowserClient();
+  const supabaseUrl = getSupabaseUrl();
+  const publishableKey = getSupabasePublishableKey();
+
+  const response = await fetch(`${supabaseUrl}/auth/v1/settings`, {
     method: "GET",
     headers: {
-      apikey: supabase.supabaseKey,
-      Authorization: `Bearer ${supabase.supabaseKey}`,
+      apikey: publishableKey,
+      Authorization: `Bearer ${publishableKey}`,
     },
   });
 

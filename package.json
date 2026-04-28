@@ -10,8 +10,6 @@
     "package": "node scripts/package-manifest.mjs"
   },
   "dependencies": {
-    "@fluentui/react-components": "^9.73.7",
-    "@fluentui/react-icons": "^2.0.324",
     "@microsoft/teams-js": "^2.52.0",
     "@supabase/supabase-js": "^2.105.0",
     "botbuilder": "^4.23.3",
@@ -21,11 +19,15 @@
     "react-dom": "19.2.4"
   },
   "devDependencies": {
+    "@tailwindcss/postcss": "^4.2.4",
     "@types/node": "^20",
+    "@types/pg": "^8.20.0",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.2.4",
+    "postcss": "^8.5.12",
+    "tailwindcss": "^4.2.4",
     "typescript": "^5"
   }
 }
