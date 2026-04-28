@@ -1,0 +1,146 @@
+{
+  "runner_api_request": {
+    "user_id": "ds_user_001",
+    "session_id": "campaign_planning_2026_q4",
+    "agent_id": "campaign_data_agent",
+    "message": {
+      "role": "user",
+      "parts": [
+        {
+          "text": "Analyze the uploaded Jul-Dec sales files and identify long-haul routes that are suitable for a tactical promotion. Focus on soft demand with recoverable yield."
+        }
+      ]
+    },
+    "metadata": {
+      "file_metadata": {
+        "sales_jul_dec.csv": {
+          "presigned_url": "https://your-presigned-url.example/sales_jul_dec.csv",
+          "description": "Jul to Dec route-level sales data with origin, destination, cabin, passengers, revenue, yield, booking date and travel date",
+          "mime_type": "text/csv",
+          "file_size_bytes": 248901,
+          "persist_across_jobs": true
+        }
+      }
+    },
+    "keep_logs": true
+  },
+  "tool_request_body": {
+    "analysis_brief": "Identify long-haul routes for a Jul-Dec tactical promotion and rank them by commercial opportunity.",
+    "planning_window": {
+      "start_date": "2026-07-01",
+      "end_date": "2026-12-31"
+    },
+    "travel_window": {
+      "start_date": "2026-07-01",
+      "end_date": "2026-12-31"
+    },
+    "currency": "CNY",
+    "campaign_type": "long_haul_promotion",
+    "long_haul_rules": {
+      "min_stage_length_km": 3500,
+      "include_stopover_routes": false,
+      "maximum_candidate_routes": 8
+    },
+    "required_columns": [
+      "origin",
+      "destination",
+      "cabin_class",
+      "booking_date",
+      "travel_date",
+      "passengers",
+      "revenue",
+      "yield"
+    ],
+    "output_artifacts": {
+      "include_route_scoring_csv": true,
+      "include_summary_json": true
+    },
+    "agentsl_s3_context": {
+      "tool_name": "analyze_sales_csv",
+      "job_path": "campaign_data_agent/ds_user_001/campaign_planning_2026_q4/jobs/job_123",
+      "bucket_name": "example-bucket",
+      "region": "ap-southeast-1",
+      "available_files": {
+        "sales_jul_dec.csv": {
+          "download_url": "https://download.example/sales_jul_dec.csv",
+          "description": "Jul to Dec route-level sales data with origin, destination, cabin, passengers, revenue, yield, booking date and travel date",
+          "mime_type": "text/csv",
+          "version": 1,
+          "persist_across_jobs": true,
+          "file_size_bytes": 248901
+        }
+      },
+      "upload": {
+        "url": "https://upload.example/",
+        "fields": {
+          "key": "campaign_data_agent/ds_user_001/campaign_planning_2026_q4/jobs/job_123/${filename}",
+          "x-amz-algorithm": "AWS4-HMAC-SHA256",
+          "x-amz-credential": "credential",
+          "x-amz-date": "20260428T120000Z",
+          "x-amz-security-token": "token",
+          "policy": "policy",
+          "x-amz-signature": "signature"
+        }
+      }
+    }
+  },
+  "tool_success_response": {
+    "analysis_summary": {
+      "campaign_type": "long_haul_promotion",
+      "planning_window": {
+        "start_date": "2026-07-01",
+        "end_date": "2026-12-31"
+      },
+      "travel_window": {
+        "start_date": "2026-07-01",
+        "end_date": "2026-12-31"
+      },
+      "files_processed": 1,
+      "routes_analyzed": 42,
+      "notes": [
+        "Long-haul routes are defined as stage length greater than or equal to 3500 km."
+      ]
+    },
+    "candidate_routes": [
+      {
+        "rank": 1,
+        "origin": "Beijing",
+        "destination": "Cape Town",
+        "reason": "Revenue and passenger softness with manageable yield deterioration indicates tactical price stimulation potential.",
+        "metrics": {
+          "revenue_change_pct": -12.4,
+          "passenger_change_pct": -9.1,
+          "yield_change_pct": -3.8,
+          "booking_conversion_change_pct": -5.2,
+          "average_fare": 5200,
+          "confidence_score": 0.78
+        }
+      }
+    ],
+    "key_findings": [
+      {
+        "title": "Beijing-Cape Town softening",
+        "statement": "The route shows sustained booking softness in the target months relative to historical trend.",
+        "evidence": [
+          "Passenger volume declined 9.1% versus comparison period.",
+          "Average fare remains above minimum acceptable threshold."
+        ]
+      }
+    ],
+    "data_quality": {
+      "missing_columns": [],
+      "dropped_rows": 3,
+      "warnings": [
+        "Three rows were dropped because travel_date was blank."
+      ]
+    },
+    "file_metadata": [
+      {
+        "filename": "route_scoring_analyze_sales_csv.csv",
+        "description": "Ranked route scoring output for Jul-Dec campaign screening",
+        "persist_across_jobs": true,
+        "mime_type": "text/csv"
+      }
+    ]
+  }
+}

@@ -1,0 +1,335 @@
+openapi: 3.0.0
+info:
+  title: campaign_csv_analyzer
+  version: 1.0.0
+  description: >-
+    Analyze uploaded airline sales CSV files for campaign planning, identify
+    candidate long-haul routes, and return structured commercial findings for
+    downstream recommendation and proposal agents.
+  contact:
+    name: Yun Gu
+    email:
+      - yun_gu@singaporeair.com.sg
+servers:
+  - url: https://campaign.react.mobi/
+paths:
+  /campaign-tools/analyze-sales-csv:
+    post:
+      operationId: analyze_sales_csv
+      summary: Analyze sales CSV inputs for campaign planning
+      description: >-
+        Downloads uploaded CSV files from AgentSL file context, aggregates
+        route-level performance, applies long-haul campaign filters, and
+        returns structured findings plus optional supporting output files.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - analysis_brief
+                - planning_window
+                - travel_window
+                - currency
+                - agentsl_s3_context
+              properties:
+                analysis_brief:
+                  type: string
+                  minLength: 20
+                  description: >-
+                    The commercial brief, for example identify long-haul routes
+                    that need tactical fare support in Jul-Dec.
+                planning_window:
+                  type: object
+                  additionalProperties: false
+                  required:
+                    - start_date
+                    - end_date
+                  properties:
+                    start_date:
+                      type: string
+                      format: date
+                    end_date:
+                      type: string
+                      format: date
+                travel_window:
+                  type: object
+                  additionalProperties: false
+                  required:
+                    - start_date
+                    - end_date
+                  properties:
+                    start_date:
+                      type: string
+                      format: date
+                    end_date:
+                      type: string
+                      format: date
+                currency:
+                  type: string
+                  minLength: 3
+                  maxLength: 3
+                  description: ISO 4217 currency code for output monetary values.
+                campaign_type:
+                  type: string
+                  enum:
+                    - long_haul_promotion
+                    - seasonal_sale
+                    - load_factor_recovery
+                    - yield_defense
+                    - custom
+                  default: long_haul_promotion
+                long_haul_rules:
+                  type: object
+                  additionalProperties: false
+                  properties:
+                    min_stage_length_km:
+                      type: integer
+                      minimum: 1
+                      default: 3500
+                    include_stopover_routes:
+                      type: boolean
+                      default: false
+                    maximum_candidate_routes:
+                      type: integer
+                      minimum: 1
+                      maximum: 20
+                      default: 10
+                scoring_weights:
+                  type: object
+                  additionalProperties: false
+                  properties:
+                    revenue_decline_weight:
+                      type: number
+                    passenger_decline_weight:
+                      type: number
+                    yield_gap_weight:
+                      type: number
+                    booking_conversion_weight:
+                      type: number
+                required_columns:
+                  type: array
+                  description: >-
+                    Optional explicit schema guard for uploaded CSV files.
+                  items:
+                    type: string
+                output_artifacts:
+                  type: object
+                  additionalProperties: false
+                  properties:
+                    include_route_scoring_csv:
+                      type: boolean
+                      default: true
+                    include_summary_json:
+                      type: boolean
+                      default: false
+                agentsl_s3_context:
+                  type: object
+                  description: >-
+                    File context injected by AgentSL. Required for file routing.
+                  required:
+                    - available_files
+                    - upload
+                  properties:
+                    tool_name:
+                      type: string
+                    job_path:
+                      type: string
+                    bucket_name:
+                      type: string
+                    region:
+                      type: string
+                    upload:
+                      type: object
+                      properties:
+                        url:
+                          type: string
+                        fields:
+                          type: object
+                          additionalProperties:
+                            type: string
+                    available_files:
+                      type: object
+                      additionalProperties:
+                        type: object
+                        additionalProperties: false
+                        required:
+                          - download_url
+                          - description
+                        properties:
+                          download_url:
+                            type: string
+                          description:
+                            type: string
+                          mime_type:
+                            type: string
+                          version:
+                            type: integer
+                          persist_across_jobs:
+                            type: boolean
+                          file_size_bytes:
+                            type: integer
+      responses:
+        '200':
+          description: Sales analysis completed successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required:
+                  - analysis_summary
+                  - candidate_routes
+                  - key_findings
+                  - data_quality
+                properties:
+                  analysis_summary:
+                    type: object
+                    additionalProperties: false
+                    required:
+                      - campaign_type
+                      - planning_window
+                      - travel_window
+                      - files_processed
+                      - routes_analyzed
+                    properties:
+                      campaign_type:
+                        type: string
+                      planning_window:
+                        type: object
+                        properties:
+                          start_date:
+                            type: string
+                          end_date:
+                            type: string
+                      travel_window:
+                        type: object
+                        properties:
+                          start_date:
+                            type: string
+                          end_date:
+                            type: string
+                      files_processed:
+                        type: integer
+                      routes_analyzed:
+                        type: integer
+                      notes:
+                        type: array
+                        items:
+                          type: string
+                  candidate_routes:
+                    type: array
+                    items:
+                      type: object
+                      additionalProperties: false
+                      required:
+                        - rank
+                        - origin
+                        - destination
+                        - reason
+                        - metrics
+                      properties:
+                        rank:
+                          type: integer
+                        origin:
+                          type: string
+                        destination:
+                          type: string
+                        via:
+                          type: string
+                        reason:
+                          type: string
+                        metrics:
+                          type: object
+                          additionalProperties: false
+                          properties:
+                            revenue_change_pct:
+                              type: number
+                            passenger_change_pct:
+                              type: number
+                            yield_change_pct:
+                              type: number
+                            booking_conversion_change_pct:
+                              type: number
+                            average_fare:
+                              type: number
+                            confidence_score:
+                              type: number
+                  key_findings:
+                    type: array
+                    items:
+                      type: object
+                      additionalProperties: false
+                      required:
+                        - title
+                        - statement
+                        - evidence
+                      properties:
+                        title:
+                          type: string
+                        statement:
+                          type: string
+                        evidence:
+                          type: array
+                          items:
+                            type: string
+                  data_quality:
+                    type: object
+                    additionalProperties: false
+                    required:
+                      - missing_columns
+                      - dropped_rows
+                      - warnings
+                    properties:
+                      missing_columns:
+                        type: array
+                        items:
+                          type: string
+                      dropped_rows:
+                        type: integer
+                      warnings:
+                        type: array
+                        items:
+                          type: string
+                  file_metadata:
+                    type: array
+                    items:
+                      type: object
+                      required:
+                        - filename
+                        - description
+                      properties:
+                        filename:
+                          type: string
+                        description:
+                          type: string
+                        persist_across_jobs:
+                          type: boolean
+                        mime_type:
+                          type: string
+        '400':
+          description: Validation error or unsupported input file format
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  details:
+                    type: array
+                    items:
+                      type: string
+        '500':
+          description: Internal analysis failure
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  trace_id:
+                    type: string

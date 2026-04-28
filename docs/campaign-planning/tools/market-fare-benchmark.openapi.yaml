@@ -1,0 +1,211 @@
+openapi: 3.0.0
+info:
+  title: market_fare_benchmark_tool
+  version: 1.0.0
+  description: >-
+    Benchmark route-level market fares for campaign candidate routes and return
+    comparable public or internal reference prices for downstream pricing and
+    recommendation agents.
+  contact:
+    name: Yun Gu
+    email:
+      - yun_gu@singaporeair.com.sg
+servers:
+  - url: https://campaign.react.mobi/
+paths:
+  /campaign-tools/benchmark-market-fares:
+    post:
+      operationId: benchmark_market_fares
+      summary: Benchmark market fares for candidate routes
+      description: >-
+        Accepts a shortlist of routes and travel windows, queries market fare
+        sources, and returns route-level benchmark prices and competitor notes.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - routes
+                - travel_window
+                - currency
+              properties:
+                routes:
+                  type: array
+                  minItems: 1
+                  maxItems: 10
+                  items:
+                    type: object
+                    additionalProperties: false
+                    required:
+                      - origin
+                      - destination
+                    properties:
+                      origin:
+                        type: string
+                      destination:
+                        type: string
+                      via:
+                        type: string
+                      priority:
+                        type: integer
+                travel_window:
+                  type: object
+                  additionalProperties: false
+                  required:
+                    - start_date
+                    - end_date
+                  properties:
+                    start_date:
+                      type: string
+                      format: date
+                    end_date:
+                      type: string
+                      format: date
+                currency:
+                  type: string
+                  minLength: 3
+                  maxLength: 3
+                point_of_sale:
+                  type: string
+                  description: Point of sale market, for example CN or SG.
+                trip_type:
+                  type: string
+                  enum:
+                    - round_trip
+                    - one_way
+                  default: round_trip
+                cabin_class:
+                  type: string
+                stay_rules:
+                  type: object
+                  additionalProperties: false
+                  properties:
+                    min_nights:
+                      type: integer
+                    max_nights:
+                      type: integer
+                competitor_scope:
+                  type: object
+                  additionalProperties: false
+                  properties:
+                    include_full_service:
+                      type: boolean
+                      default: true
+                    include_low_cost:
+                      type: boolean
+                      default: false
+                    maximum_competitors:
+                      type: integer
+                      minimum: 1
+                      maximum: 20
+                      default: 5
+      responses:
+        '200':
+          description: Benchmark results returned successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required:
+                  - benchmark_summary
+                  - route_benchmarks
+                properties:
+                  benchmark_summary:
+                    type: object
+                    additionalProperties: false
+                    required:
+                      - routes_requested
+                      - routes_benchmarked
+                    properties:
+                      routes_requested:
+                        type: integer
+                      routes_benchmarked:
+                        type: integer
+                      point_of_sale:
+                        type: string
+                      notes:
+                        type: array
+                        items:
+                          type: string
+                  route_benchmarks:
+                    type: array
+                    items:
+                      type: object
+                      additionalProperties: false
+                      required:
+                        - route
+                        - reference_market_price
+                        - competitor_summary
+                        - source_reference
+                      properties:
+                        route:
+                          type: object
+                          additionalProperties: false
+                          required:
+                            - origin
+                            - destination
+                          properties:
+                            origin:
+                              type: string
+                            destination:
+                              type: string
+                            via:
+                              type: string
+                        lowest_observed_fare:
+                          type: object
+                          properties:
+                            amount:
+                              type: number
+                            currency:
+                              type: string
+                        reference_market_price:
+                          type: object
+                          required:
+                            - amount
+                            - currency
+                          properties:
+                            amount:
+                              type: number
+                            currency:
+                              type: string
+                        competitor_summary:
+                          type: string
+                        market_position_note:
+                          type: string
+                        source_reference:
+                          type: string
+                        collected_at:
+                          type: string
+                          format: date-time
+                  warnings:
+                    type: array
+                    items:
+                      type: string
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  details:
+                    type: array
+                    items:
+                      type: string
+        '500':
+          description: Benchmark lookup failed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  trace_id:
+                    type: string

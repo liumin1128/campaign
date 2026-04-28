@@ -1,0 +1,60 @@
+{
+  "tool_request_body": {
+    "routes": [
+      {
+        "origin": "Beijing",
+        "destination": "Cape Town",
+        "priority": 1
+      },
+      {
+        "origin": "Shanghai",
+        "destination": "Barcelona",
+        "priority": 2
+      }
+    ],
+    "travel_window": {
+      "start_date": "2026-07-01",
+      "end_date": "2026-12-31"
+    },
+    "currency": "CNY",
+    "point_of_sale": "CN",
+    "trip_type": "round_trip",
+    "cabin_class": "economy",
+    "competitor_scope": {
+      "include_full_service": true,
+      "include_low_cost": false,
+      "maximum_competitors": 5
+    }
+  },
+  "tool_success_response": {
+    "benchmark_summary": {
+      "routes_requested": 2,
+      "routes_benchmarked": 2,
+      "point_of_sale": "CN",
+      "notes": [
+        "Reference market price uses median comparable fare across selected competitors."
+      ]
+    },
+    "route_benchmarks": [
+      {
+        "route": {
+          "origin": "Beijing",
+          "destination": "Cape Town"
+        },
+        "lowest_observed_fare": {
+          "amount": 4980,
+          "currency": "CNY"
+        },
+        "reference_market_price": {
+          "amount": 5200,
+          "currency": "CNY"
+        },
+        "competitor_summary": "Market clustered around CNY 5,100 to CNY 5,400 with one lower outlier fare.",
+        "market_position_note": "There is room for a tactical fare cut while staying within the competitive cluster.",
+        "source_reference": "internal_fare_service:CN:PEK-CPT:2026-04-28",
+        "collected_at": "2026-04-28T12:00:00Z"
+      }
+    ],
+    "warnings": []
+  }
+}
