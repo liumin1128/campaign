@@ -26,6 +26,18 @@ export function getSupabasePublishableKey(): string {
   );
 }
 
+export function getSupabaseServiceRoleKey(): string {
+  return (
+    process.env.SUPABASE_SERVICE_ROLE_KEY ??
+    process.env.SUPABASE_SECRET_KEY ??
+    (() => {
+      throw new Error(
+        "Missing required environment variable: SUPABASE_SERVICE_ROLE_KEY or SUPABASE_SECRET_KEY",
+      );
+    })()
+  );
+}
+
 export function getPostgresConnectionString(): string {
   return (
     process.env.POSTGRES_URL_NON_POOLING ??

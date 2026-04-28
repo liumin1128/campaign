@@ -1,0 +1,162 @@
+[
+  {
+    "campaign": "pek1",
+    "step": "Initial Idea",
+    "content": "Retrieve data from Tableau",
+    "assignedTo": "liumin",
+    "deadline": "2026-07-01",
+    "status": "todo"
+  },
+  {
+    "campaign": "pek1",
+    "step": "Initial Idea",
+    "content": "Download filtered tables",
+    "assignedTo": "liumin",
+    "deadline": "2026-07-01",
+    "status": "todo"
+  },
+  {
+    "campaign": "pek1",
+    "step": "Initial Idea",
+    "content": "Hand-pick key data points",
+    "assignedTo": "liumin",
+    "deadline": "2026-07-01",
+    "status": "todo"
+  },
+  {
+    "campaign": "pek1",
+    "step": "Initial Idea",
+    "content": "Internal alignment discussion / idea raised",
+    "assignedTo": "liumin",
+    "deadline": "2026-07-01",
+    "status": "todo"
+  },
+  {
+    "campaign": "pek1",
+    "step": "Proposal Justification",
+    "content": "Build a PPT proposal",
+    "assignedTo": "liumin",
+    "deadline": "2026-07-01",
+    "status": "todo"
+  },
+  {
+    "campaign": "pek1",
+    "step": "Proposal Justification",
+    "content": "Send an Email",
+    "assignedTo": "liumin",
+    "deadline": "2026-07-01",
+    "status": "todo"
+  },
+  {
+    "campaign": "pek1",
+    "step": "Approval",
+    "content": "GM requires data support",
+    "assignedTo": "liumin",
+    "deadline": "2026-07-01",
+    "status": "todo"
+  },
+  {
+    "campaign": "pek1",
+    "step": "Execution",
+    "content": "Prepare contents of WMP creatives to Designer - Hazel (DS)",
+    "assignedTo": "liumin",
+    "deadline": "2026-07-01",
+    "status": "todo"
+  },
+  {
+    "campaign": "pek1",
+    "step": "Execution",
+    "content": "Provide DNSW SYD marketing materials (to DS & Designer) - Ethan (BMD)",
+    "assignedTo": "liumin",
+    "deadline": "2026-07-01",
+    "status": "todo"
+  },
+  {
+    "campaign": "pek1",
+    "step": "Execution",
+    "content": "Design, and send WMP creatives back to DS for review - Designer",
+    "assignedTo": "liumin",
+    "deadline": "2026-07-01",
+    "status": "todo"
+  },
+  {
+    "campaign": "pek1",
+    "step": "Execution",
+    "content": "WMP creatives confirmed by DS and send to BMD for review - Hazel(DS)",
+    "assignedTo": "liumin",
+    "deadline": "2026-07-01",
+    "status": "todo"
+  },
+  {
+    "campaign": "pek1",
+    "step": "Execution",
+    "content": "Final WMP creatives confirmed by BMD & DNSW - Arly Ethan (BMD)",
+    "assignedTo": "liumin",
+    "deadline": "2026-07-01",
+    "status": "todo"
+  },
+  {
+    "campaign": "pek1",
+    "step": "Execution",
+    "content": "Start of WMP development (coordinated by PO) - WMP Team",
+    "assignedTo": "liumin",
+    "deadline": "2026-07-01",
+    "status": "todo"
+  },
+  {
+    "campaign": "pek1",
+    "step": "Execution",
+    "content": "WMP cash-off set-up - Wang Yu (WMP PO)",
+    "assignedTo": "liumin",
+    "deadline": "2026-07-01",
+    "status": "todo"
+  },
+  {
+    "campaign": "pek1",
+    "step": "Execution",
+    "content": "Preview of SAA contents - Carrie (BMD)",
+    "assignedTo": "liumin",
+    "deadline": "2026-07-01",
+    "status": "todo"
+  },
+  {
+    "campaign": "pek1",
+    "step": "Execution",
+    "content": "Preview of social comms - Merc (BMD)",
+    "assignedTo": "liumin",
+    "deadline": "2026-07-01",
+    "status": "todo"
+  },
+  {
+    "campaign": "pek1",
+    "step": "Execution",
+    "content": "Deploy WMP Creatives - WMP Team",
+    "assignedTo": "liumin",
+    "deadline": "2026-07-01",
+    "status": "todo"
+  },
+  {
+    "campaign": "pek1",
+    "step": "Execution",
+    "content": "Final view of Social comms/SAA contents - Merc Carrie (BMD)",
+    "assignedTo": "liumin",
+    "deadline": "2026-07-01",
+    "status": "todo"
+  },
+  {
+    "campaign": "pek1",
+    "step": "Go Live & Monitor",
+    "content": "WMP Creatives go live - WMP Team",
+    "assignedTo": "liumin",
+    "deadline": "2026-07-01",
+    "status": "todo"
+  },
+  {
+    "campaign": "pek1",
+    "step": "Go Live & Monitor",
+    "content": "Social comms & SAA contents go live - Merc Carrie (BMD)",
+    "assignedTo": "liumin",
+    "deadline": "2026-07-01",
+    "status": "todo"
+  }
+]

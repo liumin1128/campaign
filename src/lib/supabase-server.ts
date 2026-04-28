@@ -1,9 +1,14 @@
 import "server-only";
 
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import { getSupabasePublishableKey, getSupabaseUrl } from "@/lib/env";
+import {
+  getSupabasePublishableKey,
+  getSupabaseServiceRoleKey,
+  getSupabaseUrl,
+} from "@/lib/env";
 
 let serverClient: SupabaseClient | undefined;
+let adminClient: SupabaseClient | undefined;
 
 export function getSupabaseServerClient(): SupabaseClient {
   if (!serverClient) {
@@ -16,6 +21,19 @@ export function getSupabaseServerClient(): SupabaseClient {
   }
 
   return serverClient;
+}
+
+export function getSupabaseAdminClient(): SupabaseClient {
+  if (!adminClient) {
+    adminClient = createClient(getSupabaseUrl(), getSupabaseServiceRoleKey(), {
+      auth: {
+        persistSession: false,
+        autoRefreshToken: false,
+      },
+    });
+  }
+
+  return adminClient;
 }
 
 export async function checkSupabaseServerConnection() {

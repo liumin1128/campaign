@@ -1,3 +1,5 @@
+import CampaignTaskList from "@/components/campaign-task-list";
+
 type CampaignPageProps = {
   params: Promise<{
     campaignID: string;
@@ -23,6 +25,8 @@ export default async function CampaignDetailPage({
           </div>
         </div>
       </div>
+
+      <CampaignTaskList campaignID={campaignID} />
     </div>
   );
 }
