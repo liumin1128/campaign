@@ -10,6 +10,8 @@
     "package": "node scripts/package-manifest.mjs"
   },
   "dependencies": {
+    "@headlessui/react": "^2.2.10",
+    "@heroicons/react": "^2.2.0",
     "@microsoft/teams-js": "^2.52.0",
     "@supabase/supabase-js": "^2.105.0",
     "botbuilder": "^4.23.3",
