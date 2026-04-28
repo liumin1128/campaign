@@ -1,6 +1,12 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, type CSSProperties } from "react";
+import { Checkbox } from "@fluentui/react-components";
+import {
+  CalendarLtrRegular,
+  ClockRegular,
+  PersonRegular,
+} from "@fluentui/react-icons";
 import {
   useCampaignTaskStore,
   type CampaignTask,
@@ -16,6 +22,9 @@ const stepDefinitions = [
   { key: "Execution", label: "Step 4: Execution" },
   { key: "Go Live & Monitor", label: "Step 5: Go Live & Monitor" },
 ] as const;
+
+const taskCheckboxClassName =
+  "rounded-full p-1 transition-transform duration-150 hover:scale-105 focus-within:scale-105 [&_.fui-Checkbox__indicator]:rounded-full [&_.fui-Checkbox__indicator]:border-[1.5px] [&_.fui-Checkbox__indicator]:shadow-[0_0_0_4px_rgba(255,255,255,0.92),0_10px_24px_rgba(99,102,241,0.14)] focus-within:[&_.fui-Checkbox__indicator]:shadow-[0_0_0_5px_rgba(224,231,255,0.95),0_12px_28px_rgba(99,102,241,0.2)]";
 
 function formatDate(dateText: string | null) {
   if (!dateText) {
@@ -73,64 +82,76 @@ function TaskRow({
   const isUpdating = updatingTaskIDs.includes(task.id);
   const isDone = task.status === "done";
   const showUpdatedAt = hasUpdatedTimestamp(task.created_at, task.updated_at);
+  const checkboxStyle = {
+    "--fui-Checkbox__indicator--borderColor": isDone ? "#818cf8" : "#cbd5e1",
+    "--fui-Checkbox__indicator--backgroundColor": isDone
+      ? "#818cf8"
+      : "#ffffff",
+    "--fui-Checkbox__indicator--color": isDone ? "#ffffff" : "#ffffff",
+  } as CSSProperties;
 
   return (
-    <li className="rounded-lg border border-gray-200 bg-white px-4 py-3">
-      <label className="flex cursor-pointer items-center gap-3">
-        <input
-          type="checkbox"
-          className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+    <li className="rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm transition hover:border-indigo-200 hover:shadow-md">
+      <div className="flex items-center gap-3">
+        <Checkbox
+          aria-label={isDone ? "Mark task as todo" : "Mark task as done"}
           checked={isDone}
+          className={taskCheckboxClassName}
           disabled={isUpdating}
-          onChange={() => {
+          shape="circular"
+          size="large"
+          style={checkboxStyle}
+          onChange={(_, data) => {
             void updateTaskStatus(
               campaignID,
               task.id,
-              isDone ? "todo" : "done",
+              data.checked ? "done" : "todo",
             );
           }}
         />
 
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-col gap-2 text-sm text-gray-600 lg:flex-row lg:items-center lg:gap-4">
-            <span
-              className={
-                isDone
-                  ? "font-medium text-gray-400 line-through"
-                  : "font-medium text-gray-900"
-              }
-            >
-              {task.content}
-            </span>
+        <div className="flex min-w-0 flex-1 items-center gap-4 overflow-hidden">
+          <span
+            className={
+              isDone
+                ? "min-w-0 flex-1 truncate text-sm font-medium text-slate-400 line-through"
+                : "min-w-0 flex-1 truncate text-sm font-medium text-slate-900"
+            }
+            title={task.content}
+          >
+            {task.content}
+          </span>
 
+          <div className="flex min-w-0 items-center justify-end gap-2 overflow-hidden text-xs text-slate-500">
             {task.assignedTo ? (
-              <span className="truncate rounded-full bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-600">
-                {task.assignedTo}
+              <span className="inline-flex max-w-40 items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 font-medium text-slate-600">
+                <PersonRegular className="size-3.5 text-slate-400" />
+                <span className="truncate">{task.assignedTo}</span>
               </span>
             ) : null}
 
-            <span className="text-xs text-gray-500">
-              Deadline: {formatDate(task.deadline)}
+            <span className="inline-flex items-center gap-1 whitespace-nowrap rounded-full bg-indigo-50 px-2.5 py-1 font-medium text-indigo-700">
+              <CalendarLtrRegular className="size-3.5" />
+              <span>{formatDate(task.deadline)}</span>
             </span>
 
-            <span className="text-xs text-gray-500">
-              Created: {formatDate(task.created_at)}
-            </span>
-
-            {showUpdatedAt ? (
-              <span className="text-xs text-gray-500">
-                Updated: {formatDate(task.updated_at)}
+            <span className="inline-flex min-w-0 items-center gap-1 whitespace-nowrap text-slate-400">
+              <ClockRegular className="size-3.5" />
+              <span className="truncate">
+                {showUpdatedAt
+                  ? `Updated ${formatDate(task.updated_at)}`
+                  : `Created ${formatDate(task.created_at)}`}
               </span>
-            ) : null}
+            </span>
 
             {isUpdating ? (
-              <span className="text-xs font-medium text-blue-600">
+              <span className="whitespace-nowrap rounded-full bg-indigo-100 px-2.5 py-1 font-semibold text-indigo-700">
                 Updating...
               </span>
             ) : null}
           </div>
         </div>
-      </label>
+      </div>
     </li>
   );
 }
@@ -169,7 +190,7 @@ export default function CampaignTaskList({
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="overflow-hidden rounded-lg bg-white shadow-sm">
+      <div className="overflow-hidden rounded-lg shadow-sm">
         <div className="border-b border-gray-200 px-4 py-4 sm:px-6">
           <div className="flex items-center justify-between gap-3">
             <div>
@@ -187,7 +208,7 @@ export default function CampaignTaskList({
           </div>
         </div>
 
-        <div className="px-4 py-5 sm:p-6">
+        <div className="">
           {loading ? (
             <div className="text-sm text-gray-500">Loading tasks...</div>
           ) : null}
@@ -207,10 +228,7 @@ export default function CampaignTaskList({
           {!loading && !error && tasks.length > 0 ? (
             <div className="space-y-4">
               {groupedTasks.map((group) => (
-                <section
-                  key={group.key}
-                  className="rounded-xl border border-gray-200 bg-gray-50/70"
-                >
+                <section key={group.key} className="rounded-sm bg-white">
                   <div className="border-b border-gray-200 px-4 py-4">
                     <div className="flex items-center justify-between gap-3">
                       <h4 className="text-sm font-semibold text-gray-900">
@@ -223,7 +241,7 @@ export default function CampaignTaskList({
                     </div>
                   </div>
 
-                  <ul className="space-y-3 px-4 py-4">
+                  <ul className="space-y-3 px-4 py-4  bg-gray-50">
                     {group.tasks.map((task) => (
                       <TaskRow
                         key={task.id}
