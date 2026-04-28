@@ -229,7 +229,7 @@ export default function CampaignTaskRow({
                 </button>
                 <button
                   type="button"
-                  className="rounded-full bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:bg-indigo-300 dark:disabled:bg-indigo-900/60"
+                  className="rounded-xs bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:bg-indigo-300 dark:disabled:bg-indigo-900/60"
                   disabled={isUpdating || !hasPendingTextChange}
                   onClick={() => {
                     void handleSaveText();
