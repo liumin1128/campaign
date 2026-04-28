@@ -50,3 +50,11 @@ export function getPostgresConnectionString(): string {
     })()
   );
 }
+
+export function getOptionalTeamsWebhookUrl(): string | null {
+  return (
+    process.env.TEAMS_WEBHOOK_URL ??
+    process.env.NEXT_PUBLIC_TEAMS_WEBHOOK_URL ??
+    null
+  );
+}

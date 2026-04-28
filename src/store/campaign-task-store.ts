@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { useTeamsUserStore } from "@/store/teams-user-store";
 
 export type CampaignTaskStatus = "todo" | "done";
 
@@ -98,6 +99,13 @@ export const useCampaignTaskStore = create<CampaignTaskState>()((set, get) => ({
   },
   updateTaskStatus: async (campaignID, taskID, status) => {
     const previousTasks = get().tasks;
+    const currentUser = useTeamsUserStore.getState().info;
+    const sender =
+      currentUser.displayName || currentUser.userPrincipalName || "开发者";
+    const webhookUrl =
+      typeof window !== "undefined"
+        ? window.localStorage.getItem("teams_webhook_url")?.trim() || undefined
+        : undefined;
 
     set((state) => ({
       error: null,
@@ -118,6 +126,8 @@ export const useCampaignTaskStore = create<CampaignTaskState>()((set, get) => ({
           body: JSON.stringify({
             taskID,
             status,
+            sender,
+            webhookUrl,
           }),
         },
       );

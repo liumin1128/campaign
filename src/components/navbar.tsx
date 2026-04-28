@@ -1,8 +1,9 @@
 "use client";
 
 import { useThemeMode } from "flowbite-react";
-import { useState } from "react";
+import { useState, useSyncExternalStore } from "react";
 import {
+  Cog,
   CalendarMonth,
   ChartPie,
   FileCopy,
@@ -20,6 +21,7 @@ const navigation = [
   { name: "Calendar", href: "#", icon: CalendarMonth, current: false },
   { name: "Documents", href: "#", icon: FileCopy, current: false },
   { name: "Reports", href: "#", icon: ChartPie, current: false },
+  { name: "Settings", href: "/tab/settings", icon: Cog, current: false },
 ];
 const teams = [
   { id: 1, name: "Heroicons", href: "#", initial: "H", current: false },
@@ -44,6 +46,14 @@ function formatTeamsData(payload: unknown) {
 
 function ThemeModeSwitch() {
   const { computedMode, setMode } = useThemeMode();
+  const mounted = useSyncExternalStore(
+    () => () => undefined,
+    () => true,
+    () => false,
+  );
+
+  const isLight = mounted && computedMode === "light";
+  const isDark = mounted && computedMode === "dark";
 
   return (
     <div className="inline-flex rounded-full border border-slate-200 bg-slate-100 p-1 dark:border-slate-700 dark:bg-slate-800">
@@ -51,7 +61,7 @@ function ThemeModeSwitch() {
         type="button"
         onClick={() => setMode("light")}
         className={classNames(
-          computedMode === "light"
+          isLight
             ? "bg-white text-slate-900 shadow-sm"
             : "text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100",
           "rounded-full px-3 py-1 text-xs font-semibold transition",
@@ -63,7 +73,7 @@ function ThemeModeSwitch() {
         type="button"
         onClick={() => setMode("dark")}
         className={classNames(
-          computedMode === "dark"
+          isDark
             ? "bg-slate-900 text-white shadow-sm dark:bg-slate-950"
             : "text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100",
           "rounded-full px-3 py-1 text-xs font-semibold transition",

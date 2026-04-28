@@ -1,4 +1,6 @@
 import { getSupabaseAdminClient } from "@/lib/supabase-server";
+import { getOptionalTeamsWebhookUrl } from "@/lib/env";
+import { sendTeamsWebhookMessage } from "@/lib/teams-webhook";
 
 export const runtime = "nodejs";
 
@@ -44,6 +46,8 @@ export async function PATCH(request: Request, context: RouteContext) {
   const payload = (await request.json()) as {
     taskID?: number;
     status?: string;
+    sender?: string;
+    webhookUrl?: string;
   };
 
   if (
@@ -61,6 +65,23 @@ export async function PATCH(request: Request, context: RouteContext) {
 
   const supabase = getSupabaseAdminClient();
   const status = payload.status as TaskStatus;
+
+  const { data: previousTask, error: previousTaskError } = await supabase
+    .from("task")
+    .select(taskSelectFields)
+    .eq("id", payload.taskID)
+    .eq("campaign", campaignID)
+    .single();
+
+  if (previousTaskError) {
+    return Response.json(
+      {
+        ok: false,
+        error: previousTaskError.message,
+      },
+      { status: 500 },
+    );
+  }
 
   const { data, error } = await supabase
     .from("task")
@@ -81,6 +102,22 @@ export async function PATCH(request: Request, context: RouteContext) {
       },
       { status: 500 },
     );
+  }
+
+  const sender = payload.sender?.trim() || "Unknown";
+  const webhookUrl = payload.webhookUrl?.trim() || getOptionalTeamsWebhookUrl();
+  const shouldNotify = previousTask.status !== "done" && status === "done";
+
+  if (shouldNotify && webhookUrl) {
+    try {
+      await sendTeamsWebhookMessage({
+        message: `${sender} 完成任务：${data.content}`,
+        webhookUrl,
+        sender,
+      });
+    } catch (notifyError) {
+      console.error("Task completion webhook failed:", notifyError);
+    }
   }
 
   return Response.json({

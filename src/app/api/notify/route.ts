@@ -1,5 +1,7 @@
 import { NextRequest } from "next/server";
 import { sendProactiveMessage, getConversationReferences } from "@/lib/bot";
+import { sendTeamsWebhookMessage } from "@/lib/teams-webhook";
+import { getOptionalTeamsWebhookUrl } from "@/lib/env";
 
 /**
  * POST /api/notify - 向群组发送消息
@@ -16,9 +18,14 @@ export async function POST(req: NextRequest) {
     return Response.json({ error: "message 参数必填" }, { status: 400 });
   }
 
+  const resolvedWebhookUrl =
+    typeof webhookUrl === "string" && webhookUrl.trim()
+      ? webhookUrl.trim()
+      : getOptionalTeamsWebhookUrl();
+
   // 如果提供了 webhookUrl，使用 Webhook 方式发送
-  if (webhookUrl) {
-    return sendViaWebhook(message, webhookUrl, sender);
+  if (resolvedWebhookUrl) {
+    return sendViaWebhook(message, resolvedWebhookUrl, sender);
   }
 
   // 否则使用 Bot 主动消息
@@ -49,87 +56,8 @@ async function sendViaWebhook(
   webhookUrl: string,
   sender?: string,
 ) {
-  // 校验 webhook URL 必须是 Microsoft Teams / Power Automate 的合法域名
   try {
-    const url = new URL(webhookUrl);
-    const validDomains = [
-      ".webhook.office.com",
-      ".office.com",
-      ".powerplatform.com",
-      ".logic.azure.com",
-    ];
-    if (!validDomains.some((d) => url.hostname.endsWith(d))) {
-      return Response.json(
-        { error: "webhookUrl 必须是 Teams Webhook 或 Power Automate 地址" },
-        { status: 400 },
-      );
-    }
-  } catch {
-    return Response.json({ error: "webhookUrl 格式无效" }, { status: 400 });
-  }
-
-  try {
-    const url = new URL(webhookUrl);
-    const isPowerAutomate =
-      url.hostname.endsWith(".powerplatform.com") ||
-      url.hostname.endsWith(".logic.azure.com");
-
-    const adaptiveCard = {
-      $schema: "http://adaptivecards.io/schemas/adaptive-card.json",
-      type: "AdaptiveCard",
-      version: "1.4",
-      body: [
-        {
-          type: "TextBlock",
-          text: "📨 来自 Tab 应用的消息",
-          weight: "Bolder",
-          size: "Medium",
-        },
-        { type: "TextBlock", text: message, wrap: true },
-        {
-          type: "TextBlock",
-          text: `发送者: ${sender ?? "Unknown"} | ${new Date().toLocaleString("zh-CN")}`,
-          size: "Small",
-          isSubtle: true,
-        },
-      ],
-    };
-
-    // Power Automate Workflows 使用不同的 payload 格式
-    const payload = isPowerAutomate
-      ? {
-          type: "message",
-          attachments: [
-            {
-              contentType: "application/vnd.microsoft.card.adaptive",
-              contentUrl: null,
-              content: adaptiveCard,
-            },
-          ],
-        }
-      : {
-          type: "message",
-          attachments: [
-            {
-              contentType: "application/vnd.microsoft.card.adaptive",
-              content: adaptiveCard,
-            },
-          ],
-        };
-
-    const res = await fetch(webhookUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-
-    if (!res.ok) {
-      const text = await res.text();
-      return Response.json(
-        { error: `Webhook 返回错误: ${res.status} - ${text}` },
-        { status: 502 },
-      );
-    }
+    await sendTeamsWebhookMessage({ message, webhookUrl, sender });
 
     return Response.json({ message: "消息已通过 Webhook 发送到群组" });
   } catch (err) {
@@ -137,7 +65,13 @@ async function sendViaWebhook(
     console.error("Webhook 发送失败:", errorMessage, err);
     return Response.json(
       { error: `发送失败: ${errorMessage}` },
-      { status: 500 },
+      {
+        status:
+          errorMessage.includes("webhookUrl") ||
+          errorMessage.includes("Power Automate")
+            ? 400
+            : 500,
+      },
     );
   }
 }
