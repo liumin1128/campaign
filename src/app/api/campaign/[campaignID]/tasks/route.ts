@@ -64,7 +64,10 @@ export async function PATCH(request: Request, context: RouteContext) {
 
   const { data, error } = await supabase
     .from("task")
-    .update({ status })
+    .update({
+      status,
+      updated_at: new Date().toISOString(),
+    })
     .eq("id", payload.taskID)
     .eq("campaign", campaignID)
     .select(taskSelectFields)

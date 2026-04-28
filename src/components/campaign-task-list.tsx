@@ -35,6 +35,28 @@ function formatDate(dateText: string | null) {
   }).format(date);
 }
 
+function hasUpdatedTimestamp(
+  createdAt: string | null,
+  updatedAt: string | null,
+) {
+  if (!updatedAt) {
+    return false;
+  }
+
+  if (!createdAt) {
+    return true;
+  }
+
+  const createdTime = new Date(createdAt).getTime();
+  const updatedTime = new Date(updatedAt).getTime();
+
+  if (Number.isNaN(createdTime) || Number.isNaN(updatedTime)) {
+    return updatedAt !== createdAt;
+  }
+
+  return updatedTime > createdTime;
+}
+
 function TaskRow({
   task,
   campaignID,
@@ -50,6 +72,7 @@ function TaskRow({
   );
   const isUpdating = updatingTaskIDs.includes(task.id);
   const isDone = task.status === "done";
+  const showUpdatedAt = hasUpdatedTimestamp(task.created_at, task.updated_at);
 
   return (
     <li className="rounded-lg border border-gray-200 bg-white px-4 py-3">
@@ -93,6 +116,12 @@ function TaskRow({
             <span className="text-xs text-gray-500">
               Created: {formatDate(task.created_at)}
             </span>
+
+            {showUpdatedAt ? (
+              <span className="text-xs text-gray-500">
+                Updated: {formatDate(task.updated_at)}
+              </span>
+            ) : null}
 
             {isUpdating ? (
               <span className="text-xs font-medium text-blue-600">
