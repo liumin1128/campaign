@@ -8,6 +8,8 @@ import {
   HomeIcon,
   UsersIcon,
 } from "@heroicons/react/24/outline";
+import { classNames } from "@/utils/common";
+import { useTeamsUserStore } from "@/store/teams-user-store";
 
 const navigation = [
   { name: "Dashboard", href: "#", icon: HomeIcon, current: true },
@@ -23,11 +25,26 @@ const teams = [
   { id: 3, name: "Workcation", href: "#", initial: "W", current: false },
 ];
 
-function classNames(...classes) {
-  return classes.filter(Boolean).join(" ");
+function getUserInitials(displayName: string) {
+  const initials = displayName
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? "")
+    .join("");
+
+  return initials || "TU";
 }
 
 export function Navbar() {
+  const info = useTeamsUserStore((state) => state.info);
+  const inTeams = useTeamsUserStore((state) => state.inTeams);
+
+  const displayName = info.displayName || (inTeams ? "Teams 用户" : "开发者");
+  const secondaryLine =
+    info.teamName || info.userPrincipalName || "Browser mode";
+  const initials = getUserInitials(displayName);
+
   return (
     <nav className="flex flex-1 flex-col">
       <ul role="list" className="flex flex-1 flex-col gap-y-7">
@@ -98,15 +115,23 @@ export function Navbar() {
         <li className="-mx-6 mt-auto">
           <a
             href="#"
-            className="flex items-center gap-x-4 px-6 py-3 text-sm/6 font-semibold text-gray-900 hover:bg-gray-50"
+            className="flex items-center gap-x-4 px-6 py-3 text-sm/6 hover:bg-gray-50"
           >
-            <img
-              alt=""
-              src="https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?ixlib=rb-1.2.1&ixid=eyJhcHBfaWQiOjEyMDd9&auto=format&fit=facearea&facepad=2&w=256&h=256&q=80"
-              className="size-8 rounded-full bg-gray-50 outline -outline-offset-1 outline-black/5"
-            />
+            <span
+              aria-hidden="true"
+              className="flex size-8 shrink-0 items-center justify-center rounded-full bg-indigo-600 text-xs font-semibold text-white"
+            >
+              {initials}
+            </span>
             <span className="sr-only">Your profile</span>
-            <span aria-hidden="true">Tom Cook</span>
+            <span className="min-w-0 flex-1" aria-hidden="true">
+              <span className="block truncate font-semibold text-gray-900">
+                {displayName}
+              </span>
+              <span className="block truncate text-xs text-gray-500">
+                {secondaryLine}
+              </span>
+            </span>
           </a>
         </li>
       </ul>
