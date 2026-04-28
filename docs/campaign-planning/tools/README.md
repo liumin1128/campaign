@@ -34,8 +34,9 @@ In AgentSL Tool Studio:
 2. Select `OpenAPI` as the tool type.
 3. Paste `campaign-csv-analyzer.openapi.yaml` into the editor.
 4. Replace the placeholder `servers.url` with your deployed tool endpoint.
-5. Replace the contact name and email in the OpenAPI `info.contact` section.
-6. Save the tool.
+5. For this Next.js app, the actual callable paths must include the `/api` prefix, for example `/api/campaign-tools/analyze-sales-csv`.
+6. Replace the contact name and email in the OpenAPI `info.contact` section.
+7. Save the tool.
 
 ## Important AgentSL Rules
 

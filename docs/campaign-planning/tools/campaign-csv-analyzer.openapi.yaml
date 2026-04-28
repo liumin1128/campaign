@@ -13,7 +13,7 @@ info:
 servers:
   - url: https://campaign.react.mobi/
 paths:
-  /campaign-tools/analyze-sales-csv:
+  /api/campaign-tools/analyze-sales-csv:
     post:
       operationId: analyze_sales_csv
       summary: Analyze sales CSV inputs for campaign planning

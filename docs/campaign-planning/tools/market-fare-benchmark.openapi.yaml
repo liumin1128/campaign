@@ -13,7 +13,7 @@ info:
 servers:
   - url: https://campaign.react.mobi/
 paths:
-  /campaign-tools/benchmark-market-fares:
+  /api/campaign-tools/benchmark-market-fares:
     post:
       operationId: benchmark_market_fares
       summary: Benchmark market fares for candidate routes
