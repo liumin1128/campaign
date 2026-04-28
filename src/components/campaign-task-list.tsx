@@ -389,13 +389,12 @@ export default function CampaignTaskList({
             Cancel
           </Button>
           <Button
-            isProcessing={creatingTask}
             disabled={creatingTask}
             onClick={() => {
               void handleCreateTask();
             }}
           >
-            Create task
+            {creatingTask ? "Creating..." : "Create task"}
           </Button>
         </ModalFooter>
       </Modal>
