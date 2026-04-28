@@ -329,7 +329,7 @@ export default function CampaignTaskList({
           >
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
-                <Label htmlFor="campaign-task-campaign" value="Campaign" />
+                <Label htmlFor="campaign-task-campaign">Campaign</Label>
                 <TextInput
                   id="campaign-task-campaign"
                   readOnly
@@ -337,7 +337,7 @@ export default function CampaignTaskList({
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="campaign-task-step" value="Step" />
+                <Label htmlFor="campaign-task-step">Step</Label>
                 <TextInput
                   id="campaign-task-step"
                   readOnly
@@ -347,7 +347,7 @@ export default function CampaignTaskList({
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="campaign-task-content" value="Task content" />
+              <Label htmlFor="campaign-task-content">Task content</Label>
               <TextInput
                 id="campaign-task-content"
                 ref={contentInputRef}
@@ -358,7 +358,7 @@ export default function CampaignTaskList({
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="campaign-task-deadline" value="Deadline" />
+              <Label htmlFor="campaign-task-deadline">Deadline</Label>
               <TextInput
                 id="campaign-task-deadline"
                 type="date"
