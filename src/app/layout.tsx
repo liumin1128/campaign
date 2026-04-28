@@ -15,7 +15,7 @@ export default function RootLayout({
   return (
     <html lang="zh-CN" suppressHydrationWarning>
       <head>
-        <ThemeModeScript defaultMode="light" />
+        <ThemeModeScript />
       </head>
       <body>{children}</body>
     </html>

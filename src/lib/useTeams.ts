@@ -12,7 +12,6 @@ export function useTeams() {
     null,
   );
   const [error, setError] = useState<string | null>(null);
-  const [themeName, setThemeName] = useState("default");
 
   useEffect(() => {
     const init = async () => {
@@ -20,10 +19,6 @@ export function useTeams() {
         await microsoftTeams.app.initialize();
         const ctx = await microsoftTeams.app.getContext();
         setContext(ctx);
-        setThemeName(ctx.app.theme ?? "default");
-        microsoftTeams.app.registerOnThemeChangeHandler((nextTheme) => {
-          setThemeName(nextTheme);
-        });
         setInTeams(true);
       } catch {
         setInTeams(false);
@@ -33,7 +28,7 @@ export function useTeams() {
     init();
   }, []);
 
-  return { inTeams, context, error, themeName };
+  return { inTeams, context, error };
 }
 
 /** Teams context 中可提取的用户/群组信息 */

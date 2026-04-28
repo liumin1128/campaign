@@ -1,6 +1,6 @@
 "use client";
 
-import { TeamsProvider } from "@/lib/TeamsProvider";
+import { TeamsUserSync } from "@/lib/TeamsUserSync";
 import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 import { Bars, Close } from "flowbite-react-icons/outline";
@@ -28,7 +28,8 @@ export default function TabLayout({ children }: { children: ReactNode }) {
   }, [sidebarOpen]);
 
   return (
-    <TeamsProvider>
+    <>
+      <TeamsUserSync />
       <div>
         {sidebarOpen ? (
           <div
@@ -114,6 +115,6 @@ export default function TabLayout({ children }: { children: ReactNode }) {
           <div className="px-4 sm:px-6 lg:px-8">{children}</div>
         </main>
       </div>
-    </TeamsProvider>
+    </>
   );
 }
