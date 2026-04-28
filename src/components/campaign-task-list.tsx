@@ -38,22 +38,22 @@ function getStepStatus(tasks: CampaignTask[]): StepStatus {
 function StepStatusIndicator({ status }: { status: StepStatus }) {
   if (status === "completed") {
     return (
-      <span className="flex h-7 w-7 items-center justify-center rounded-full bg-emerald-100 text-emerald-600 ring-4 ring-emerald-50 dark:bg-emerald-500/15 dark:text-emerald-300 dark:ring-emerald-500/10">
-        <CheckCircle className="size-4.5" />
+      <span className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-100 text-emerald-600 ring-4 ring-emerald-50 dark:bg-emerald-500/15 dark:text-emerald-300 dark:ring-emerald-500/10">
+        <CheckCircle className="size-5.5" />
       </span>
     );
   }
 
   if (status === "in-progress") {
     return (
-      <span className="flex h-7 w-7 items-center justify-center rounded-full bg-indigo-100 ring-4 ring-indigo-50 dark:bg-indigo-500/15 dark:ring-indigo-500/10">
-        <span className="h-2.5 w-2.5 rounded-full bg-indigo-600 dark:bg-indigo-300" />
+      <span className="flex h-9 w-9 items-center justify-center rounded-full bg-indigo-100 ring-4 ring-indigo-50 dark:bg-indigo-500/15 dark:ring-indigo-500/10">
+        <span className="h-3 w-3 rounded-full bg-indigo-600 dark:bg-indigo-300" />
       </span>
     );
   }
 
   return (
-    <span className="flex h-7 w-7 items-center justify-center rounded-full border border-slate-300 bg-white ring-4 ring-slate-100 dark:border-slate-600 dark:bg-slate-900 dark:ring-slate-800" />
+    <span className="flex h-9 w-9 items-center justify-center rounded-full border border-slate-300 bg-white ring-4 ring-slate-100 dark:border-slate-600 dark:bg-slate-900 dark:ring-slate-800" />
   );
 }
 
@@ -144,9 +144,9 @@ export default function CampaignTaskList({
                 >
                   <div className="border-b border-gray-200 px-4 py-4 dark:border-slate-800">
                     <div className="flex items-center justify-between gap-3">
-                      <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-3.5">
                         <StepStatusIndicator status={group.status} />
-                        <h4 className="text-sm font-semibold text-gray-900 dark:text-slate-100">
+                        <h4 className="text-base font-semibold text-gray-900 dark:text-slate-100 sm:text-lg">
                           {group.label}
                         </h4>
                       </div>
