@@ -26,6 +26,8 @@ export default async function CampaignDetailPage({
         </div>
       </div>
 
+      <br />
+
       <CampaignTaskList campaignID={campaignID} />
     </div>
   );

@@ -157,23 +157,6 @@ export default function CampaignTaskList({
   return (
     <div className="flex flex-col gap-4">
       <div className="overflow-hidden rounded-lg">
-        <div className="border-b border-gray-200 px-4 py-4 sm:px-6 ">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <h3 className="text-base font-semibold leading-6 text-gray-900 dark:text-slate-100">
-                Tasks
-              </h3>
-              <p className="mt-1 text-sm text-gray-500 dark:text-slate-400">
-                Campaign {campaignID} currently has {tasks.length} task
-                {tasks.length === 1 ? "" : "s"}.
-              </p>
-            </div>
-            <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-medium text-gray-600 dark:bg-slate-800 dark:text-slate-300">
-              {activeCampaignID ?? campaignID}
-            </span>
-          </div>
-        </div>
-
         <div className="">
           {loading ? (
             <div className="text-sm text-gray-500 dark:text-slate-400">
