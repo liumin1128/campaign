@@ -1,0 +1,600 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://campaign.local/schemas/campaign-proposal.schema.json",
+  "title": "Campaign Proposal",
+  "description": "Structured output contract for AI-generated airline campaign proposals.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "proposal_metadata",
+    "campaign",
+    "input_summary",
+    "executive_summary",
+    "key_findings",
+    "market_benchmarks",
+    "recommendations",
+    "impact_assessment",
+    "risks_and_assumptions",
+    "appendix"
+  ],
+  "properties": {
+    "proposal_metadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "proposal_id",
+        "generated_at",
+        "generator_version",
+        "output_language",
+        "currency"
+      ],
+      "properties": {
+        "proposal_id": {
+          "type": "string",
+          "minLength": 3
+        },
+        "generated_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "generator_version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "output_language": {
+          "type": "string",
+          "minLength": 2,
+          "description": "Language used in the final proposal, for example en-SG."
+        },
+        "currency": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 3,
+          "description": "ISO 4217 currency code, for example CNY or SGD."
+        }
+      }
+    },
+    "campaign": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "campaign_name",
+        "campaign_type",
+        "objective",
+        "planning_window",
+        "travel_window",
+        "target_segments",
+        "market_scope"
+      ],
+      "properties": {
+        "campaign_name": {
+          "type": "string",
+          "minLength": 5
+        },
+        "campaign_type": {
+          "type": "string",
+          "enum": [
+            "long_haul_promotion",
+            "seasonal_sale",
+            "load_factor_recovery",
+            "yield_defense",
+            "custom"
+          ]
+        },
+        "objective": {
+          "type": "string",
+          "minLength": 20
+        },
+        "planning_window": {
+          "$ref": "#/$defs/dateRange"
+        },
+        "travel_window": {
+          "$ref": "#/$defs/dateRange"
+        },
+        "target_segments": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 2
+          }
+        },
+        "market_scope": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "origins",
+            "destinations",
+            "cabin_classes"
+          ],
+          "properties": {
+            "origins": {
+              "$ref": "#/$defs/stringList"
+            },
+            "destinations": {
+              "$ref": "#/$defs/stringList"
+            },
+            "cabin_classes": {
+              "$ref": "#/$defs/stringList"
+            }
+          }
+        }
+      }
+    },
+    "input_summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "brief",
+        "source_files",
+        "data_coverage",
+        "business_constraints"
+      ],
+      "properties": {
+        "brief": {
+          "type": "string",
+          "minLength": 20
+        },
+        "source_files": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/sourceFile"
+          }
+        },
+        "data_coverage": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 10
+          }
+        },
+        "business_constraints": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 5
+          }
+        }
+      }
+    },
+    "executive_summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "headline",
+        "summary",
+        "decision_ask"
+      ],
+      "properties": {
+        "headline": {
+          "type": "string",
+          "minLength": 10,
+          "maxLength": 140
+        },
+        "summary": {
+          "type": "string",
+          "minLength": 80
+        },
+        "decision_ask": {
+          "type": "string",
+          "minLength": 20,
+          "description": "The specific approval requested from GM."
+        }
+      }
+    },
+    "key_findings": {
+      "type": "array",
+      "minItems": 3,
+      "items": {
+        "$ref": "#/$defs/finding"
+      }
+    },
+    "market_benchmarks": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/marketBenchmark"
+      }
+    },
+    "recommendations": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 5,
+      "items": {
+        "$ref": "#/$defs/recommendation"
+      }
+    },
+    "impact_assessment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "expected_outcomes",
+        "measurement_plan"
+      ],
+      "properties": {
+        "expected_outcomes": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/outcome"
+          }
+        },
+        "measurement_plan": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 10
+          }
+        }
+      }
+    },
+    "risks_and_assumptions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "risks",
+        "assumptions",
+        "data_gaps"
+      ],
+      "properties": {
+        "risks": {
+          "$ref": "#/$defs/labeledNoteList"
+        },
+        "assumptions": {
+          "$ref": "#/$defs/labeledNoteList"
+        },
+        "data_gaps": {
+          "$ref": "#/$defs/labeledNoteList"
+        }
+      }
+    },
+    "appendix": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "supporting_tables",
+        "citations"
+      ],
+      "properties": {
+        "supporting_tables": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/supportingTable"
+          }
+        },
+        "citations": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/citation"
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "dateRange": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "start_date",
+        "end_date"
+      ],
+      "properties": {
+        "start_date": {
+          "type": "string",
+          "format": "date"
+        },
+        "end_date": {
+          "type": "string",
+          "format": "date"
+        }
+      }
+    },
+    "stringList": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "minLength": 2
+      }
+    },
+    "sourceFile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "file_name",
+        "description",
+        "mime_type"
+      ],
+      "properties": {
+        "file_name": {
+          "type": "string",
+          "minLength": 3
+        },
+        "description": {
+          "type": "string",
+          "minLength": 10
+        },
+        "mime_type": {
+          "type": "string",
+          "minLength": 3
+        }
+      }
+    },
+    "finding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "title",
+        "statement",
+        "evidence",
+        "severity"
+      ],
+      "properties": {
+        "title": {
+          "type": "string",
+          "minLength": 5
+        },
+        "statement": {
+          "type": "string",
+          "minLength": 20
+        },
+        "evidence": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 10
+          }
+        },
+        "severity": {
+          "type": "string",
+          "enum": [
+            "low",
+            "medium",
+            "high"
+          ]
+        }
+      }
+    },
+    "marketBenchmark": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "route",
+        "travel_window",
+        "reference_market_price",
+        "competitor_summary",
+        "source_reference"
+      ],
+      "properties": {
+        "route": {
+          "$ref": "#/$defs/route"
+        },
+        "travel_window": {
+          "$ref": "#/$defs/dateRange"
+        },
+        "reference_market_price": {
+          "$ref": "#/$defs/money"
+        },
+        "competitor_summary": {
+          "type": "string",
+          "minLength": 20
+        },
+        "source_reference": {
+          "type": "string",
+          "minLength": 8
+        }
+      }
+    },
+    "recommendation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "priority",
+        "route",
+        "recommendation_type",
+        "recommended_discount",
+        "proposed_price",
+        "reference_market_price",
+        "rationale",
+        "confidence"
+      ],
+      "properties": {
+        "priority": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 5
+        },
+        "route": {
+          "$ref": "#/$defs/route"
+        },
+        "recommendation_type": {
+          "type": "string",
+          "enum": [
+            "discount",
+            "fare_adjustment",
+            "bundle_offer",
+            "capacity_support",
+            "custom"
+          ]
+        },
+        "recommended_discount": {
+          "$ref": "#/$defs/money"
+        },
+        "proposed_price": {
+          "$ref": "#/$defs/money"
+        },
+        "reference_market_price": {
+          "$ref": "#/$defs/money"
+        },
+        "rationale": {
+          "type": "array",
+          "minItems": 2,
+          "items": {
+            "type": "string",
+            "minLength": 10
+          }
+        },
+        "expected_effect": {
+          "type": "string",
+          "minLength": 10
+        },
+        "confidence": {
+          "type": "string",
+          "enum": [
+            "low",
+            "medium",
+            "high"
+          ]
+        }
+      }
+    },
+    "outcome": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "metric",
+        "direction",
+        "explanation"
+      ],
+      "properties": {
+        "metric": {
+          "type": "string",
+          "minLength": 3
+        },
+        "direction": {
+          "type": "string",
+          "enum": [
+            "increase",
+            "decrease",
+            "stable"
+          ]
+        },
+        "target_value": {
+          "type": [
+            "number",
+            "string"
+          ]
+        },
+        "explanation": {
+          "type": "string",
+          "minLength": 10
+        }
+      }
+    },
+    "labeledNoteList": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "title",
+          "detail"
+        ],
+        "properties": {
+          "title": {
+            "type": "string",
+            "minLength": 3
+          },
+          "detail": {
+            "type": "string",
+            "minLength": 10
+          }
+        }
+      }
+    },
+    "supportingTable": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "table_name",
+        "description"
+      ],
+      "properties": {
+        "table_name": {
+          "type": "string",
+          "minLength": 3
+        },
+        "description": {
+          "type": "string",
+          "minLength": 10
+        },
+        "file_name": {
+          "type": "string",
+          "minLength": 3
+        }
+      }
+    },
+    "citation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source_type",
+        "reference",
+        "usage"
+      ],
+      "properties": {
+        "source_type": {
+          "type": "string",
+          "enum": [
+            "internal_csv",
+            "market_api",
+            "manual_input",
+            "other"
+          ]
+        },
+        "reference": {
+          "type": "string",
+          "minLength": 5
+        },
+        "usage": {
+          "type": "string",
+          "minLength": 10
+        }
+      }
+    },
+    "route": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "origin",
+        "destination"
+      ],
+      "properties": {
+        "origin": {
+          "type": "string",
+          "minLength": 3
+        },
+        "destination": {
+          "type": "string",
+          "minLength": 3
+        },
+        "via": {
+          "type": "string",
+          "minLength": 3
+        }
+      }
+    },
+    "money": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "amount"
+      ],
+      "properties": {
+        "amount": {
+          "type": "number"
+        },
+        "currency": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 3
+        }
+      }
+    }
+  }
+}
