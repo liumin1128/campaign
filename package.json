@@ -10,6 +10,8 @@
     "package": "node scripts/package-manifest.mjs"
   },
   "dependencies": {
+    "@fluentui/react-components": "^9.73.7",
+    "@fluentui/react-icons": "^2.0.324",
     "@headlessui/react": "^2.2.10",
     "@heroicons/react": "^2.2.0",
     "@microsoft/teams-js": "^2.52.0",

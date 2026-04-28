@@ -27,13 +27,13 @@ export async function checkSupabaseBrowserConnection(): Promise<{
 }> {
   getSupabaseBrowserClient();
   const supabaseUrl = getSupabaseUrl();
-  const publishableKey = getSupabasePublishableKey();
+  const supabaseKey = getSupabasePublishableKey();
 
   const response = await fetch(`${supabaseUrl}/auth/v1/settings`, {
     method: "GET",
     headers: {
-      apikey: publishableKey,
-      Authorization: `Bearer ${publishableKey}`,
+      apikey: supabaseKey,
+      Authorization: `Bearer ${supabaseKey}`,
     },
   });
 
