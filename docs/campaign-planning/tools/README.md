@@ -33,10 +33,14 @@ In AgentSL Tool Studio:
 1. Create a new tool.
 2. Select `OpenAPI` as the tool type.
 3. Paste `campaign-csv-analyzer.openapi.yaml` into the editor.
-4. Replace the placeholder `servers.url` with your deployed tool endpoint.
+4. Use the production `servers.url` defined in the OpenAPI file. Do not replace it with a temporary preview domain such as `*.vercel.app`.
 5. For this Next.js app, the actual callable paths must include the `/api` prefix, for example `/api/campaign-tools/analyze-sales-csv`.
 6. Replace the contact name and email in the OpenAPI `info.contact` section.
 7. Save the tool.
+
+## TLS Troubleshooting
+
+If Agent Runner fails with `CERTIFICATE_VERIFY_FAILED`, verify that you are using the production hostname and not a temporary preview domain. See `agent-runner-tls-troubleshooting.md` in this folder for the exact checks and the summary you can send to platform or network teams.
 
 ## Important AgentSL Rules
 

@@ -12,6 +12,7 @@ info:
       - yun_gu@singaporeair.com.sg
 servers:
   - url: https://campaign.react.mobi/
+    description: Official production endpoint. Do not replace with temporary preview domains.
 paths:
   /api/campaign-tools/analyze-sales-csv:
     post:
