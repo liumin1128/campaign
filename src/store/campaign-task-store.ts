@@ -7,6 +7,7 @@ export type CampaignTask = {
   id: number;
   campaign: string;
   content: string;
+  text: string | null;
   assignedTo: string | null;
   step: string | null;
   deadline: string | null;

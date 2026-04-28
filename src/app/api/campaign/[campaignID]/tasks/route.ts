@@ -5,7 +5,7 @@ import { sendTeamsWebhookMessage } from "@/lib/teams-webhook";
 export const runtime = "nodejs";
 
 const taskSelectFields =
-  "id, campaign, content, assignedTo, step, deadline, status, created_at, updated_at";
+  "id, campaign, content, text, assignedTo, step, deadline, status, created_at, updated_at";
 
 type RouteContext = {
   params: Promise<{
