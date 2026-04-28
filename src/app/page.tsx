@@ -15,7 +15,9 @@ export default function Home() {
                   当前项目已切换为 Tailwind 驱动的 Teams 工作台界面。
                 </h1>
                 <p className="max-w-2xl text-base leading-8 text-slate-600 sm:text-lg">
-                  首页和 Tab 视图都可以直接使用 Tailwind 工具类构建界面，不再依赖手写 CSS Module 或 Fluent UI 的组件样式层。
+                  首页和 Tab 视图都可以直接使用 Tailwind
+                  工具类构建界面，不再依赖手写 CSS Module 或 Fluent UI
+                  的组件样式层。
                 </p>
               </div>
             </div>
@@ -23,7 +25,7 @@ export default function Home() {
             <div className="flex flex-col gap-3 sm:flex-row">
               <Link
                 href="/tab"
-                className="inline-flex items-center justify-center rounded-full bg-slate-950 px-6 py-3 text-sm font-semibold text-white transition hover:bg-slate-800"
+                className="inline-flex items-center justify-center rounded-full bg-indigo-600 px-6 py-3 text-sm font-semibold text-white transition hover:bg-indigo-500"
               >
                 打开 Campaign Workbench
               </Link>
@@ -36,18 +38,22 @@ export default function Home() {
             </div>
           </div>
 
-          <div className="grid gap-4 rounded-[28px] bg-slate-950 px-5 py-5 text-white sm:grid-cols-2 lg:grid-cols-1">
-            <div className="rounded-3xl border border-white/10 bg-white/5 p-5">
-              <p className="text-sm text-slate-300">样式方案</p>
-              <p className="mt-2 text-2xl font-semibold">Tailwind CSS 4</p>
-              <p className="mt-3 text-sm leading-7 text-slate-300">
+          <div className="grid gap-4 rounded-[28px] border border-slate-200/80 bg-slate-50/90 px-5 py-5 text-slate-900 sm:grid-cols-2 lg:grid-cols-1">
+            <div className="rounded-3xl border border-slate-200 bg-white/90 p-5 shadow-[0_12px_30px_rgba(15,23,42,0.04)]">
+              <p className="text-sm text-slate-500">样式方案</p>
+              <p className="mt-2 text-2xl font-semibold text-slate-950">
+                Tailwind CSS 4
+              </p>
+              <p className="mt-3 text-sm leading-7 text-slate-600">
                 通过全局样式入口和 PostCSS 插件接管界面样式编译。
               </p>
             </div>
-            <div className="rounded-3xl border border-white/10 bg-white/5 p-5">
-              <p className="text-sm text-slate-300">界面层</p>
-              <p className="mt-2 text-2xl font-semibold">原生 JSX + Utility Classes</p>
-              <p className="mt-3 text-sm leading-7 text-slate-300">
+            <div className="rounded-3xl border border-slate-200 bg-white/90 p-5 shadow-[0_12px_30px_rgba(15,23,42,0.04)]">
+              <p className="text-sm text-slate-500">界面层</p>
+              <p className="mt-2 text-2xl font-semibold text-slate-950">
+                原生 JSX + Utility Classes
+              </p>
+              <p className="mt-3 text-sm leading-7 text-slate-600">
                 更适合快速改版、状态驱动和 Teams 内嵌页面的细粒度控制。
               </p>
             </div>

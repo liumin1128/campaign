@@ -34,17 +34,18 @@ export default function TabConfigPage() {
           配置团队协作 Tab
         </h1>
         <p className="mt-4 text-base leading-8 text-slate-600">
-          点击 Teams 顶部的保存后，这个 Tab 会被添加到频道或群聊中，并展示 campaign workbench、任务管理和消息发送能力。
+          点击 Teams 顶部的保存后，这个 Tab 会被添加到频道或群聊中，并展示
+          campaign workbench、任务管理和消息发送能力。
         </p>
 
-        <div className="mt-8 grid gap-4 rounded-[28px] bg-slate-950 p-5 text-sm text-slate-200 sm:grid-cols-2">
-          <div className="rounded-3xl border border-white/10 bg-white/5 p-5">
-            <p className="text-slate-400">Entity ID</p>
-            <p className="mt-2 font-medium text-white">teamDemo</p>
+        <div className="mt-8 grid gap-4 rounded-[28px] border border-slate-200/80 bg-slate-50/90 p-5 text-sm text-slate-700 sm:grid-cols-2">
+          <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-[0_12px_30px_rgba(15,23,42,0.04)]">
+            <p className="text-slate-500">Entity ID</p>
+            <p className="mt-2 font-medium text-slate-950">teamDemo</p>
           </div>
-          <div className="rounded-3xl border border-white/10 bg-white/5 p-5">
-            <p className="text-slate-400">Content URL</p>
-            <p className="mt-2 break-all font-medium text-white">/tab</p>
+          <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-[0_12px_30px_rgba(15,23,42,0.04)]">
+            <p className="text-slate-500">Content URL</p>
+            <p className="mt-2 break-all font-medium text-slate-950">/tab</p>
           </div>
         </div>
 
@@ -53,7 +54,7 @@ export default function TabConfigPage() {
           onClick={() => {
             microsoftTeams.pages.config.setValidityState(true);
           }}
-          className="mt-8 inline-flex items-center justify-center rounded-full bg-slate-950 px-6 py-3 text-sm font-semibold text-white transition hover:bg-slate-800"
+          className="mt-8 inline-flex items-center justify-center rounded-full bg-indigo-600 px-6 py-3 text-sm font-semibold text-white transition hover:bg-indigo-500"
         >
           确认配置
         </button>
