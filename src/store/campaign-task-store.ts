@@ -11,6 +11,7 @@ export type CampaignTask = {
   deadline: string | null;
   status: CampaignTaskStatus;
   created_at: string | null;
+  updated_at: string | null;
 };
 
 type CampaignTaskState = {

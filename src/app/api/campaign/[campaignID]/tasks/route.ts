@@ -3,7 +3,7 @@ import { getSupabaseAdminClient } from "@/lib/supabase-server";
 export const runtime = "nodejs";
 
 const taskSelectFields =
-  "id, campaign, content, assignedTo, step, deadline, status, created_at";
+  "id, campaign, content, assignedTo, step, deadline, status, created_at, updated_at";
 
 type RouteContext = {
   params: Promise<{
