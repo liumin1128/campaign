@@ -2,23 +2,23 @@
 
 import { useState } from "react";
 import {
-  CalendarIcon,
-  ChartPieIcon,
-  DocumentDuplicateIcon,
-  FolderIcon,
-  HomeIcon,
-  UsersIcon,
-} from "@heroicons/react/24/outline";
+  CalendarMonth,
+  ChartPie,
+  FileCopy,
+  Folder,
+  Home,
+  Users,
+} from "flowbite-react-icons/outline";
 import { classNames } from "@/utils/common";
 import { useTeamsUserStore } from "@/store/teams-user-store";
 
 const navigation = [
-  { name: "Dashboard", href: "#", icon: HomeIcon, current: true },
-  { name: "Team", href: "#", icon: UsersIcon, current: false },
-  { name: "Projects", href: "#", icon: FolderIcon, current: false },
-  { name: "Calendar", href: "#", icon: CalendarIcon, current: false },
-  { name: "Documents", href: "#", icon: DocumentDuplicateIcon, current: false },
-  { name: "Reports", href: "#", icon: ChartPieIcon, current: false },
+  { name: "Dashboard", href: "#", icon: Home, current: true },
+  { name: "Team", href: "#", icon: Users, current: false },
+  { name: "Projects", href: "#", icon: Folder, current: false },
+  { name: "Calendar", href: "#", icon: CalendarMonth, current: false },
+  { name: "Documents", href: "#", icon: FileCopy, current: false },
+  { name: "Reports", href: "#", icon: ChartPie, current: false },
 ];
 const teams = [
   { id: 1, name: "Heroicons", href: "#", initial: "H", current: false },

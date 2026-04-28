@@ -2,68 +2,75 @@
 
 import { TeamsProvider } from "@/lib/TeamsProvider";
 import type { ReactNode } from "react";
-import { useState } from "react";
-import {
-  Dialog,
-  DialogBackdrop,
-  DialogPanel,
-  TransitionChild,
-} from "@headlessui/react";
+import { useEffect, useState } from "react";
+import { Bars, Close } from "flowbite-react-icons/outline";
 import NavBar from "@/components/navbar";
-import { Bars3Icon, XMarkIcon } from "@heroicons/react/24/outline";
 
 export default function TabLayout({ children }: { children: ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
+  useEffect(() => {
+    if (!sidebarOpen) {
+      return;
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setSidebarOpen(false);
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [sidebarOpen]);
+
   return (
     <TeamsProvider>
       <div>
-        <Dialog
-          open={sidebarOpen}
-          onClose={setSidebarOpen}
-          className="relative z-50 lg:hidden"
-        >
-          <DialogBackdrop
-            transition
-            className="fixed inset-0 bg-gray-900/80 transition-opacity duration-300 ease-linear data-closed:opacity-0"
-          />
+        {sidebarOpen ? (
+          <div
+            className="relative z-50 lg:hidden"
+            role="dialog"
+            aria-modal="true"
+          >
+            <button
+              type="button"
+              aria-label="关闭侧边栏"
+              onClick={() => setSidebarOpen(false)}
+              className="fixed inset-0 bg-gray-900/80"
+            />
 
-          <div className="fixed inset-0 flex">
-            <DialogPanel
-              transition
-              className="relative mr-16 flex w-full max-w-xs flex-1 transform transition duration-300 ease-in-out data-closed:-translate-x-full"
-            >
-              <TransitionChild>
-                <div className="absolute top-0 left-full flex w-16 justify-center pt-5 duration-300 ease-in-out data-closed:opacity-0">
+            <div className="fixed inset-0 flex">
+              <div className="relative mr-16 flex w-full max-w-xs flex-1">
+                <div className="absolute top-0 left-full flex w-16 justify-center pt-5">
                   <button
                     type="button"
                     onClick={() => setSidebarOpen(false)}
                     className="-m-2.5 p-2.5"
                   >
                     <span className="sr-only">Close sidebar</span>
-                    <XMarkIcon
-                      aria-hidden="true"
-                      className="size-6 text-white"
-                    />
+                    <Close aria-hidden="true" className="size-6 text-white" />
                   </button>
                 </div>
-              </TransitionChild>
 
-              {/* Sidebar component, swap this element with another sidebar if you like */}
-              <div className="relative flex grow flex-col gap-y-5 overflow-y-auto bg-white px-6 pb-2">
-                <div className="relative flex h-16 shrink-0 items-center">
-                  {/* <img
-                      alt="Your Company"
-                      src="/plus-assets/img/logos/mark.svg?color=indigo&shade=600"
-                      className="h-8 w-auto"
-                    /> */}
+                <div className="relative flex grow flex-col gap-y-5 overflow-y-auto bg-white px-6 pb-2">
+                  <div className="relative flex h-16 shrink-0 items-center">
+                    {/* <img
+                        alt="Your Company"
+                        src="/plus-assets/img/logos/mark.svg?color=indigo&shade=600"
+                        className="h-8 w-auto"
+                      /> */}
+                  </div>
+
+                  <NavBar />
                 </div>
-
-                <NavBar />
               </div>
-            </DialogPanel>
+            </div>
           </div>
-        </Dialog>
+        ) : null}
 
         {/* Static sidebar for desktop */}
         <div className="hidden lg:fixed lg:inset-y-0 lg:z-50 lg:flex lg:w-72 lg:flex-col">
@@ -88,7 +95,7 @@ export default function TabLayout({ children }: { children: ReactNode }) {
             className="-m-2.5 p-2.5 text-gray-700 hover:text-gray-900 lg:hidden"
           >
             <span className="sr-only">Open sidebar</span>
-            <Bars3Icon aria-hidden="true" className="size-6" />
+            <Bars aria-hidden="true" className="size-6" />
           </button>
           <div className="flex-1 text-sm/6 font-semibold text-gray-900">
             Dashboard

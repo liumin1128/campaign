@@ -1,12 +1,7 @@
 "use client";
 
-import { useEffect, type CSSProperties } from "react";
-import { Checkbox } from "@fluentui/react-components";
-import {
-  CalendarLtrRegular,
-  ClockRegular,
-  PersonRegular,
-} from "@fluentui/react-icons";
+import { CalendarMonth, Clock, User } from "flowbite-react-icons/outline";
+import { useEffect } from "react";
 import {
   useCampaignTaskStore,
   type CampaignTask,
@@ -24,7 +19,10 @@ const stepDefinitions = [
 ] as const;
 
 const taskCheckboxClassName =
-  "rounded-full p-1 transition-transform duration-150 hover:scale-105 focus-within:scale-105 [&_.fui-Checkbox__indicator]:rounded-full [&_.fui-Checkbox__indicator]:border-[1.5px] [&_.fui-Checkbox__indicator]:shadow-[0_0_0_4px_rgba(255,255,255,0.92),0_10px_24px_rgba(99,102,241,0.14)] focus-within:[&_.fui-Checkbox__indicator]:shadow-[0_0_0_5px_rgba(224,231,255,0.95),0_12px_28px_rgba(99,102,241,0.2)]";
+  "group relative inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-transform duration-150 hover:scale-105 focus-within:scale-105";
+
+const taskCheckboxIndicatorClassName =
+  "pointer-events-none inline-flex h-5 w-5 items-center justify-center rounded-full border-[1.5px] bg-white text-xs font-bold leading-none shadow-[0_0_0_4px_rgba(255,255,255,0.92),0_10px_24px_rgba(99,102,241,0.14)] transition-colors duration-150 focus-within:shadow-[0_0_0_5px_rgba(224,231,255,0.95),0_12px_28px_rgba(99,102,241,0.2)]";
 
 function formatDate(dateText: string | null) {
   if (!dateText) {
@@ -82,33 +80,36 @@ function TaskRow({
   const isUpdating = updatingTaskIDs.includes(task.id);
   const isDone = task.status === "done";
   const showUpdatedAt = hasUpdatedTimestamp(task.created_at, task.updated_at);
-  const checkboxStyle = {
-    "--fui-Checkbox__indicator--borderColor": isDone ? "#818cf8" : "#cbd5e1",
-    "--fui-Checkbox__indicator--backgroundColor": isDone
-      ? "#818cf8"
-      : "#ffffff",
-    "--fui-Checkbox__indicator--color": isDone ? "#ffffff" : "#ffffff",
-  } as CSSProperties;
 
   return (
     <li className="rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm transition hover:border-indigo-200 hover:shadow-md">
       <div className="flex items-center gap-3">
-        <Checkbox
-          aria-label={isDone ? "Mark task as todo" : "Mark task as done"}
-          checked={isDone}
-          className={taskCheckboxClassName}
-          disabled={isUpdating}
-          shape="circular"
-          size="large"
-          style={checkboxStyle}
-          onChange={(_, data) => {
-            void updateTaskStatus(
-              campaignID,
-              task.id,
-              data.checked ? "done" : "todo",
-            );
-          }}
-        />
+        <label className={taskCheckboxClassName}>
+          <input
+            aria-label={isDone ? "Mark task as todo" : "Mark task as done"}
+            checked={isDone}
+            className="peer sr-only"
+            disabled={isUpdating}
+            type="checkbox"
+            onChange={(event) => {
+              void updateTaskStatus(
+                campaignID,
+                task.id,
+                event.target.checked ? "done" : "todo",
+              );
+            }}
+          />
+          <span
+            aria-hidden="true"
+            className={`${taskCheckboxIndicatorClassName} ${
+              isDone
+                ? "border-indigo-400 bg-indigo-400 text-white"
+                : "border-slate-300 bg-white text-transparent"
+            } peer-disabled:cursor-not-allowed peer-disabled:opacity-60 peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-indigo-500`}
+          >
+            ✓
+          </span>
+        </label>
 
         <div className="flex min-w-0 flex-1 items-center gap-4 overflow-hidden">
           <span
@@ -125,18 +126,18 @@ function TaskRow({
           <div className="flex min-w-0 items-center justify-end gap-2 overflow-hidden text-xs text-slate-500">
             {task.assignedTo ? (
               <span className="inline-flex max-w-40 items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 font-medium text-slate-600">
-                <PersonRegular className="size-3.5 text-slate-400" />
+                <User className="size-3.5 text-slate-400" />
                 <span className="truncate">{task.assignedTo}</span>
               </span>
             ) : null}
 
             <span className="inline-flex items-center gap-1 whitespace-nowrap rounded-full bg-indigo-50 px-2.5 py-1 font-medium text-indigo-700">
-              <CalendarLtrRegular className="size-3.5" />
+              <CalendarMonth className="size-3.5" />
               <span>{formatDate(task.deadline)}</span>
             </span>
 
             <span className="inline-flex min-w-0 items-center gap-1 whitespace-nowrap text-slate-400">
-              <ClockRegular className="size-3.5" />
+              <Clock className="size-3.5" />
               <span className="truncate">
                 {showUpdatedAt
                   ? `Updated ${formatDate(task.updated_at)}`
