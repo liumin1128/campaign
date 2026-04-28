@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Checkbox } from "flowbite-react";
+import { Badge, Checkbox } from "flowbite-react";
 import { CalendarMonth, Clock, User } from "flowbite-react-icons/outline";
 import {
   useCampaignTaskStore,
@@ -51,6 +51,104 @@ function formatDate(dateText: string | null) {
   }).format(date);
 }
 
+type DeadlineBadgeLevel =
+  | "brand"
+  | "alternative"
+  | "gray"
+  | "danger"
+  | "success"
+  | "warning";
+
+type DeadlineBadgePresentation = {
+  level: DeadlineBadgeLevel;
+  color: "info" | "gray" | "failure" | "success" | "warning";
+  label: string;
+  className?: string;
+};
+
+function parseDeadlineDate(dateText: string) {
+  const matchedDate = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateText);
+
+  if (matchedDate) {
+    const [, year, month, day] = matchedDate;
+
+    return new Date(Number(year), Number(month) - 1, Number(day));
+  }
+
+  const parsedDate = new Date(dateText);
+
+  if (Number.isNaN(parsedDate.getTime())) {
+    return null;
+  }
+
+  return new Date(
+    parsedDate.getFullYear(),
+    parsedDate.getMonth(),
+    parsedDate.getDate(),
+  );
+}
+
+function getDeadlineBadgePresentation(
+  deadline: string | null,
+  isDone: boolean,
+): DeadlineBadgePresentation {
+  if (isDone) {
+    return {
+      level: "success",
+      color: "success",
+      label: formatDate(deadline),
+    };
+  }
+
+  if (!deadline) {
+    return {
+      level: "alternative",
+      color: "gray",
+      label: "No deadline",
+      className:
+        "border border-slate-200 bg-white text-slate-600 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-300",
+    };
+  }
+
+  const deadlineDate = parseDeadlineDate(deadline);
+
+  if (!deadlineDate) {
+    return {
+      level: "brand",
+      color: "info",
+      label: deadline,
+      className:
+        "bg-indigo-50 text-indigo-700 dark:bg-indigo-500/15 dark:text-indigo-200",
+    };
+  }
+
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const formattedDeadline = formatDate(deadline);
+
+  if (deadlineDate.getTime() < today.getTime()) {
+    return {
+      level: "danger",
+      color: "failure",
+      label: formattedDeadline,
+    };
+  }
+
+  if (deadlineDate.getTime() === today.getTime()) {
+    return {
+      level: "warning",
+      color: "warning",
+      label: formattedDeadline,
+    };
+  }
+
+  return {
+    level: "gray",
+    color: "gray",
+    label: formattedDeadline,
+  };
+}
+
 function hasUpdatedTimestamp(
   createdAt: string | null,
   updatedAt: string | null,
@@ -90,6 +188,7 @@ export default function CampaignTaskRow({
   const isUpdating = updatingTaskIDs.includes(task.id);
   const isDone = task.status === "done";
   const showUpdatedAt = hasUpdatedTimestamp(task.created_at, task.updated_at);
+  const deadlineBadge = getDeadlineBadgePresentation(task.deadline, isDone);
   const [isEditingText, setIsEditingText] = useState(false);
   const [draftText, setDraftText] = useState(task.text ?? "");
 
@@ -144,10 +243,15 @@ export default function CampaignTaskRow({
                 </span>
               ) : null}
 
-              <span className="inline-flex items-center gap-1 whitespace-nowrap rounded-full bg-indigo-50 px-2.5 py-1 font-medium text-indigo-700 dark:bg-indigo-500/15 dark:text-indigo-200">
-                <CalendarMonth className="size-3.5" />
-                <span>{formatDate(task.deadline)}</span>
-              </span>
+              <Badge
+                color={deadlineBadge.color}
+                icon={CalendarMonth}
+                size="sm"
+                className={deadlineBadge.className}
+                data-deadline-level={deadlineBadge.level}
+              >
+                {deadlineBadge.label}
+              </Badge>
 
               <span className="inline-flex min-w-0 items-center gap-1 whitespace-nowrap text-slate-400 dark:text-slate-500">
                 <Clock className="size-3.5" />
