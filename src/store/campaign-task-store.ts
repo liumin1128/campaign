@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { useTeamsUserStore } from "@/store/teams-user-store";
+import { normalizeRichTextValue } from "@/utils/rich-text";
 
 export type CampaignTaskStatus = "todo" | "done";
 
@@ -28,6 +29,11 @@ type CampaignTaskState = {
     taskID: number,
     status: CampaignTaskStatus,
   ) => Promise<void>;
+  updateTaskText: (
+    campaignID: string,
+    taskID: number,
+    text: string,
+  ) => Promise<boolean>;
   reset: () => void;
 };
 
@@ -161,6 +167,65 @@ export const useCampaignTaskStore = create<CampaignTaskState>()((set, get) => ({
         updatingTaskIDs: state.updatingTaskIDs.filter((id) => id !== taskID),
         tasks: previousTasks,
       }));
+    }
+  },
+  updateTaskText: async (campaignID, taskID, text) => {
+    const previousTasks = get().tasks;
+    const normalizedText = normalizeRichTextValue(text);
+
+    set((state) => ({
+      error: null,
+      updatingTaskIDs: [...state.updatingTaskIDs, taskID],
+      tasks: state.tasks.map((task) =>
+        task.id === taskID ? { ...task, text: normalizedText } : task,
+      ),
+    }));
+
+    try {
+      const response = await fetch(
+        `/api/campaign/${encodeURIComponent(campaignID)}/tasks`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            taskID,
+            text: normalizedText,
+          }),
+        },
+      );
+
+      const payload = (await response.json()) as {
+        ok: boolean;
+        error?: string;
+        task?: CampaignTask;
+      };
+
+      if (!response.ok || !payload.ok || !payload.task) {
+        throw new Error(payload.error ?? "Failed to update task text");
+      }
+
+      const updatedTask = payload.task;
+
+      set((state) => ({
+        error: null,
+        updatingTaskIDs: state.updatingTaskIDs.filter((id) => id !== taskID),
+        tasks: state.tasks.map((task) =>
+          task.id === taskID ? updatedTask : task,
+        ),
+      }));
+
+      return true;
+    } catch (error) {
+      set((state) => ({
+        error:
+          error instanceof Error ? error.message : "Failed to update task text",
+        updatingTaskIDs: state.updatingTaskIDs.filter((id) => id !== taskID),
+        tasks: previousTasks,
+      }));
+
+      return false;
     }
   },
   reset: () =>

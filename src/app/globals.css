@@ -58,3 +58,83 @@ code,
 pre {
   font-family: "SFMono-Regular", "Cascadia Code", "Menlo", monospace;
 }
+
+.task-rich-text-editor p.is-editor-empty:first-child::before {
+  content: "输入任务备注、补充说明或富文本内容...";
+  float: left;
+  height: 0;
+  color: #94a3b8;
+  pointer-events: none;
+}
+
+.task-rich-text-editor,
+.task-rich-text-preview {
+  min-height: 2rem;
+}
+
+.task-rich-text-editor > :first-child,
+.task-rich-text-preview > :first-child {
+  margin-top: 0;
+}
+
+.task-rich-text-editor > :last-child,
+.task-rich-text-preview > :last-child {
+  margin-bottom: 0;
+}
+
+.task-rich-text-editor h2,
+.task-rich-text-preview h2 {
+  margin: 1rem 0 0.5rem;
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+
+.task-rich-text-editor p,
+.task-rich-text-preview p,
+.task-rich-text-editor ul,
+.task-rich-text-preview ul,
+.task-rich-text-editor ol,
+.task-rich-text-preview ol,
+.task-rich-text-editor blockquote,
+.task-rich-text-preview blockquote {
+  margin: 0.55rem 0;
+}
+
+.task-rich-text-editor ul,
+.task-rich-text-preview ul {
+  list-style: disc;
+  padding-left: 1.25rem;
+}
+
+.task-rich-text-editor ol,
+.task-rich-text-preview ol {
+  list-style: decimal;
+  padding-left: 1.25rem;
+}
+
+.task-rich-text-editor blockquote,
+.task-rich-text-preview blockquote {
+  border-left: 3px solid #cbd5e1;
+  padding-left: 0.85rem;
+  color: #475569;
+}
+
+.task-rich-text-editor strong,
+.task-rich-text-preview strong {
+  font-weight: 700;
+}
+
+.task-rich-text-editor em,
+.task-rich-text-preview em {
+  font-style: italic;
+}
+
+html.dark .task-rich-text-editor p.is-editor-empty:first-child::before {
+  color: #64748b;
+}
+
+html.dark .task-rich-text-editor blockquote,
+html.dark .task-rich-text-preview blockquote {
+  border-left-color: #475569;
+  color: #cbd5e1;
+}
