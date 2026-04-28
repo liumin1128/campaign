@@ -202,13 +202,13 @@ export default function CampaignTaskRow({
           </div>
 
           {hasText && !isEditingText ? (
-            <div className="rounded-xl border border-slate-200 bg-slate-50/80 px-4 py-3 dark:border-slate-700 dark:bg-slate-950/50">
+            <div className="rounded-sm border border-slate-200 bg-slate-50/80 px-4 py-3 dark:border-slate-700 dark:bg-slate-950/50">
               <TaskMarkdownPreview source={task.text ?? ""} />
             </div>
           ) : null}
 
           {isEditingText ? (
-            <div className="space-y-3 rounded-xl border border-slate-200 bg-slate-50/90 p-3 dark:border-slate-700 dark:bg-slate-950/50">
+            <div className="space-y-3 rounded-sm border border-slate-200 bg-slate-50/90 p-3 dark:border-slate-700 dark:bg-slate-950/50">
               <TaskMarkdownEditor
                 value={draftText}
                 disabled={isUpdating}
@@ -218,7 +218,7 @@ export default function CampaignTaskRow({
               <div className="flex items-center justify-end gap-2">
                 <button
                   type="button"
-                  className="rounded-full border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 transition hover:border-slate-300 hover:bg-white disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:text-slate-300 dark:hover:border-slate-600 dark:hover:bg-slate-900"
+                  className="rounded-xs border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 transition hover:border-slate-300 hover:bg-white disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:text-slate-300 dark:hover:border-slate-600 dark:hover:bg-slate-900"
                   disabled={isUpdating}
                   onClick={() => {
                     setDraftText(task.text ?? "");
