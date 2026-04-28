@@ -132,11 +132,13 @@ export const useCampaignTaskStore = create<CampaignTaskState>()((set, get) => ({
         throw new Error(payload.error ?? "Failed to update task status");
       }
 
+      const updatedTask = payload.task;
+
       set((state) => ({
         error: null,
         updatingTaskIDs: state.updatingTaskIDs.filter((id) => id !== taskID),
         tasks: state.tasks.map((task) =>
-          task.id === taskID ? payload.task : task,
+          task.id === taskID ? updatedTask : task,
         ),
       }));
     } catch (error) {
