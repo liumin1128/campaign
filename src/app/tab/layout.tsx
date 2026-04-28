@@ -56,7 +56,7 @@ export default function TabLayout({ children }: { children: ReactNode }) {
                   </button>
                 </div>
 
-                <div className="relative flex grow flex-col gap-y-5 overflow-y-auto bg-white px-6 pb-2">
+                <div className="relative flex grow flex-col gap-y-5 overflow-y-auto bg-white px-6 pb-2 dark:bg-slate-950">
                   <div className="relative flex h-16 shrink-0 items-center">
                     {/* <img
                         alt="Your Company"
@@ -75,7 +75,7 @@ export default function TabLayout({ children }: { children: ReactNode }) {
         {/* Static sidebar for desktop */}
         <div className="hidden lg:fixed lg:inset-y-0 lg:z-50 lg:flex lg:w-72 lg:flex-col">
           {/* Sidebar component, swap this element with another sidebar if you like */}
-          <div className="flex grow flex-col gap-y-5 overflow-y-auto border-r border-gray-200 bg-white px-6">
+          <div className="flex grow flex-col gap-y-5 overflow-y-auto border-r border-gray-200 bg-white px-6 dark:border-slate-800 dark:bg-slate-950">
             <div className="flex h-16 shrink-0 items-center">
               {/* <img
                   alt="Your Company"
@@ -88,16 +88,16 @@ export default function TabLayout({ children }: { children: ReactNode }) {
           </div>
         </div>
 
-        <div className="sticky top-0 z-40 flex items-center gap-x-6 bg-white px-4 py-4 shadow-xs sm:px-6 lg:hidden">
+        <div className="sticky top-0 z-40 flex items-center gap-x-6 bg-white px-4 py-4 shadow-xs sm:px-6 lg:hidden dark:bg-slate-950">
           <button
             type="button"
             onClick={() => setSidebarOpen(true)}
-            className="-m-2.5 p-2.5 text-gray-700 hover:text-gray-900 lg:hidden"
+            className="-m-2.5 p-2.5 text-gray-700 hover:text-gray-900 lg:hidden dark:text-slate-300 dark:hover:text-white"
           >
             <span className="sr-only">Open sidebar</span>
             <Bars aria-hidden="true" className="size-6" />
           </button>
-          <div className="flex-1 text-sm/6 font-semibold text-gray-900">
+          <div className="flex-1 text-sm/6 font-semibold text-gray-900 dark:text-slate-100">
             Dashboard
           </div>
           <a href="#">

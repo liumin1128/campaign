@@ -1,5 +1,6 @@
 "use client";
 
+import { useThemeMode } from "flowbite-react";
 import { useState } from "react";
 import {
   CalendarMonth,
@@ -41,6 +42,39 @@ function formatTeamsData(payload: unknown) {
   return JSON.stringify(payload, null, 2);
 }
 
+function ThemeModeSwitch() {
+  const { computedMode, setMode } = useThemeMode();
+
+  return (
+    <div className="inline-flex rounded-full border border-slate-200 bg-slate-100 p-1 dark:border-slate-700 dark:bg-slate-800">
+      <button
+        type="button"
+        onClick={() => setMode("light")}
+        className={classNames(
+          computedMode === "light"
+            ? "bg-white text-slate-900 shadow-sm"
+            : "text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100",
+          "rounded-full px-3 py-1 text-xs font-semibold transition",
+        )}
+      >
+        Light
+      </button>
+      <button
+        type="button"
+        onClick={() => setMode("dark")}
+        className={classNames(
+          computedMode === "dark"
+            ? "bg-slate-900 text-white shadow-sm dark:bg-slate-950"
+            : "text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100",
+          "rounded-full px-3 py-1 text-xs font-semibold transition",
+        )}
+      >
+        Dark
+      </button>
+    </div>
+  );
+}
+
 export function Navbar() {
   const [profileOpen, setProfileOpen] = useState(false);
   const context = useTeamsUserStore((state) => state.context);
@@ -66,6 +100,19 @@ export function Navbar() {
           <li>
             <ul role="list" className="flex flex-1 flex-col gap-y-7">
               <li>
+                <div className="flex items-center justify-between rounded-2xl border border-slate-200/80 bg-white/80 px-3 py-3 shadow-sm backdrop-blur-sm dark:border-slate-700 dark:bg-slate-900/70">
+                  <div>
+                    <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                      Theme
+                    </p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      Switch light or dark mode
+                    </p>
+                  </div>
+                  <ThemeModeSwitch />
+                </div>
+              </li>
+              <li>
                 <ul role="list" className="-mx-2 space-y-1">
                   {navigation.map((item) => (
                     <li key={item.name}>
@@ -73,8 +120,8 @@ export function Navbar() {
                         href={item.href}
                         className={classNames(
                           item.current
-                            ? "bg-gray-50 text-indigo-600"
-                            : "text-gray-700 hover:bg-gray-50 hover:text-indigo-600",
+                            ? "bg-gray-50 text-indigo-600 dark:bg-slate-800 dark:text-indigo-300"
+                            : "text-gray-700 hover:bg-gray-50 hover:text-indigo-600 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-indigo-300",
                           "group flex gap-x-3 rounded-md p-2 text-sm/6 font-semibold",
                         )}
                       >
@@ -82,8 +129,8 @@ export function Navbar() {
                           aria-hidden="true"
                           className={classNames(
                             item.current
-                              ? "text-indigo-600"
-                              : "text-gray-400 group-hover:text-indigo-600",
+                              ? "text-indigo-600 dark:text-indigo-300"
+                              : "text-gray-400 group-hover:text-indigo-600 dark:text-slate-500 dark:group-hover:text-indigo-300",
                             "size-6 shrink-0",
                           )}
                         />
@@ -94,7 +141,7 @@ export function Navbar() {
                 </ul>
               </li>
               <li>
-                <div className="text-xs/6 font-semibold text-gray-400">
+                <div className="text-xs/6 font-semibold text-gray-400 dark:text-slate-500">
                   Your teams
                 </div>
                 <ul role="list" className="-mx-2 mt-2 space-y-1">
@@ -104,17 +151,17 @@ export function Navbar() {
                         href={team.href}
                         className={classNames(
                           team.current
-                            ? "bg-gray-50 text-indigo-600"
-                            : "text-gray-700 hover:bg-gray-50 hover:text-indigo-600",
+                            ? "bg-gray-50 text-indigo-600 dark:bg-slate-800 dark:text-indigo-300"
+                            : "text-gray-700 hover:bg-gray-50 hover:text-indigo-600 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-indigo-300",
                           "group flex gap-x-3 rounded-md p-2 text-sm/6 font-semibold",
                         )}
                       >
                         <span
                           className={classNames(
                             team.current
-                              ? "border-indigo-600 text-indigo-600"
-                              : "border-gray-200 text-gray-400 group-hover:border-indigo-600 group-hover:text-indigo-600",
-                            "flex size-6 shrink-0 items-center justify-center rounded-lg border bg-white text-[0.625rem] font-medium",
+                              ? "border-indigo-600 text-indigo-600 dark:border-indigo-300 dark:text-indigo-300"
+                              : "border-gray-200 text-gray-400 group-hover:border-indigo-600 group-hover:text-indigo-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-500 dark:group-hover:border-indigo-300 dark:group-hover:text-indigo-300",
+                            "flex size-6 shrink-0 items-center justify-center rounded-lg border bg-white text-[0.625rem] font-medium dark:bg-slate-900",
                           )}
                         >
                           {team.initial}
@@ -131,7 +178,7 @@ export function Navbar() {
             <button
               type="button"
               onClick={() => setProfileOpen(true)}
-              className="flex w-full items-center gap-x-4 px-6 py-3 text-left text-sm/6 hover:bg-gray-50"
+              className="flex w-full items-center gap-x-4 px-6 py-3 text-left text-sm/6 hover:bg-gray-50 dark:hover:bg-slate-800"
             >
               <span
                 aria-hidden="true"
@@ -141,10 +188,10 @@ export function Navbar() {
               </span>
               <span className="sr-only">Your profile</span>
               <span className="min-w-0 flex-1" aria-hidden="true">
-                <span className="block truncate font-semibold text-gray-900">
+                <span className="block truncate font-semibold text-gray-900 dark:text-slate-100">
                   {displayName}
                 </span>
-                <span className="block truncate text-xs text-gray-500">
+                <span className="block truncate text-xs text-gray-500 dark:text-slate-400">
                   {secondaryLine}
                 </span>
               </span>
@@ -165,30 +212,30 @@ export function Navbar() {
             role="dialog"
             aria-modal="true"
             aria-labelledby="teams-context-title"
-            className="relative flex max-h-[85vh] w-full max-w-3xl flex-col overflow-hidden rounded-3xl bg-white shadow-2xl ring-1 ring-slate-900/10"
+            className="relative flex max-h-[85vh] w-full max-w-3xl flex-col overflow-hidden rounded-3xl bg-white shadow-2xl ring-1 ring-slate-900/10 dark:bg-slate-900 dark:ring-white/10"
           >
-            <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4">
+            <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4 dark:border-slate-800">
               <div>
                 <h2
                   id="teams-context-title"
-                  className="text-base font-semibold text-slate-900"
+                  className="text-base font-semibold text-slate-900 dark:text-slate-100"
                 >
                   Teams 用户上下文
                 </h2>
-                <p className="mt-1 text-sm text-slate-500">
+                <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
                   当前展示 Teams SDK 返回的原始 context 与提取后的字段。
                 </p>
               </div>
               <button
                 type="button"
                 onClick={() => setProfileOpen(false)}
-                className="rounded-full px-3 py-1.5 text-sm font-medium text-slate-500 hover:bg-slate-100 hover:text-slate-900"
+                className="rounded-full px-3 py-1.5 text-sm font-medium text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100"
               >
                 关闭
               </button>
             </div>
-            <div className="min-h-0 flex-1 overflow-y-auto bg-slate-50 px-6 py-5">
-              <pre className="whitespace-pre-wrap break-all font-mono text-xs leading-6 text-slate-700">
+            <div className="min-h-0 flex-1 overflow-y-auto bg-slate-50 px-6 py-5 dark:bg-slate-950">
+              <pre className="whitespace-pre-wrap break-all font-mono text-xs leading-6 text-slate-700 dark:text-slate-300">
                 {teamsData}
               </pre>
             </div>
