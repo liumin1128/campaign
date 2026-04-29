@@ -79,7 +79,7 @@ function CampaignFormModal({
       <ModalBody>
         <div className="flex flex-col gap-4">
           <div>
-            <Label htmlFor="campaignID" value="Campaign ID" />
+            <Label htmlFor="campaignID">Campaign ID</Label>
             <TextInput
               id="campaignID"
               placeholder="e.g. summer-2026"
@@ -89,7 +89,7 @@ function CampaignFormModal({
             />
           </div>
           <div>
-            <Label htmlFor="title" value="Title" />
+            <Label htmlFor="title">Title</Label>
             <TextInput
               id="title"
               placeholder="Campaign title"
@@ -98,7 +98,7 @@ function CampaignFormModal({
             />
           </div>
           <div>
-            <Label htmlFor="content" value="Content" />
+            <Label htmlFor="content">Content</Label>
             <Textarea
               id="content"
               placeholder="Campaign description (optional)"
