@@ -10,12 +10,12 @@
         "termsOfUseUrl": "https://example.com/terms"
     },
     "name": {
-        "short": "TeamDemolocal",
-        "full": "Teams Demo App"
+        "short": "Campaignlocal",
+        "full": "Campaign Management"
     },
     "description": {
-        "short": "A demo Teams tab app with multiple UI views",
-        "full": "A demo Teams application that shows a tab in group chats with home, tasks, messaging and settings views."
+        "short": "Campaign management tab app with multiple UI views",
+        "full": "A campaign management application that shows a tab in group chats with campaign, tasks, messaging and settings views."
     },
     "icons": {
         "outline": "outline.png",
@@ -41,7 +41,7 @@
     "staticTabs": [
         {
             "entityId": "home",
-            "name": "Demo Tab",
+            "name": "Campaign Management",
             "contentUrl": "https://localhost:3000/tab",
             "websiteUrl": "https://localhost:3000/tab",
             "scopes": [
