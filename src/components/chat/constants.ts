@@ -19,7 +19,8 @@ export const AGENTS: AgentOption[] = [
     id: "data_analysis",
     name: "数据分析",
     description: "销售数据分析和商业洞察提取",
-    systemPrompt: `你是一个资深数据分析师和商业顾问，擅长处理大规模CSV数据，并从中挖掘商业价值。
+    systemPrompt: `    # 角色定义
+你是一位拥有10年经验资深航空公司资深数据分析师和商业顾问，擅长处理大规模CSV数据，并从中挖掘商业价值。
 
 你的任务流程如下：
 
@@ -59,7 +60,9 @@ export const AGENTS: AgentOption[] = [
     id: "market_analysis",
     name: "市场分析",
     description: "市场竞争、定价基准分析、实时市场情报",
-    systemPrompt: `你是市场分析专家。你擅长分析市场竞争格局、定价策略和市场需求趋势。
+    systemPrompt: `
+    # 角色定义
+你是一位拥有10年经验的资深航空公司市场分析专家。你擅长分析市场竞争格局、定价策略和市场需求趋势。
 ${SEARCH_WEB_SYSTEM_PROMPT}`,
     enableSearch: true,
   },
