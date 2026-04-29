@@ -2,25 +2,17 @@
 
 import { useThemeMode } from "flowbite-react";
 import { useState, useSyncExternalStore } from "react";
-import {
-  Cog,
-  CalendarMonth,
-  ChartPie,
-  FileCopy,
-  Folder,
-  Home,
-  Users,
-} from "flowbite-react-icons/outline";
+import { Cog, Home } from "flowbite-react-icons/outline";
 import { classNames } from "@/utils/common";
 import { useTeamsUserStore } from "@/store/teams-user-store";
 
 const navigation = [
-  { name: "Dashboard", href: "#", icon: Home, current: true },
-  { name: "Team", href: "#", icon: Users, current: false },
-  { name: "Projects", href: "#", icon: Folder, current: false },
-  { name: "Calendar", href: "#", icon: CalendarMonth, current: false },
-  { name: "Documents", href: "#", icon: FileCopy, current: false },
-  { name: "Reports", href: "#", icon: ChartPie, current: false },
+  { name: "Dashboard", href: "/tab", icon: Home, current: true },
+  // { name: "Team", href: "#", icon: Users, current: false },
+  // { name: "Projects", href: "#", icon: Folder, current: false },
+  // { name: "Calendar", href: "#", icon: CalendarMonth, current: false },
+  // { name: "Documents", href: "#", icon: FileCopy, current: false },
+  // { name: "Reports", href: "#", icon: ChartPie, current: false },
   { name: "Settings", href: "/tab/settings", icon: Cog, current: false },
 ];
 const teams = [
