@@ -1,21 +1,25 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
-import { TextInput } from "flowbite-react";
 import {
   ChartMixed,
   ChartLineUp,
+  FileCsv,
+  FileImport,
   PaperPlane,
   Star,
   Shuffle,
   Stop,
 } from "flowbite-react-icons/outline";
+import { isMarkdownContent } from "@/utils/markdown";
+import MarkdownDisplay from "@/components/markdown-display";
 
 interface Message {
   id: string;
   role: "system" | "user" | "assistant";
   content: string;
   reasoning?: string;
+  attachments?: FileAttachment[];
 }
 
 interface AgentOption {
@@ -104,14 +108,74 @@ function ReasoningBlock({ text }: { text: string }) {
   );
 }
 
+interface FileAttachment {
+  name: string;
+  content: string;
+  type: "csv" | "text";
+}
+
+/** 简易 CSV 解析：将 CSV 文本解析为格式化 markdown 表格 */
+function parseCSVToMarkdown(raw: string): string {
+  const lines = raw.trim().split("\n");
+  if (lines.length === 0) return "";
+
+  const rows = lines.map((line) => {
+    // 处理带引号的字段（简单处理，不支持多行引号）
+    const fields: string[] = [];
+    let current = "";
+    let inQuote = false;
+    for (const ch of line) {
+      if (ch === '"') {
+        inQuote = !inQuote;
+      } else if (ch === "," && !inQuote) {
+        fields.push(current.trim());
+        current = "";
+      } else {
+        current += ch;
+      }
+    }
+    fields.push(current.trim());
+    return fields;
+  });
+
+  if (rows.length === 0) return "";
+
+  // 构建 Markdown 表格
+  const header = rows[0];
+  const separator = header.map(() => " --- ");
+  const body = rows.slice(1);
+
+  const table = [
+    `| ${header.join(" | ")} |`,
+    `| ${separator.join(" | ")} |`,
+    ...body.map(
+      (row) => `| ${row.map((f) => f.replace(/\|/g, "\\|")).join(" | ")} |`,
+    ),
+  ].join("\n");
+
+  return `📄 **CSV 数据：${lines.length} 行 ${header.length} 列**\n\n${table}`;
+}
+
+/** 读取文件内容 */
+function readFileAsText(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = () => reject(new Error("文件读取失败"));
+    reader.readAsText(file);
+  });
+}
+
 export default function ChatPage() {
   const [messages, setMessages] = useState<Message[]>([WELCOME_MESSAGE]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [selectedAgent, setSelectedAgent] = useState<AgentOption>(AGENTS[0]);
+  const [fileAttachments, setFileAttachments] = useState<FileAttachment[]>([]);
   const abortRef = useRef<AbortController | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -125,18 +189,20 @@ export default function ChatPage() {
 
   async function handleSend() {
     const trimmed = input.trim();
-    if (!trimmed || isLoading) return;
+    if ((!trimmed && fileAttachments.length === 0) || isLoading) return;
 
+    // 用户消息只保存文本内容，附件单独存储
     const userMsg: Message = {
       id: crypto.randomUUID(),
       role: "user",
       content: trimmed,
+      attachments: fileAttachments.length > 0 ? fileAttachments : undefined,
     };
 
-    // 追加用户消息，构建请求消息列表
     const updatedMessages = [...messages, userMsg];
     setMessages(updatedMessages);
     setInput("");
+    setFileAttachments([]);
     setIsLoading(true);
 
     // 如果选中了 agent 且 systemPrompt 非空，注入 system prompt
@@ -145,12 +211,26 @@ export default function ChatPage() {
           { role: "system" as const, content: selectedAgent.systemPrompt },
           ...updatedMessages.map((m) => ({
             role: m.role as "user" | "assistant",
-            content: m.content,
+            content:
+              m.role === "user" && m.attachments?.length
+                ? m.content +
+                  (m.content ? "\n\n" : "") +
+                  m.attachments
+                    .map((a) => `[附件：${a.name}]\n\n${a.content}`)
+                    .join("\n\n")
+                : m.content,
           })),
         ]
       : updatedMessages.map((m) => ({
           role: m.role as "user" | "assistant",
-          content: m.content,
+          content:
+            m.role === "user" && m.attachments?.length
+              ? m.content +
+                (m.content ? "\n\n" : "") +
+                m.attachments
+                  .map((a) => `[附件：${a.name}]\n\n${a.content}`)
+                  .join("\n\n")
+              : m.content,
         }));
 
     // 创建占位的 AI 回复
@@ -277,11 +357,62 @@ export default function ChatPage() {
   const messagesRef = useRef(messages);
   messagesRef.current = messages;
 
-  function handleKeyDown(e: React.KeyboardEvent) {
+  function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       handleSend();
     }
+  }
+
+  /** 处理文件选择（支持多选） */
+  async function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    const newAttachments: FileAttachment[] = [];
+
+    for (const file of Array.from(files)) {
+      const isCSV = file.name.endsWith(".csv") || file.type === "text/csv";
+      const isText =
+        file.type.startsWith("text/") ||
+        file.name.endsWith(".txt") ||
+        file.name.endsWith(".md") ||
+        file.name.endsWith(".json");
+
+      if (!isCSV && !isText) {
+        alert(`不支持的文件类型：${file.name}，已跳过`);
+        continue;
+      }
+
+      try {
+        const raw = await readFileAsText(file);
+
+        if (isCSV) {
+          const markdown = parseCSVToMarkdown(raw);
+          newAttachments.push({
+            name: file.name,
+            content: markdown,
+            type: "csv",
+          });
+        } else {
+          newAttachments.push({ name: file.name, content: raw, type: "text" });
+        }
+      } catch {
+        alert(`文件读取失败：${file.name}，已跳过`);
+      }
+    }
+
+    if (newAttachments.length > 0) {
+      setFileAttachments((prev) => [...prev, ...newAttachments]);
+    }
+
+    // 重置 input 以便重复选择同一文件
+    e.target.value = "";
+  }
+
+  /** 移除指定文件附件 */
+  function handleRemoveFile(index: number) {
+    setFileAttachments((prev) => prev.filter((_, i) => i !== index));
   }
 
   return (
@@ -389,26 +520,59 @@ export default function ChatPage() {
               )}
 
               {/* 消息气泡 */}
-              <div
-                className={`rounded-2xl px-4 py-3 text-sm leading-relaxed whitespace-pre-wrap ${
-                  msg.role === "user"
-                    ? "bg-indigo-600 text-white"
-                    : "bg-gray-100 text-gray-900 dark:bg-slate-800 dark:text-slate-100"
-                }`}
-              >
-                {msg.content ||
-                  (isLoading && msg.id === messages[messages.length - 1]?.id ? (
-                    <span className="inline-flex gap-1">
-                      <span className="animate-bounce">.</span>
-                      <span className="animate-bounce [animation-delay:0.2s]">
-                        .
+              {msg.role === "assistant" &&
+              msg.content &&
+              isMarkdownContent(msg.content) ? (
+                <div className="rounded-2xl bg-gray-100 px-4 py-3 text-gray-900 dark:bg-slate-800 dark:text-slate-100">
+                  <MarkdownDisplay content={msg.content} />
+                </div>
+              ) : (
+                <div
+                  className={`rounded-2xl px-4 py-3 text-sm leading-relaxed whitespace-pre-wrap ${
+                    msg.role === "user"
+                      ? "bg-indigo-600 text-white"
+                      : "bg-gray-100 text-gray-900 dark:bg-slate-800 dark:text-slate-100"
+                  }`}
+                >
+                  {msg.content ||
+                    (isLoading &&
+                    msg.id === messages[messages.length - 1]?.id ? (
+                      <span className="inline-flex gap-1">
+                        <span className="animate-bounce">.</span>
+                        <span className="animate-bounce [animation-delay:0.2s]">
+                          .
+                        </span>
+                        <span className="animate-bounce [animation-delay:0.4s]">
+                          .
+                        </span>
                       </span>
-                      <span className="animate-bounce [animation-delay:0.4s]">
-                        .
+                    ) : null)}
+                </div>
+              )}
+
+              {/* 附件列表 */}
+              {msg.attachments && msg.attachments.length > 0 && (
+                <div className="mt-1.5 space-y-1">
+                  {msg.attachments.map((att, idx) => (
+                    <div
+                      key={idx}
+                      className={`flex items-center gap-2 rounded-xl border px-3 py-2 text-xs ${
+                        msg.role === "user"
+                          ? "border-indigo-300/50 bg-indigo-500/20 text-indigo-100"
+                          : "border-gray-200 bg-gray-50 text-gray-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400"
+                      }`}
+                    >
+                      <FileCsv className="size-4 shrink-0" />
+                      <span className="min-w-0 flex-1 truncate font-medium">
+                        {att.name}
                       </span>
-                    </span>
-                  ) : null)}
-              </div>
+                      <span className="shrink-0 opacity-60">
+                        {att.type === "csv" ? "CSV" : "文本"}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         ))}
@@ -417,43 +581,110 @@ export default function ChatPage() {
 
       {/* Input area */}
       <div className="border-t border-gray-200 pt-4 dark:border-slate-700">
-        <div className="flex items-end gap-2">
-          <div className="flex-1">
-            <TextInput
-              ref={inputRef}
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={handleKeyDown}
-              disabled={isLoading}
-              placeholder={isLoading ? "AI 正在回复..." : "输入消息..."}
-              className="[&>input]:rounded-2xl [&>input]:border-gray-300 [&>input]:bg-white [&>input]:py-3 [&>input]:text-sm disabled:[&>input]:opacity-50 dark:[&>input]:border-slate-600 dark:[&>input]:bg-slate-800 dark:[&>input]:text-slate-100 dark:[&>input]:placeholder-slate-400"
-            />
+        {/* 文件附件标签 */}
+        {fileAttachments.length > 0 && (
+          <div className="mb-2 flex flex-wrap gap-2">
+            {fileAttachments.map((att, idx) => (
+              <div
+                key={idx}
+                className="flex items-center gap-2 rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-1.5 dark:border-indigo-800 dark:bg-indigo-950/30"
+              >
+                <FileCsv className="size-4 shrink-0 text-indigo-600 dark:text-indigo-400" />
+                <span className="max-w-[200px] truncate text-sm text-indigo-700 dark:text-indigo-300">
+                  {att.name}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => handleRemoveFile(idx)}
+                  className="flex size-5 shrink-0 items-center justify-center rounded-full text-indigo-400 hover:bg-indigo-200 hover:text-indigo-700 dark:hover:bg-indigo-800 dark:hover:text-indigo-200"
+                >
+                  <svg
+                    className="size-3.5"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M6 18L18 6M6 6l12 12"
+                    />
+                  </svg>
+                </button>
+              </div>
+            ))}
           </div>
+        )}
 
-          {isLoading ? (
-            <button
-              type="button"
-              onClick={handleStop}
-              className="flex size-10 shrink-0 items-center justify-center rounded-full bg-red-500 text-white transition hover:bg-red-400"
-              title="停止生成"
-            >
-              <Stop className="size-5" />
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={handleSend}
-              disabled={!input.trim()}
-              className="flex size-10 shrink-0 items-center justify-center rounded-full bg-indigo-600 text-white transition hover:bg-indigo-500 disabled:opacity-40 disabled:hover:bg-indigo-600"
-            >
-              <PaperPlane className="size-5" />
-            </button>
-          )}
+        {/* 一体式输入框容器 */}
+        <div
+          className={`relative rounded-2xl border bg-white transition-colors ${
+            isLoading
+              ? "border-gray-200 dark:border-slate-700"
+              : "border-gray-300 focus-within:border-indigo-400 focus-within:ring-2 focus-within:ring-indigo-100 dark:border-slate-600 dark:focus-within:border-indigo-500 dark:focus-within:ring-indigo-900/40"
+          } dark:bg-slate-800`}
+        >
+          {/* 输入框 */}
+          <textarea
+            ref={inputRef}
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={handleKeyDown}
+            disabled={isLoading}
+            placeholder={
+              isLoading ? "AI 正在回复..." : "输入消息，Shift+Enter 换行..."
+            }
+            className="h-[140px] w-full resize-none bg-transparent px-4 pb-12 pt-4 text-sm text-gray-900 outline-none placeholder:text-gray-400 disabled:opacity-50 dark:text-slate-100 dark:placeholder-slate-500"
+          />
+
+          {/* 底部工具栏 */}
+          <div className="absolute bottom-0 right-0 flex items-center gap-1 p-2">
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              accept=".csv,.txt,.md,.json,text/*"
+              onChange={handleFileSelect}
+              className="hidden"
+            />
+
+            {isLoading ? (
+              <button
+                type="button"
+                onClick={handleStop}
+                className="flex size-8 items-center justify-center rounded-lg bg-red-500 text-white transition hover:bg-red-400"
+                title="停止生成"
+              >
+                <Stop className="size-4" />
+              </button>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={isLoading}
+                  className="flex size-8 items-center justify-center rounded-lg text-gray-400 transition hover:bg-gray-100 hover:text-gray-600 disabled:opacity-40 dark:hover:bg-slate-700 dark:hover:text-slate-300"
+                  title="上传文件（支持 CSV）"
+                >
+                  <FileImport className="size-4.5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSend}
+                  disabled={!input.trim() && fileAttachments.length === 0}
+                  className="flex size-8 items-center justify-center rounded-lg bg-indigo-600 text-white transition hover:bg-indigo-500 disabled:opacity-40 disabled:hover:bg-indigo-600"
+                >
+                  <PaperPlane className="size-4.5" />
+                </button>
+              </>
+            )}
+          </div>
         </div>
         <p className="mt-2 text-center text-xs text-gray-400 dark:text-slate-500">
           {isLoading
             ? "正在生成回复，点击停止按钮中断"
-            : "AI 回复仅供参考，请核实重要信息"}
+            : "回车发送 · 支持 CSV 文件上传解析"}
         </p>
       </div>
     </div>
