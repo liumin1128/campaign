@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { ArrowLeft } from "flowbite-react-icons/outline";
 import CampaignTaskList from "@/components/campaign-task-list";
+import CampaignStepper from "@/components/campaign-stepper";
+import CampaignProgressText from "@/components/campaign-progress-text";
 
 type CampaignPageProps = {
   params: Promise<{
@@ -49,6 +51,8 @@ export default async function CampaignDetailPage({
               <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
                 活动 ID: {campaignID}
               </p>
+
+              <CampaignStepper campaignID={campaignID} />
             </div>
           </div>
         </div>
