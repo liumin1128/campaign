@@ -1,7 +1,11 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
-import type { Message } from "@/components/chat/types";
-import { AGENTS, WELCOME_MESSAGE } from "@/components/chat/constants";
+import type { Message, Language } from "@/components/chat/types";
+import {
+  getLocalizedAgents,
+  getWelcomeMessage,
+  getNewSessionTitle,
+} from "@/components/chat/i18n";
 
 export const MAX_SESSIONS = 20;
 
@@ -17,6 +21,8 @@ export interface ChatSession {
 interface ChatStoreState {
   sessions: ChatSession[];
   activeSessionId: string | null;
+  language: Language;
+  setLanguage: (lang: Language) => void;
   createSession: (agentId?: string) => string;
   switchSession: (id: string) => void;
   deleteSession: (id: string) => void;
@@ -25,21 +31,24 @@ interface ChatStoreState {
   renameSession: (id: string, title: string) => void;
 }
 
-function generateTitle(messages: Message[]): string {
+function generateTitle(messages: Message[], language: Language): string {
   const firstUserMsg = messages.find((m) => m.role === "user");
   if (firstUserMsg?.content) {
     const clean = firstUserMsg.content.replace(/\n/g, " ").trim();
     return clean.length > 30 ? clean.slice(0, 30) + "…" : clean;
   }
-  return "新对话";
+  return getNewSessionTitle(language);
 }
 
-function createNewSession(agentId?: string): ChatSession {
+function createNewSession(
+  agentId?: string,
+  language: Language = "zh",
+): ChatSession {
   return {
     id: crypto.randomUUID(),
-    title: "新对话",
-    messages: [WELCOME_MESSAGE],
-    selectedAgentId: agentId ?? AGENTS[0].id,
+    title: getNewSessionTitle(language),
+    messages: [getWelcomeMessage(language)],
+    selectedAgentId: agentId ?? getLocalizedAgents(language)[0].id,
     createdAt: Date.now(),
     updatedAt: Date.now(),
   };
@@ -50,10 +59,19 @@ export const useChatStore = create<ChatStoreState>()(
     (set) => ({
       sessions: [],
       activeSessionId: null,
+      language: "zh",
+
+      setLanguage: (lang) => set({ language: lang }),
 
       createSession: (agentId) => {
+        let lang = "zh" as Language;
+        set((state) => {
+          lang = state.language;
+          return state;
+        });
         const session = createNewSession(
           typeof agentId === "string" ? agentId : undefined,
+          lang,
         );
         set((state) => {
           const sessions = [session, ...state.sessions].slice(0, MAX_SESSIONS);
@@ -71,7 +89,7 @@ export const useChatStore = create<ChatStoreState>()(
           let sessions = state.sessions.filter((s) => s.id !== id);
           // 删除最后一个时自动创建新会话
           if (sessions.length === 0) {
-            const newSession = createNewSession();
+            const newSession = createNewSession(undefined, state.language);
             sessions = [newSession];
             return { sessions, activeSessionId: newSession.id };
           }
@@ -88,7 +106,9 @@ export const useChatStore = create<ChatStoreState>()(
           const sessions = state.sessions.map((s) => {
             if (s.id !== id) return s;
             const title =
-              s.title === "新对话" ? generateTitle(messages) : s.title;
+              s.title === getNewSessionTitle(state.language)
+                ? generateTitle(messages, state.language)
+                : s.title;
             return { ...s, messages, title, updatedAt: Date.now() };
           });
           return { sessions };
@@ -119,6 +139,7 @@ export const useChatStore = create<ChatStoreState>()(
       partialize: (state) => ({
         sessions: state.sessions,
         activeSessionId: state.activeSessionId,
+        language: state.language,
       }),
     },
   ),
@@ -140,6 +161,8 @@ export function useActiveSession(): {
   session: ChatSession | undefined;
   sessions: ChatSession[];
   activeSessionId: string | null;
+  language: Language;
+  setLanguage: (lang: Language) => void;
   createSession: (agentId?: string) => string;
   switchSession: (id: string) => void;
   deleteSession: (id: string) => void;
@@ -149,6 +172,8 @@ export function useActiveSession(): {
 } {
   const sessions = useChatStore((s) => s.sessions);
   const activeSessionId = useChatStore((s) => s.activeSessionId);
+  const language = useChatStore((s) => s.language);
+  const setLanguage = useChatStore((s) => s.setLanguage);
   const createSession = useChatStore((s) => s.createSession);
   const switchSession = useChatStore((s) => s.switchSession);
   const deleteSession = useChatStore((s) => s.deleteSession);
@@ -162,6 +187,8 @@ export function useActiveSession(): {
     session,
     sessions,
     activeSessionId,
+    language,
+    setLanguage,
     createSession,
     switchSession,
     deleteSession,

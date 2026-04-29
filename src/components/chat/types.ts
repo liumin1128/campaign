@@ -20,3 +20,6 @@ export interface FileAttachment {
   content: string;
   type: "csv" | "text";
 }
+
+/** 聊天回复语言 */
+export type Language = "zh" | "en";

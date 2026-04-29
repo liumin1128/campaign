@@ -1,6 +1,7 @@
 "use client";
 
 import { useChat } from "@/hooks/use-chat";
+import { t } from "@/components/chat/i18n";
 import { AgentSelector } from "@/components/chat/agent-selector";
 import { MessageBubble } from "@/components/chat/message-bubble";
 import { ChatInput } from "@/components/chat/chat-input";
@@ -13,12 +14,14 @@ export default function ChatPage() {
     isLoading,
     selectedAgent,
     fileAttachments,
+    language,
     sessions,
     activeSessionId,
     messagesEndRef,
     inputRef,
     fileInputRef,
     setInput,
+    setLanguage,
     setSelectedAgent,
     handleSend,
     handleStop,
@@ -40,6 +43,7 @@ export default function ChatPage() {
       <SessionSelector
         sessions={sessions}
         activeSessionId={activeSessionId}
+        language={language}
         onNew={createSession}
         onSwitch={switchSession}
         onDelete={deleteSession}
@@ -54,7 +58,7 @@ export default function ChatPage() {
             AI Chat
           </h1>
           <p className="mt-1 text-sm text-gray-500 dark:text-slate-400">
-            与 AI 助手进行对话 · 支持流式输出
+            {t(language, "page_desc")}
           </p>
         </div>
 
@@ -62,6 +66,7 @@ export default function ChatPage() {
         <div className="px-6">
           <AgentSelector
             selectedAgent={selectedAgent}
+            language={language}
             onSelect={setSelectedAgent}
           />
         </div>
@@ -74,6 +79,7 @@ export default function ChatPage() {
               message={msg}
               isLatest={msg.id === latestAssistantId}
               isLoading={isLoading}
+              language={language}
             />
           ))}
           <div ref={messagesEndRef} />
@@ -84,6 +90,7 @@ export default function ChatPage() {
           <ChatInput
             input={input}
             isLoading={isLoading}
+            language={language}
             fileAttachments={fileAttachments}
             inputRef={inputRef}
             fileInputRef={fileInputRef}
@@ -93,6 +100,7 @@ export default function ChatPage() {
             onKeyDown={handleKeyDown}
             onFileSelect={handleFileSelect}
             onRemoveFile={handleRemoveFile}
+            onLanguageChange={setLanguage}
           />
         </div>
       </div>

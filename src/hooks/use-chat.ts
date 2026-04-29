@@ -6,7 +6,7 @@ import type {
   AgentOption,
   FileAttachment,
 } from "@/components/chat/types";
-import { AGENTS } from "@/components/chat/constants";
+import { getLocalizedAgents, t } from "@/components/chat/i18n";
 import { processFiles } from "@/components/chat/utils";
 import { useActiveSession } from "@/store/chat-store";
 
@@ -15,6 +15,8 @@ export function useChat() {
     session,
     sessions,
     activeSessionId,
+    language,
+    setLanguage,
     createSession,
     switchSession,
     deleteSession,
@@ -25,8 +27,9 @@ export function useChat() {
 
   const messages = session?.messages ?? [];
   const messageVersion = messages.length + (messages.at(-1)?.id ?? "");
+  const agents = getLocalizedAgents(language);
   const selectedAgent =
-    AGENTS.find((a) => a.id === session?.selectedAgentId) ?? AGENTS[0];
+    agents.find((a) => a.id === session?.selectedAgentId) ?? agents[0];
   const sessionId = session?.id;
 
   const [input, setInput] = useState("");
@@ -63,6 +66,12 @@ export function useChat() {
     [sessionId, updateSessionAgent],
   );
 
+  /** 语言回复指令 */
+  const languageInstruction =
+    language === "zh"
+      ? "\n\n请使用中文回复，除非用户明确要求使用其他语言。"
+      : "\n\nPlease respond in English, unless the user explicitly asks for another language.";
+
   /** 从 activeSession 的消息构建 API 请求消息体 */
   const buildApiMessages = useCallback(
     (msgs: Message[]) => {
@@ -78,17 +87,19 @@ export function useChat() {
             : m.content,
       });
 
-      return selectedAgent?.systemPrompt
-        ? [
-            {
-              role: "system" as const,
-              content: selectedAgent.systemPrompt,
-            },
-            ...msgs.map(mapMsg),
-          ]
-        : msgs.map(mapMsg);
+      const systemContent = selectedAgent?.systemPrompt
+        ? selectedAgent.systemPrompt + languageInstruction
+        : languageInstruction;
+
+      return [
+        {
+          role: "system" as const,
+          content: systemContent,
+        },
+        ...msgs.map(mapMsg),
+      ];
     },
-    [selectedAgent],
+    [selectedAgent, languageInstruction],
   );
 
   async function handleSend() {
@@ -140,7 +151,10 @@ export function useChat() {
           sid,
           withAssistant.map((m) =>
             m.id === assistantId
-              ? { ...m, content: `❌ 请求失败: ${err.error ?? "未知错误"}` }
+              ? {
+                  ...m,
+                  content: `❌ ${err.error ?? t(language, "error_stream")}`,
+                }
               : m,
           ),
         );
@@ -153,7 +167,9 @@ export function useChat() {
         updateSessionMessages(
           sid,
           withAssistant.map((m) =>
-            m.id === assistantId ? { ...m, content: "❌ 无法读取响应流" } : m,
+            m.id === assistantId
+              ? { ...m, content: t(language, "error_stream") }
+              : m,
           ),
         );
         setIsLoading(false);
@@ -220,7 +236,7 @@ export function useChat() {
           sid,
           withAssistant.map((m) =>
             m.id === assistantId
-              ? { ...m, content: m.content + "\n\n_（已停止生成）_" }
+              ? { ...m, content: m.content + `\n\n_${t(language, "stopped")}_` }
               : m,
           ),
         );
@@ -229,7 +245,10 @@ export function useChat() {
           sid,
           withAssistant.map((m) =>
             m.id === assistantId
-              ? { ...m, content: `❌ 网络错误: ${(err as Error).message}` }
+              ? {
+                  ...m,
+                  content: `${t(language, "error_network_prefix")}${(err as Error).message}`,
+                }
               : m,
           ),
         );
@@ -270,6 +289,7 @@ export function useChat() {
     isLoading,
     selectedAgent,
     fileAttachments,
+    language,
     sessions,
     activeSessionId,
     // refs
@@ -278,6 +298,7 @@ export function useChat() {
     fileInputRef,
     // 操作
     setInput,
+    setLanguage,
     setSelectedAgent: handleSetSelectedAgent,
     handleSend,
     handleStop,

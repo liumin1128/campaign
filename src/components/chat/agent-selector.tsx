@@ -1,24 +1,32 @@
 "use client";
 
-import type { AgentOption } from "./types";
-import { AGENTS, AGENT_ICONS } from "./constants";
+import type { AgentOption, Language } from "./types";
+import { AGENT_ICONS } from "./constants";
+import { getLocalizedAgents, t } from "./i18n";
 
 interface AgentSelectorProps {
   selectedAgent: AgentOption;
+  language: Language;
   onSelect: (agent: AgentOption) => void;
 }
 
-export function AgentSelector({ selectedAgent, onSelect }: AgentSelectorProps) {
+export function AgentSelector({
+  selectedAgent,
+  language,
+  onSelect,
+}: AgentSelectorProps) {
+  const agents = getLocalizedAgents(language);
+
   return (
     <div className="border-b border-gray-100 py-3 dark:border-slate-800">
       <div className="mb-3 flex items-center gap-2">
         <span className="text-xs font-medium text-gray-400 dark:text-slate-500">
-          Agent:
+          {t(language, "agent_label")}
         </span>
       </div>
 
       <div className="grid grid-cols-2 gap-2">
-        {AGENTS.map((agent) => {
+        {agents.map((agent) => {
           const isSelected = selectedAgent?.id === agent.id;
           const IconComponent = AGENT_ICONS[agent.id];
 

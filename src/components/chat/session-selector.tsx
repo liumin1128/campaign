@@ -2,11 +2,13 @@
 
 import { Plus, TrashBin } from "flowbite-react-icons/outline";
 import type { ChatSession } from "@/store/chat-store";
-import type { Message } from "./types";
+import type { Message, Language } from "./types";
+import { t } from "./i18n";
 
 interface SessionSelectorProps {
   sessions: ChatSession[];
   activeSessionId: string | null;
+  language: Language;
   onNew: () => void;
   onSwitch: (id: string) => void;
   onDelete: (id: string) => void;
@@ -14,14 +16,14 @@ interface SessionSelectorProps {
 }
 
 function getPreview(messages: Message[]): string {
-  if (messages.length === 0) return "（空）";
+  if (messages.length === 0) return "";
   const last = messages[messages.length - 1];
   if (last.content) {
     return last.content.length > 40
       ? last.content.slice(0, 40) + "…"
       : last.content;
   }
-  return "（空）";
+  return "";
 }
 
 function countUserMessages(messages: Message[]): number {
@@ -31,6 +33,7 @@ function countUserMessages(messages: Message[]): number {
 export function SessionSelector({
   sessions,
   activeSessionId,
+  language,
   onNew,
   onSwitch,
   onDelete,
@@ -40,7 +43,7 @@ export function SessionSelector({
       {/* 头部 */}
       <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3 dark:border-slate-700">
         <span className="text-xs font-semibold uppercase tracking-wider text-gray-400 dark:text-slate-500">
-          对话
+          {t(language, "session_title")}
         </span>
         <button
           type="button"
@@ -48,7 +51,7 @@ export function SessionSelector({
           className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-indigo-600 transition hover:bg-indigo-50 dark:text-indigo-400 dark:hover:bg-indigo-950/40"
         >
           <Plus className="size-3.5" />
-          新建
+          {t(language, "session_new")}
         </button>
       </div>
 
@@ -56,7 +59,7 @@ export function SessionSelector({
       <div className="flex-1 space-y-0.5 overflow-y-auto p-2">
         {sessions.length === 0 && (
           <p className="py-8 text-center text-xs text-gray-400 dark:text-slate-500">
-            暂无对话
+            {t(language, "session_empty")}
           </p>
         )}
 
@@ -82,7 +85,6 @@ export function SessionSelector({
               }}
               tabIndex={0}
               role="button"
-              aria-label={`切换到对话: ${s.title}`}
             >
               {/* 标题行 */}
               <div className="flex items-start justify-between gap-2">
@@ -103,7 +105,6 @@ export function SessionSelector({
                     onDelete(s.id);
                   }}
                   className="invisible shrink-0 rounded p-0.5 text-gray-400 opacity-0 transition hover:bg-gray-200 hover:text-red-500 group-hover:visible group-hover:opacity-100 dark:hover:bg-slate-600 dark:hover:text-red-400"
-                  aria-label={`删除: ${s.title}`}
                 >
                   <TrashBin className="size-3.5" />
                 </button>
@@ -114,14 +115,14 @@ export function SessionSelector({
                 {s.messages.length > 0
                   ? s.messages[s.messages.length - 1].content
                     ? preview
-                    : "等待回复…"
-                  : "（空）"}
+                    : t(language, "session_waiting")
+                  : t(language, "session_empty_preview")}
               </p>
 
               {/* 消息数 */}
               {userCount > 0 && (
                 <span className="mt-1 inline-block rounded-full bg-gray-100 px-1.5 py-0.5 text-[10px] text-gray-500 dark:bg-slate-700 dark:text-slate-400">
-                  {userCount} 条
+                  {t(language, "session_count", { n: userCount })}
                 </span>
               )}
             </div>

@@ -2,11 +2,13 @@
 
 import { FileImport, PaperPlane, Stop } from "flowbite-react-icons/outline";
 import { FileCsv } from "flowbite-react-icons/outline";
-import type { FileAttachment } from "./types";
+import type { FileAttachment, Language } from "./types";
+import { t } from "./i18n";
 
 interface ChatInputProps {
   input: string;
   isLoading: boolean;
+  language: Language;
   fileAttachments: FileAttachment[];
   inputRef: React.RefObject<HTMLTextAreaElement | null>;
   fileInputRef: React.RefObject<HTMLInputElement | null>;
@@ -16,11 +18,13 @@ interface ChatInputProps {
   onKeyDown: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void;
   onFileSelect: (e: React.ChangeEvent<HTMLInputElement>) => void;
   onRemoveFile: (index: number) => void;
+  onLanguageChange: (lang: Language) => void;
 }
 
 export function ChatInput({
   input,
   isLoading,
+  language,
   fileAttachments,
   inputRef,
   fileInputRef,
@@ -30,6 +34,7 @@ export function ChatInput({
   onKeyDown,
   onFileSelect,
   onRemoveFile,
+  onLanguageChange,
 }: ChatInputProps) {
   return (
     <div className="border-t border-gray-200 pt-4 dark:border-slate-700">
@@ -82,57 +87,74 @@ export function ChatInput({
           onKeyDown={onKeyDown}
           disabled={isLoading}
           placeholder={
-            isLoading ? "AI 正在回复..." : "输入消息，Shift+Enter 换行..."
+            isLoading
+              ? t(language, "chat_input_loading_placeholder")
+              : t(language, "chat_input_placeholder")
           }
           className="h-[140px] w-full resize-none bg-transparent px-4 pb-12 pt-4 text-sm text-gray-900 outline-none placeholder:text-gray-400 disabled:opacity-50 dark:text-slate-100 dark:placeholder-slate-500"
         />
 
-        <div className="absolute bottom-0 right-0 flex items-center gap-1 p-2">
-          <input
-            ref={fileInputRef}
-            type="file"
-            multiple
-            accept=".csv,.txt,.md,.json,text/*"
-            onChange={onFileSelect}
-            className="hidden"
-          />
+        <div className="absolute bottom-0 left-0 right-0 flex items-center justify-between p-2">
+          {/* 语言切换 */}
+          <button
+            type="button"
+            onClick={() => onLanguageChange(language === "zh" ? "en" : "zh")}
+            disabled={isLoading}
+            className="flex size-8 items-center justify-center rounded-lg text-xs font-semibold text-gray-400 transition hover:bg-gray-100 hover:text-gray-600 disabled:opacity-40 dark:hover:bg-slate-700 dark:hover:text-slate-300"
+            title={t(
+              language,
+              language === "zh" ? "lang_switch_to_en" : "lang_switch_to_zh",
+            )}
+          >
+            {language === "zh" ? "中" : "EN"}
+          </button>
 
-          {isLoading ? (
-            <button
-              type="button"
-              onClick={onStop}
-              className="flex size-8 items-center justify-center rounded-lg bg-red-500 text-white transition hover:bg-red-400"
-              title="停止生成"
-            >
-              <Stop className="size-4" />
-            </button>
-          ) : (
-            <>
+          {/* 右侧操作按钮 */}
+          <div className="flex items-center gap-1">
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              accept=".csv,.txt,.md,.json,text/*"
+              onChange={onFileSelect}
+              className="hidden"
+            />
+
+            {isLoading ? (
               <button
                 type="button"
-                onClick={() => fileInputRef.current?.click()}
-                disabled={isLoading}
-                className="flex size-8 items-center justify-center rounded-lg text-gray-400 transition hover:bg-gray-100 hover:text-gray-600 disabled:opacity-40 dark:hover:bg-slate-700 dark:hover:text-slate-300"
-                title="上传文件（支持 CSV）"
+                onClick={onStop}
+                className="flex size-8 items-center justify-center rounded-lg bg-red-500 text-white transition hover:bg-red-400"
+                title={t(language, "stop_title")}
               >
-                <FileImport className="size-4.5" />
+                <Stop className="size-4" />
               </button>
-              <button
-                type="button"
-                onClick={onSend}
-                disabled={!input.trim() && fileAttachments.length === 0}
-                className="flex size-8 items-center justify-center rounded-lg bg-indigo-600 text-white transition hover:bg-indigo-500 disabled:opacity-40 disabled:hover:bg-indigo-600"
-              >
-                <PaperPlane className="size-4.5" />
-              </button>
-            </>
-          )}
+            ) : (
+              <>
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={isLoading}
+                  className="flex size-8 items-center justify-center rounded-lg text-gray-400 transition hover:bg-gray-100 hover:text-gray-600 disabled:opacity-40 dark:hover:bg-slate-700 dark:hover:text-slate-300"
+                  title={t(language, "upload_file_title")}
+                >
+                  <FileImport className="size-4.5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={onSend}
+                  disabled={!input.trim() && fileAttachments.length === 0}
+                  className="flex size-8 items-center justify-center rounded-lg bg-indigo-600 text-white transition hover:bg-indigo-500 disabled:opacity-40 disabled:hover:bg-indigo-600"
+                >
+                  <PaperPlane className="size-4.5" />
+                </button>
+              </>
+            )}
+          </div>
         </div>
       </div>
       <p className="mt-2 text-center text-xs text-gray-400 dark:text-slate-500">
-        {isLoading
-          ? "正在生成回复，点击停止按钮中断"
-          : "回车发送 · 支持 CSV 文件上传解析"}
+        {isLoading ? t(language, "loading_hint") : t(language, "send_hint")}
       </p>
     </div>
   );

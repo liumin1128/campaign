@@ -1,8 +1,16 @@
 "use client";
 
 import { useState } from "react";
+import type { Language } from "./types";
+import { t } from "./i18n";
 
-export function ReasoningBlock({ text }: { text: string }) {
+export function ReasoningBlock({
+  text,
+  language,
+}: {
+  text: string;
+  language: Language;
+}) {
   const [expanded, setExpanded] = useState(false);
   const isLong = text.length > 300;
 
@@ -24,9 +32,11 @@ export function ReasoningBlock({ text }: { text: string }) {
             clipRule="evenodd"
           />
         </svg>
-        <span className="font-medium">思考过程</span>
+        <span className="font-medium">{t(language, "reasoning_title")}</span>
         {!expanded && isLong && (
-          <span className="text-amber-500">（过长已折叠）</span>
+          <span className="text-amber-500">
+            {t(language, "reasoning_collapsed")}
+          </span>
         )}
       </button>
       {expanded && (

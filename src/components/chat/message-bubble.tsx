@@ -4,7 +4,8 @@ import { FileCsv } from "flowbite-react-icons/outline";
 import { isMarkdownContent } from "@/utils/markdown";
 import MarkdownDisplay from "@/components/markdown-display";
 import { ReasoningBlock } from "./reasoning-block";
-import type { Message } from "./types";
+import type { Message, Language } from "./types";
+import { t } from "./i18n";
 
 function LoadingDots() {
   return (
@@ -20,12 +21,14 @@ interface MessageBubbleProps {
   message: Message;
   isLatest: boolean;
   isLoading: boolean;
+  language: Language;
 }
 
 export function MessageBubble({
   message,
   isLatest,
   isLoading,
+  language,
 }: MessageBubbleProps) {
   return (
     <div
@@ -37,7 +40,7 @@ export function MessageBubble({
         }`}
       >
         {message.role === "assistant" && message.reasoning && (
-          <ReasoningBlock text={message.reasoning} />
+          <ReasoningBlock text={message.reasoning} language={language} />
         )}
 
         {message.role === "assistant" &&
@@ -75,7 +78,10 @@ export function MessageBubble({
                   {att.name}
                 </span>
                 <span className="shrink-0 opacity-60">
-                  {att.type === "csv" ? "CSV" : "文本"}
+                  {t(
+                    language,
+                    att.type === "csv" ? "file_type_csv" : "file_type_text",
+                  )}
                 </span>
               </div>
             ))}
