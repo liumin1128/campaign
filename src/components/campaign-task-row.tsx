@@ -1,8 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Badge, Checkbox } from "flowbite-react";
-import { CalendarMonth, Clock, User } from "flowbite-react-icons/outline";
+import { Badge, Checkbox, TextInput } from "flowbite-react";
+import { CalendarMonth, User } from "flowbite-react-icons/outline";
 import {
   useCampaignTaskStore,
   type CampaignTask,
@@ -29,6 +29,26 @@ function NoteEditIcon() {
         strokeLinejoin="round"
       />
       <path d="M8.4 3.8l3.8 3.8" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function TrashIcon() {
+  return (
+    <svg
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      aria-hidden="true"
+      className="size-4"
+    >
+      <path
+        d="M3 4h10M6 4V2.5a.5.5 0 0 1 .5-.5h3a.5.5 0 0 1 .5.5V4M4 4v9a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path d="M6.5 7v4M9.5 7v4" strokeLinecap="round" />
     </svg>
   );
 }
@@ -149,28 +169,6 @@ function getDeadlineBadgePresentation(
   };
 }
 
-function hasUpdatedTimestamp(
-  createdAt: string | null,
-  updatedAt: string | null,
-) {
-  if (!updatedAt) {
-    return false;
-  }
-
-  if (!createdAt) {
-    return true;
-  }
-
-  const createdTime = new Date(createdAt).getTime();
-  const updatedTime = new Date(updatedAt).getTime();
-
-  if (Number.isNaN(createdTime) || Number.isNaN(updatedTime)) {
-    return updatedAt !== createdAt;
-  }
-
-  return updatedTime > createdTime;
-}
-
 export default function CampaignTaskRow({
   task,
   campaignID,
@@ -184,22 +182,68 @@ export default function CampaignTaskRow({
   const updateTaskStatus = useCampaignTaskStore(
     (state) => state.updateTaskStatus,
   );
-  const updateTaskText = useCampaignTaskStore((state) => state.updateTaskText);
+  const updateTaskDetails = useCampaignTaskStore(
+    (state) => state.updateTaskDetails,
+  );
+  const deleteTask = useCampaignTaskStore((state) => state.deleteTask);
+
   const isUpdating = updatingTaskIDs.includes(task.id);
   const isDone = task.status === "done";
-  const showUpdatedAt = hasUpdatedTimestamp(task.created_at, task.updated_at);
   const deadlineBadge = getDeadlineBadgePresentation(task.deadline, isDone);
-  const [isEditingText, setIsEditingText] = useState(false);
+
+  const [isEditing, setIsEditing] = useState(false);
+  const [draftContent, setDraftContent] = useState(task.content ?? "");
+  const [draftDeadline, setDraftDeadline] = useState(task.deadline ?? "");
+  const [draftAssignedTo, setDraftAssignedTo] = useState(task.assignedTo ?? "");
   const [draftText, setDraftText] = useState(task.text ?? "");
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
-  const hasText = hasRichTextContent(task.text);
-  const hasPendingTextChange = normalizeRichTextValue(draftText) !== task.text;
+  const hasNotes = hasRichTextContent(task.text);
 
-  async function handleSaveText() {
-    const didSave = await updateTaskText(campaignID, task.id, draftText);
+  const hasChanges =
+    draftContent.trim() !== (task.content ?? "") ||
+    draftDeadline !== (task.deadline ?? "") ||
+    draftAssignedTo !== (task.assignedTo ?? "") ||
+    normalizeRichTextValue(draftText) !== task.text;
+
+  function resetDrafts() {
+    setDraftContent(task.content ?? "");
+    setDraftDeadline(task.deadline ?? "");
+    setDraftAssignedTo(task.assignedTo ?? "");
+    setDraftText(task.text ?? "");
+  }
+
+  function openEditor() {
+    resetDrafts();
+    setIsEditing(true);
+  }
+
+  function closeEditor() {
+    resetDrafts();
+    setIsEditing(false);
+    setShowDeleteConfirm(false);
+  }
+
+  async function handleSave() {
+    const didSave = await updateTaskDetails(campaignID, task.id, {
+      content: draftContent.trim(),
+      deadline: draftDeadline || null,
+      assignedTo: draftAssignedTo.trim() || null,
+      text: draftText,
+    });
 
     if (didSave) {
-      setIsEditingText(false);
+      setIsEditing(false);
+      setShowDeleteConfirm(false);
+    }
+  }
+
+  async function handleDelete() {
+    const didDelete = await deleteTask(campaignID, task.id);
+
+    if (didDelete) {
+      setIsEditing(false);
+      setShowDeleteConfirm(false);
     }
   }
 
@@ -253,45 +297,22 @@ export default function CampaignTaskRow({
                 {deadlineBadge.label}
               </Badge>
 
-              <span className="inline-flex min-w-0 items-center gap-1 whitespace-nowrap text-slate-400 dark:text-slate-500">
-                <Clock className="size-3.5" />
-                <span className="truncate">
-                  {showUpdatedAt
-                    ? `Updated ${formatDate(task.updated_at)}`
-                    : `Created ${formatDate(task.created_at)}`}
-                </span>
-              </span>
-
               <button
                 type="button"
-                aria-label={
-                  isEditingText
-                    ? "收起备注编辑器"
-                    : hasText
-                      ? "编辑备注"
-                      : "添加备注"
-                }
-                title={
-                  isEditingText
-                    ? "收起备注编辑器"
-                    : hasText
-                      ? "编辑备注"
-                      : "添加备注"
-                }
+                aria-label={isEditing ? "关闭编辑面板" : "编辑任务"}
+                title={isEditing ? "关闭编辑面板" : "编辑任务"}
                 className={
-                  hasText || isEditingText
+                  isEditing
                     ? "inline-flex h-8 w-8 items-center justify-center rounded-full bg-indigo-100 text-indigo-700 transition hover:bg-indigo-200 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-indigo-500/15 dark:text-indigo-200 dark:hover:bg-indigo-500/25"
                     : "inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 text-slate-500 transition hover:border-indigo-200 hover:text-indigo-700 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:text-slate-300 dark:hover:border-indigo-500/60 dark:hover:text-indigo-200"
                 }
                 disabled={isUpdating}
                 onClick={() => {
-                  if (!isEditingText) {
-                    setDraftText(task.text ?? "");
+                  if (isEditing) {
+                    closeEditor();
                   } else {
-                    setDraftText(task.text ?? "");
+                    openEditor();
                   }
-
-                  setIsEditingText((previous) => !previous);
                 }}
               >
                 <NoteEditIcon />
@@ -305,42 +326,147 @@ export default function CampaignTaskRow({
             </div>
           </div>
 
-          {hasText && !isEditingText ? (
+          {hasNotes && !isEditing ? (
             <div className="rounded-sm border border-slate-200 bg-slate-50/80 px-4 py-3 dark:border-slate-700 dark:bg-slate-950/50">
               <TaskMarkdownPreview source={task.text ?? ""} />
             </div>
           ) : null}
 
-          {isEditingText ? (
-            <div className="space-y-3 rounded-sm border border-slate-200 bg-slate-50/90 p-3 dark:border-slate-700 dark:bg-slate-950/50">
-              <TaskMarkdownEditor
-                value={draftText}
-                disabled={isUpdating}
-                onChange={setDraftText}
-              />
-
-              <div className="flex items-center justify-end gap-2">
-                <button
-                  type="button"
-                  className="rounded-xs border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 transition hover:border-slate-300 hover:bg-white disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:text-slate-300 dark:hover:border-slate-600 dark:hover:bg-slate-900"
+          {isEditing ? (
+            <div className="space-y-4 rounded-sm border border-slate-200 bg-slate-50/90 p-4 dark:border-slate-700 dark:bg-slate-950/50">
+              {/* 任务内容 */}
+              <div>
+                <label className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">
+                  任务内容
+                </label>
+                <TextInput
+                  value={draftContent}
                   disabled={isUpdating}
-                  onClick={() => {
-                    setDraftText(task.text ?? "");
-                    setIsEditingText(false);
+                  onChange={(event) => {
+                    setDraftContent(event.target.value);
                   }}
-                >
-                  取消
-                </button>
-                <button
-                  type="button"
-                  className="rounded-xs bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:bg-indigo-300 dark:disabled:bg-indigo-900/60"
-                  disabled={isUpdating || !hasPendingTextChange}
-                  onClick={() => {
-                    void handleSaveText();
+                  className="text-sm"
+                />
+              </div>
+
+              {/* 截止日期 */}
+              <div>
+                <label className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">
+                  截止日期
+                </label>
+                <TextInput
+                  type="date"
+                  value={draftDeadline}
+                  disabled={isUpdating}
+                  onChange={(event) => {
+                    setDraftDeadline(event.target.value);
                   }}
-                >
-                  保存备注
-                </button>
+                  className="text-sm"
+                />
+              </div>
+
+              {/* 负责人 */}
+              <div>
+                <label className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">
+                  负责人
+                </label>
+                <TextInput
+                  value={draftAssignedTo}
+                  disabled={isUpdating}
+                  placeholder="输入负责人姓名"
+                  onChange={(event) => {
+                    setDraftAssignedTo(event.target.value);
+                  }}
+                  className="text-sm"
+                />
+              </div>
+
+              {/* 备注 */}
+              <div>
+                <label className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">
+                  备注
+                </label>
+                <TaskMarkdownEditor
+                  value={draftText}
+                  disabled={isUpdating}
+                  onChange={setDraftText}
+                />
+              </div>
+
+              {/* 时间信息 */}
+              <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-400 dark:text-slate-500">
+                {task.created_at ? (
+                  <span>创建时间: {formatDate(task.created_at)}</span>
+                ) : null}
+                {task.updated_at ? (
+                  <span>更新时间: {formatDate(task.updated_at)}</span>
+                ) : null}
+              </div>
+
+              {/* 操作按钮 */}
+              <div className="flex items-center justify-between gap-2">
+                <div>
+                  {showDeleteConfirm ? (
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-red-600 dark:text-red-400">
+                        确认删除？
+                      </span>
+                      <button
+                        type="button"
+                        className="rounded-xs bg-red-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-red-500 disabled:cursor-not-allowed disabled:opacity-60"
+                        disabled={isUpdating}
+                        onClick={() => {
+                          void handleDelete();
+                        }}
+                      >
+                        确认删除
+                      </button>
+                      <button
+                        type="button"
+                        className="rounded-xs border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 transition hover:border-slate-300 hover:bg-white disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:text-slate-300 dark:hover:border-slate-600 dark:hover:bg-slate-900"
+                        disabled={isUpdating}
+                        onClick={() => {
+                          setShowDeleteConfirm(false);
+                        }}
+                      >
+                        取消
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      className="inline-flex items-center gap-1 rounded-xs border border-red-200 px-3 py-1.5 text-xs font-medium text-red-600 transition hover:border-red-300 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-red-900 dark:text-red-400 dark:hover:border-red-700 dark:hover:bg-red-950"
+                      disabled={isUpdating}
+                      onClick={() => {
+                        setShowDeleteConfirm(true);
+                      }}
+                    >
+                      <TrashIcon />
+                      删除
+                    </button>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    className="rounded-xs border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 transition hover:border-slate-300 hover:bg-white disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:text-slate-300 dark:hover:border-slate-600 dark:hover:bg-slate-900"
+                    disabled={isUpdating}
+                    onClick={closeEditor}
+                  >
+                    取消
+                  </button>
+                  <button
+                    type="button"
+                    className="rounded-xs bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:bg-indigo-300 dark:disabled:bg-indigo-900/60"
+                    disabled={isUpdating || !hasChanges}
+                    onClick={() => {
+                      void handleSave();
+                    }}
+                  >
+                    保存
+                  </button>
+                </div>
               </div>
             </div>
           ) : null}

@@ -136,6 +136,9 @@ export async function PATCH(request: Request, context: RouteContext) {
     taskID?: number;
     status?: string;
     text?: string | null;
+    content?: string;
+    deadline?: string | null;
+    assignedTo?: string | null;
     sender?: string;
     webhookUrl?: string;
   };
@@ -154,8 +157,17 @@ export async function PATCH(request: Request, context: RouteContext) {
     typeof payload.status !== "undefined" &&
     (payload.status === "todo" || payload.status === "done");
   const hasTextUpdate = typeof payload.text !== "undefined";
+  const hasContentUpdate = typeof payload.content !== "undefined";
+  const hasDeadlineUpdate = typeof payload.deadline !== "undefined";
+  const hasAssignedToUpdate = typeof payload.assignedTo !== "undefined";
 
-  if (!hasStatusUpdate && !hasTextUpdate) {
+  if (
+    !hasStatusUpdate &&
+    !hasTextUpdate &&
+    !hasContentUpdate &&
+    !hasDeadlineUpdate &&
+    !hasAssignedToUpdate
+  ) {
     return Response.json(
       {
         ok: false,
@@ -199,11 +211,7 @@ export async function PATCH(request: Request, context: RouteContext) {
     );
   }
 
-  const updates: {
-    status?: TaskStatus;
-    text?: string | null;
-    updated_at: string;
-  } = {
+  const updates: Record<string, unknown> = {
     updated_at: new Date().toISOString(),
   };
 
@@ -213,6 +221,32 @@ export async function PATCH(request: Request, context: RouteContext) {
 
   if (hasTextUpdate) {
     updates.text = normalizeRichTextValue(payload.text);
+  }
+
+  if (hasContentUpdate) {
+    const trimmed = payload.content?.trim();
+    if (!trimmed) {
+      return Response.json(
+        { ok: false, error: "Task content is required" },
+        { status: 400 },
+      );
+    }
+    updates.content = trimmed;
+  }
+
+  if (hasDeadlineUpdate) {
+    const normalizedDeadline = normalizeDeadline(payload.deadline);
+    if (normalizedDeadline && "error" in normalizedDeadline) {
+      return Response.json(
+        { ok: false, error: normalizedDeadline.error },
+        { status: 400 },
+      );
+    }
+    updates.deadline = normalizedDeadline?.value ?? null;
+  }
+
+  if (hasAssignedToUpdate) {
+    updates.assignedTo = payload.assignedTo?.trim() || null;
   }
 
   const { data, error } = await supabase
@@ -253,5 +287,44 @@ export async function PATCH(request: Request, context: RouteContext) {
   return Response.json({
     ok: true,
     task: data,
+  });
+}
+
+export async function DELETE(request: Request, context: RouteContext) {
+  const { campaignID } = await context.params;
+  const payload = (await request.json()) as {
+    taskID?: number;
+  };
+
+  if (!payload.taskID) {
+    return Response.json(
+      {
+        ok: false,
+        error: "Invalid taskID",
+      },
+      { status: 400 },
+    );
+  }
+
+  const supabase = getSupabaseAdminClient();
+
+  const { error } = await supabase
+    .from("task")
+    .delete()
+    .eq("id", payload.taskID)
+    .eq("campaign", campaignID);
+
+  if (error) {
+    return Response.json(
+      {
+        ok: false,
+        error: error.message,
+      },
+      { status: 500 },
+    );
+  }
+
+  return Response.json({
+    ok: true,
   });
 }

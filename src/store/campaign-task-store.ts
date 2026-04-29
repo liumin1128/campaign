@@ -41,6 +41,17 @@ type CampaignTaskState = {
     taskID: number,
     text: string,
   ) => Promise<boolean>;
+  updateTaskDetails: (
+    campaignID: string,
+    taskID: number,
+    details: {
+      content?: string;
+      deadline?: string | null;
+      assignedTo?: string | null;
+      text?: string;
+    },
+  ) => Promise<boolean>;
+  deleteTask: (campaignID: string, taskID: number) => Promise<boolean>;
   reset: () => void;
 };
 
@@ -289,6 +300,131 @@ export const useCampaignTaskStore = create<CampaignTaskState>()((set, get) => ({
       set((state) => ({
         error:
           error instanceof Error ? error.message : "Failed to update task text",
+        updatingTaskIDs: state.updatingTaskIDs.filter((id) => id !== taskID),
+        tasks: previousTasks,
+      }));
+
+      return false;
+    }
+  },
+  updateTaskDetails: async (campaignID, taskID, details) => {
+    const previousTasks = get().tasks;
+
+    set((state) => ({
+      error: null,
+      updatingTaskIDs: [...state.updatingTaskIDs, taskID],
+      tasks: state.tasks.map((task) =>
+        task.id === taskID
+          ? {
+              ...task,
+              ...(details.content !== undefined && {
+                content: details.content,
+              }),
+              ...(details.deadline !== undefined && {
+                deadline: details.deadline,
+              }),
+              ...(details.assignedTo !== undefined && {
+                assignedTo: details.assignedTo,
+              }),
+              ...(details.text !== undefined && {
+                text: normalizeRichTextValue(details.text),
+              }),
+            }
+          : task,
+      ),
+    }));
+
+    try {
+      const body: Record<string, unknown> = { taskID };
+
+      if (details.content !== undefined) {
+        body.content = details.content;
+      }
+      if (details.deadline !== undefined) {
+        body.deadline = details.deadline;
+      }
+      if (details.assignedTo !== undefined) {
+        body.assignedTo = details.assignedTo;
+      }
+      if (details.text !== undefined) {
+        body.text = details.text;
+      }
+
+      const response = await fetch(
+        `/api/campaign/${encodeURIComponent(campaignID)}/tasks`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        },
+      );
+
+      const payload = (await response.json()) as {
+        ok: boolean;
+        error?: string;
+        task?: CampaignTask;
+      };
+
+      if (!response.ok || !payload.ok || !payload.task) {
+        throw new Error(payload.error ?? "Failed to update task");
+      }
+
+      set((state) => ({
+        error: null,
+        updatingTaskIDs: state.updatingTaskIDs.filter((id) => id !== taskID),
+        tasks: state.tasks.map((task) =>
+          task.id === taskID ? payload.task! : task,
+        ),
+      }));
+
+      return true;
+    } catch (error) {
+      set((state) => ({
+        error: error instanceof Error ? error.message : "Failed to update task",
+        updatingTaskIDs: state.updatingTaskIDs.filter((id) => id !== taskID),
+        tasks: previousTasks,
+      }));
+
+      return false;
+    }
+  },
+  deleteTask: async (campaignID, taskID) => {
+    const previousTasks = get().tasks;
+
+    set((state) => ({
+      error: null,
+      updatingTaskIDs: [...state.updatingTaskIDs, taskID],
+      tasks: state.tasks.filter((task) => task.id !== taskID),
+    }));
+
+    try {
+      const response = await fetch(
+        `/api/campaign/${encodeURIComponent(campaignID)}/tasks`,
+        {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ taskID }),
+        },
+      );
+
+      const payload = (await response.json()) as {
+        ok: boolean;
+        error?: string;
+      };
+
+      if (!response.ok || !payload.ok) {
+        throw new Error(payload.error ?? "Failed to delete task");
+      }
+
+      set((state) => ({
+        error: null,
+        updatingTaskIDs: state.updatingTaskIDs.filter((id) => id !== taskID),
+      }));
+
+      return true;
+    } catch (error) {
+      set((state) => ({
+        error: error instanceof Error ? error.message : "Failed to delete task",
         updatingTaskIDs: state.updatingTaskIDs.filter((id) => id !== taskID),
         tasks: previousTasks,
       }));
