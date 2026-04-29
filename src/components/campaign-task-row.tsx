@@ -248,7 +248,7 @@ export default function CampaignTaskRow({
   }
 
   return (
-    <li className="rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm transition hover:border-indigo-200 hover:shadow-md dark:border-slate-800 dark:bg-slate-900 dark:hover:border-indigo-500/60">
+    <li className="overflow-hidden rounded-xl border border-slate-200 bg-white px-4 py-3 transition hover:border-indigo-200 hover:ring-1 hover:ring-indigo-200/40 dark:border-slate-800 dark:bg-slate-900 dark:hover:border-indigo-500/60 dark:hover:ring-indigo-500/20">
       <div className="flex items-start gap-3">
         <div className="flex h-8 w-8 shrink-0 items-center justify-center">
           <Checkbox
@@ -327,13 +327,13 @@ export default function CampaignTaskRow({
           </div>
 
           {hasNotes && !isEditing ? (
-            <div className="rounded-sm border border-slate-200 bg-slate-50/80 px-4 py-3 dark:border-slate-700 dark:bg-slate-950/50">
+            <div className="rounded-lg border border-slate-200 bg-slate-50/80 px-4 py-3 dark:border-slate-700 dark:bg-slate-950/50">
               <TaskMarkdownPreview source={task.text ?? ""} />
             </div>
           ) : null}
 
           {isEditing ? (
-            <div className="space-y-4 rounded-sm border border-slate-200 bg-slate-50/90 p-4 dark:border-slate-700 dark:bg-slate-950/50">
+            <div className="space-y-4 rounded-lg border border-slate-200 bg-slate-50/90 p-4 dark:border-slate-700 dark:bg-slate-950/50">
               {/* 任务内容 */}
               <div>
                 <label className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">
@@ -413,7 +413,7 @@ export default function CampaignTaskRow({
                       </span>
                       <button
                         type="button"
-                        className="rounded-xs bg-red-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-red-500 disabled:cursor-not-allowed disabled:opacity-60"
+                        className="rounded-md bg-red-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-red-500 disabled:cursor-not-allowed disabled:opacity-60"
                         disabled={isUpdating}
                         onClick={() => {
                           void handleDelete();
@@ -423,7 +423,7 @@ export default function CampaignTaskRow({
                       </button>
                       <button
                         type="button"
-                        className="rounded-xs border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 transition hover:border-slate-300 hover:bg-white disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:text-slate-300 dark:hover:border-slate-600 dark:hover:bg-slate-900"
+                        className="rounded-md border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 transition hover:border-slate-300 hover:bg-white disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:text-slate-300 dark:hover:border-slate-600 dark:hover:bg-slate-900"
                         disabled={isUpdating}
                         onClick={() => {
                           setShowDeleteConfirm(false);
@@ -435,7 +435,7 @@ export default function CampaignTaskRow({
                   ) : (
                     <button
                       type="button"
-                      className="inline-flex items-center gap-1 rounded-xs border border-red-200 px-3 py-1.5 text-xs font-medium text-red-600 transition hover:border-red-300 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-red-900 dark:text-red-400 dark:hover:border-red-700 dark:hover:bg-red-950"
+                      className="inline-flex items-center gap-1 rounded-md border border-red-200 px-3 py-1.5 text-xs font-medium text-red-600 transition hover:border-red-300 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-red-900 dark:text-red-400 dark:hover:border-red-700 dark:hover:bg-red-950"
                       disabled={isUpdating}
                       onClick={() => {
                         setShowDeleteConfirm(true);
@@ -450,7 +450,7 @@ export default function CampaignTaskRow({
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
-                    className="rounded-xs border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 transition hover:border-slate-300 hover:bg-white disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:text-slate-300 dark:hover:border-slate-600 dark:hover:bg-slate-900"
+                    className="rounded-md border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 transition hover:border-slate-300 hover:bg-white disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:text-slate-300 dark:hover:border-slate-600 dark:hover:bg-slate-900"
                     disabled={isUpdating}
                     onClick={closeEditor}
                   >
@@ -458,7 +458,7 @@ export default function CampaignTaskRow({
                   </button>
                   <button
                     type="button"
-                    className="rounded-xs bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:bg-indigo-300 dark:disabled:bg-indigo-900/60"
+                    className="rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:bg-indigo-300 dark:disabled:bg-indigo-900/60"
                     disabled={isUpdating || !hasChanges}
                     onClick={() => {
                       void handleSave();

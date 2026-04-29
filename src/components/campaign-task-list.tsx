@@ -21,6 +21,7 @@ import {
   type CampaignTask,
 } from "@/store/campaign-task-store";
 import CampaignTaskRow from "@/components/campaign-task-row";
+import CampaignTaskListSkeleton from "@/components/campaign-task-list-skeleton";
 
 const stepDefinitions = [
   { key: "Initial Idea", label: "Step 1: Initial Idea" },
@@ -192,75 +193,100 @@ export default function CampaignTaskList({
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="overflow-hidden rounded-lg">
+      <div className="rounded-lg">
         <div className="">
-          {loading ? (
-            <div className="text-sm text-gray-500 dark:text-slate-400">
-              Loading tasks...
-            </div>
-          ) : null}
+          {/* 加载骨架屏 */}
+          {loading ? <CampaignTaskListSkeleton /> : null}
 
+          {/* 错误状态 */}
           {!loading && error ? (
-            <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-300">
+            <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-300">
               {error}
             </div>
           ) : null}
 
+          {/* 内容区域 - 加载完成后淡入 */}
           {!loading && !error ? (
-            <div className="space-y-4">
+            <div className="content-fade-in space-y-4">
               {tasks.length === 0 ? (
-                <div className="rounded-md border border-dashed border-gray-300 px-4 py-4 text-sm text-gray-500 dark:border-slate-700 dark:text-slate-400">
-                  No tasks found for this campaign yet. Use the add button on
-                  any step to create the first one.
+                <div className="rounded-xl border-2 border-dashed border-slate-200 bg-white/60 px-6 py-10 text-center dark:border-slate-700 dark:bg-slate-900/30">
+                  <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800">
+                    <svg
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.5"
+                      aria-hidden="true"
+                      className="size-6 text-slate-400 dark:text-slate-500"
+                    >
+                      <path d="M9 12h6M12 9v6" strokeLinecap="round" />
+                      <path d="M12 3c-4.97 0-9 4.03-9 9s4.03 9 9 9 9-4.03 9-9-4.03-9-9-9Z" />
+                    </svg>
+                  </div>
+                  <p className="text-sm font-medium text-slate-600 dark:text-slate-300">
+                    还没有任何任务
+                  </p>
+                  <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">
+                    点击每个步骤旁的 + 按钮来创建第一个任务
+                  </p>
                 </div>
               ) : null}
 
-              {groupedTasks.map((group) => {
+              {groupedTasks.map((group, groupIndex) => {
                 const isExpanded = expandedStepKeys.includes(group.key);
                 const StepToggleIcon = isExpanded ? ChevronDown : ChevronRight;
 
                 return (
                   <section
                     key={group.key}
-                    className="rounded-sm bg-white dark:bg-transparent"
+                    className="animate-fade-in rounded-xl bg-white shadow-sm ring-1 ring-slate-200/80 dark:bg-transparent dark:ring-slate-800"
+                    style={{ animationDelay: `${groupIndex * 0.05}s` }}
                   >
-                    <div className="border-b border-gray-200 px-4 py-4 dark:border-slate-800">
-                      <div className="flex items-center justify-between gap-3">
+                    <div
+                      className="flex rounded-xl cursor-pointer items-center justify-between gap-3  border-gray-200 px-4 py-4 transition hover:bg-slate-100 dark:border-slate-800 dark:hover:bg-slate-900/50"
+                      role="button"
+                      tabIndex={0}
+                      aria-expanded={isExpanded}
+                      aria-controls={`campaign-step-${group.key}`}
+                      onClick={() => toggleStepExpansion(group.key)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault();
+                          toggleStepExpansion(group.key);
+                        }
+                      }}
+                    >
+                      <div className="flex items-center gap-3.5">
+                        <StepToggleIcon className="size-4 text-slate-400 dark:text-slate-500" />
+                        <StepStatusIndicator status={group.status} />
+                        <h4 className="text-base font-semibold text-gray-900 dark:text-slate-100 sm:text-lg">
+                          {group.label}
+                        </h4>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="rounded-full bg-white px-2.5 py-1 text-xs font-medium text-gray-600 dark:bg-slate-800 dark:text-slate-300">
+                          {group.tasks.length} task
+                          {group.tasks.length === 1 ? "" : "s"}
+                        </span>
                         <button
                           type="button"
-                          className="flex items-center gap-3.5 rounded-md text-left transition hover:text-indigo-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/50 dark:hover:text-indigo-200"
-                          aria-expanded={isExpanded}
-                          aria-controls={`campaign-step-${group.key}`}
-                          onClick={() => toggleStepExpansion(group.key)}
+                          aria-label={`Add task to ${group.label}`}
+                          title={`Add task to ${group.label}`}
+                          className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-indigo-200 bg-indigo-50 text-indigo-700 transition hover:border-indigo-300 hover:bg-indigo-100 dark:border-indigo-500/30 dark:bg-indigo-500/10 dark:text-indigo-200 dark:hover:border-indigo-500/50 dark:hover:bg-indigo-500/15"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            openCreateTaskModal(group.key);
+                          }}
                         >
-                          <StepToggleIcon className="size-4 text-slate-400 dark:text-slate-500" />
-                          <StepStatusIndicator status={group.status} />
-                          <h4 className="text-base font-semibold text-gray-900 dark:text-slate-100 sm:text-lg">
-                            {group.label}
-                          </h4>
+                          <Plus className="size-4" />
                         </button>
-                        <div className="flex items-center gap-2">
-                          <span className="rounded-full bg-white px-2.5 py-1 text-xs font-medium text-gray-600 dark:bg-slate-800 dark:text-slate-300">
-                            {group.tasks.length} task
-                            {group.tasks.length === 1 ? "" : "s"}
-                          </span>
-                          <button
-                            type="button"
-                            aria-label={`Add task to ${group.label}`}
-                            title={`Add task to ${group.label}`}
-                            className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-indigo-200 bg-indigo-50 text-indigo-700 transition hover:border-indigo-300 hover:bg-indigo-100 dark:border-indigo-500/30 dark:bg-indigo-500/10 dark:text-indigo-200 dark:hover:border-indigo-500/50 dark:hover:bg-indigo-500/15"
-                            onClick={() => openCreateTaskModal(group.key)}
-                          >
-                            <Plus className="size-4" />
-                          </button>
-                        </div>
                       </div>
                     </div>
 
                     {isExpanded ? (
                       <ul
                         id={`campaign-step-${group.key}`}
-                        className="space-y-3 bg-gray-50 px-4 py-4 dark:bg-slate-950/30"
+                        className="space-y-3 bg-gray-50 px-4 py-4 dark:bg-slate-950/30 rounded-xl"
                       >
                         {group.tasks.length > 0 ? (
                           group.tasks.map((task) => (
@@ -271,8 +297,18 @@ export default function CampaignTaskList({
                             />
                           ))
                         ) : (
-                          <li className="rounded-xl border border-dashed border-slate-300 bg-white px-4 py-6 text-sm text-slate-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400">
-                            No tasks yet for this step.
+                          <li className="flex flex-col items-center gap-1.5 rounded-xl border border-dashed border-slate-200 bg-white px-4 py-6 text-sm dark:border-slate-700 dark:bg-slate-900">
+                            <span className="text-xs text-slate-400 dark:text-slate-500">
+                              暂无任务
+                            </span>
+                            <button
+                              type="button"
+                              className="inline-flex items-center gap-1 text-xs font-medium text-indigo-600 transition hover:text-indigo-500 dark:text-indigo-400 dark:hover:text-indigo-300"
+                              onClick={() => openCreateTaskModal(group.key)}
+                            >
+                              <Plus className="size-3" />
+                              创建第一个任务
+                            </button>
                           </li>
                         )}
                       </ul>

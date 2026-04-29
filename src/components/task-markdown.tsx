@@ -269,7 +269,7 @@ export function TaskMarkdownEditor({
   }
 
   return (
-    <div className="task-rich-text-wrapper overflow-hidden rounded-xs border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-950/60">
+    <div className="task-rich-text-wrapper overflow-hidden rounded-lg border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-950/60">
       <EditorToolbar editor={editor} disabled={disabled} />
       <EditorContent editor={editor} />
     </div>
