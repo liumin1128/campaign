@@ -7,7 +7,7 @@ export type Campaign = {
   content: string | null;
   created_at: string | null;
   updated_at: string | null;
-  taskProgress: {
+  taskProgress?: {
     total: number;
     done: number;
   };

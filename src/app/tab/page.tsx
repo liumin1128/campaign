@@ -289,7 +289,7 @@ export default function CampaignPage() {
                   <p className="mt-1 text-xs text-gray-400">
                     ID: {campaign.campaignID}
                   </p>
-                  {campaign.taskProgress.total > 0 && (
+                  {campaign.taskProgress && campaign.taskProgress.total > 0 && (
                     <div className="mt-3">
                       <Progress
                         progress={Math.round(
