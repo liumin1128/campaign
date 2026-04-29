@@ -8,6 +8,7 @@ import {
   ModalBody,
   ModalFooter,
   ModalHeader,
+  Progress,
   TextInput,
   Textarea,
 } from "flowbite-react";
@@ -288,6 +289,24 @@ export default function CampaignPage() {
                   <p className="mt-1 text-xs text-gray-400">
                     ID: {campaign.campaignID}
                   </p>
+                  {campaign.taskProgress.total > 0 && (
+                    <div className="mt-3">
+                      <Progress
+                        progress={Math.round(
+                          (campaign.taskProgress.done /
+                            campaign.taskProgress.total) *
+                            100,
+                        )}
+                        size="sm"
+                        color="blue"
+                        labelProgress
+                      />
+                      <p className="mt-0.5 text-xs text-gray-400">
+                        {campaign.taskProgress.done}/
+                        {campaign.taskProgress.total} tasks
+                      </p>
+                    </div>
+                  )}
                 </a>
 
                 {/* Action buttons */}

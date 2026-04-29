@@ -9,7 +9,7 @@ const campaignSelectFields =
 export async function GET() {
   const supabase = getSupabaseAdminClient();
 
-  const { data, error } = await supabase
+  const { data: campaigns, error } = await supabase
     .from("campaign")
     .select(campaignSelectFields)
     .order("created_at", { ascending: false });
@@ -18,7 +18,33 @@ export async function GET() {
     return Response.json({ ok: false, error: error.message }, { status: 500 });
   }
 
-  return Response.json({ ok: true, campaigns: data ?? [] });
+  // Aggregate task status per campaign in a single query
+  const campaignIDs = (campaigns ?? []).map((c) => c.campaignID);
+  const taskStats: Record<string, { total: number; done: number }> = {};
+
+  if (campaignIDs.length > 0) {
+    const { data: tasks } = await supabase
+      .from("task")
+      .select("campaign, status")
+      .in("campaign", campaignIDs);
+
+    if (tasks) {
+      for (const id of campaignIDs) {
+        const t = tasks.filter((x) => x.campaign === id);
+        taskStats[id] = {
+          total: t.length,
+          done: t.filter((x) => x.status === "done").length,
+        };
+      }
+    }
+  }
+
+  const result = (campaigns ?? []).map((c) => ({
+    ...c,
+    taskProgress: taskStats[c.campaignID] ?? { total: 0, done: 0 },
+  }));
+
+  return Response.json({ ok: true, campaigns: result });
 }
 
 export async function POST(request: Request) {
