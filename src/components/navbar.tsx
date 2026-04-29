@@ -2,12 +2,13 @@
 
 import { useThemeMode } from "flowbite-react";
 import { useState } from "react";
-import { Cog, Home } from "flowbite-react-icons/outline";
+import { Cog, Home, MessageDots } from "flowbite-react-icons/outline";
 import { classNames } from "@/utils/common";
 import { useTeamsUserStore } from "@/store/teams-user-store";
 
 const navigation = [
   { name: "Campaigns", href: "/tab", icon: Home, current: true },
+  { name: "Chat", href: "/tab/chat", icon: MessageDots, current: false },
   // { name: "Team", href: "#", icon: Users, current: false },
   // { name: "Projects", href: "#", icon: Folder, current: false },
   // { name: "Calendar", href: "#", icon: CalendarMonth, current: false },
