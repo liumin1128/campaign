@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { ThemeModeScript } from "flowbite-react";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -13,10 +12,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="zh-CN" suppressHydrationWarning>
-      <head>
-        <ThemeModeScript />
-      </head>
+    <html lang="zh-CN" className="light" suppressHydrationWarning>
       <body>{children}</body>
     </html>
   );
