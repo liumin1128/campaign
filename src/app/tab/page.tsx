@@ -112,11 +112,17 @@ function CampaignFormModal({
         <Button
           color="blue"
           onClick={() => onSave({ campaignID, title, content })}
-          isProcessing={saving}
+          disabled={saving}
         >
-          {isEditing ? "Save Changes" : "Create"}
+          {saving
+            ? isEditing
+              ? "Saving..."
+              : "Creating..."
+            : isEditing
+              ? "Save Changes"
+              : "Create"}
         </Button>
-        <Button color="gray" onClick={onClose}>
+        <Button color="gray" onClick={onClose} disabled={saving}>
           Cancel
         </Button>
       </ModalFooter>
@@ -148,10 +154,10 @@ function DeleteConfirmModal({
         </p>
       </ModalBody>
       <ModalFooter>
-        <Button color="red" onClick={onConfirm} isProcessing={deleting}>
-          Delete
+        <Button color="red" onClick={onConfirm} disabled={deleting}>
+          {deleting ? "Deleting..." : "Delete"}
         </Button>
-        <Button color="gray" onClick={onClose}>
+        <Button color="gray" onClick={onClose} disabled={deleting}>
           Cancel
         </Button>
       </ModalFooter>

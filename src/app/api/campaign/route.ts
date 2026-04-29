@@ -1,4 +1,5 @@
 import { getSupabaseAdminClient } from "@/lib/supabase-server";
+import demoTaskTemplates from "@/utils/demo.json";
 
 export const runtime = "nodejs";
 
@@ -72,6 +73,29 @@ export async function POST(request: Request) {
 
   if (error) {
     return Response.json({ ok: false, error: error.message }, { status: 500 });
+  }
+
+  // Create default tasks from template
+  const deadlineDate = new Date();
+  deadlineDate.setDate(deadlineDate.getDate() + 7);
+  const deadlineStr = deadlineDate.toISOString().slice(0, 10);
+
+  const tasksToInsert = demoTaskTemplates.map((t) => ({
+    campaign: campaignID,
+    step: t.step,
+    content: t.content,
+    assignedTo: null,
+    deadline: deadlineStr,
+    status: "todo" as const,
+  }));
+
+  const { error: tasksError } = await supabase
+    .from("task")
+    .insert(tasksToInsert);
+
+  if (tasksError) {
+    // Log but don't fail — campaign was created successfully
+    console.error("Failed to create default tasks:", tasksError.message);
   }
 
   return Response.json({ ok: true, campaign: data }, { status: 201 });
