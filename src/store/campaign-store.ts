@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { persist, createJSONStorage } from "zustand/middleware";
 
 export type Campaign = {
   id: number;
@@ -34,171 +35,190 @@ type CampaignState = {
   deleteCampaign: (id: number) => Promise<boolean>;
 };
 
-export const useCampaignStore = create<CampaignState>()((set) => ({
-  campaigns: [],
-  loading: false,
-  error: null,
-  saving: false,
-  deleting: false,
+export const useCampaignStore = create<CampaignState>()(
+  persist(
+    (set) => ({
+      campaigns: [],
+      loading: false,
+      error: null,
+      saving: false,
+      deleting: false,
 
-  loadCampaigns: async () => {
-    set({ loading: true, error: null });
+      loadCampaigns: async () => {
+        set({ loading: true, error: null });
 
-    try {
-      const response = await fetch("/api/campaign", {
-        method: "GET",
-        cache: "no-store",
-      });
+        try {
+          const response = await fetch("/api/campaign", {
+            method: "GET",
+            cache: "no-store",
+          });
 
-      const payload = (await response.json()) as {
-        ok: boolean;
-        error?: string;
-        campaigns?: Campaign[];
-      };
+          const payload = (await response.json()) as {
+            ok: boolean;
+            error?: string;
+            campaigns?: Campaign[];
+          };
 
-      if (!response.ok || !payload.ok) {
-        throw new Error(payload.error ?? "Failed to load campaigns");
-      }
+          if (!response.ok || !payload.ok) {
+            throw new Error(payload.error ?? "Failed to load campaigns");
+          }
 
-      set({
-        campaigns: payload.campaigns ?? [],
-        loading: false,
-        error: null,
-      });
-    } catch (error) {
-      set({
-        campaigns: [],
-        loading: false,
-        error:
-          error instanceof Error ? error.message : "Failed to load campaigns",
-      });
-    }
-  },
+          set({
+            campaigns: payload.campaigns ?? [],
+            loading: false,
+            error: null,
+          });
+        } catch (error) {
+          set({
+            campaigns: [],
+            loading: false,
+            error:
+              error instanceof Error
+                ? error.message
+                : "Failed to load campaigns",
+          });
+        }
+      },
 
-  createCampaign: async ({ campaignID, title, content }) => {
-    const trimmedID = campaignID.trim();
-    const trimmedTitle = title.trim();
+      createCampaign: async ({ campaignID, title, content }) => {
+        const trimmedID = campaignID.trim();
+        const trimmedTitle = title.trim();
 
-    if (!trimmedID || !trimmedTitle) {
-      set({ error: "campaignID and title are required" });
-      return false;
-    }
+        if (!trimmedID || !trimmedTitle) {
+          set({ error: "campaignID and title are required" });
+          return false;
+        }
 
-    set({ saving: true, error: null });
+        set({ saving: true, error: null });
 
-    try {
-      const response = await fetch("/api/campaign", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          campaignID: trimmedID,
-          title: trimmedTitle,
-          content: content?.trim() ?? null,
-        }),
-      });
+        try {
+          const response = await fetch("/api/campaign", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              campaignID: trimmedID,
+              title: trimmedTitle,
+              content: content?.trim() ?? null,
+            }),
+          });
 
-      const payload = (await response.json()) as {
-        ok: boolean;
-        error?: string;
-        campaign?: Campaign;
-      };
+          const payload = (await response.json()) as {
+            ok: boolean;
+            error?: string;
+            campaign?: Campaign;
+          };
 
-      if (!response.ok || !payload.ok || !payload.campaign) {
-        throw new Error(payload.error ?? "Failed to create campaign");
-      }
+          if (!response.ok || !payload.ok || !payload.campaign) {
+            throw new Error(payload.error ?? "Failed to create campaign");
+          }
 
-      set((state) => ({
-        campaigns: [payload.campaign!, ...state.campaigns],
-        saving: false,
-        error: null,
-      }));
+          set((state) => ({
+            campaigns: [payload.campaign!, ...state.campaigns],
+            saving: false,
+            error: null,
+          }));
 
-      return true;
-    } catch (error) {
-      set({
-        saving: false,
-        error:
-          error instanceof Error ? error.message : "Failed to create campaign",
-      });
-      return false;
-    }
-  },
+          return true;
+        } catch (error) {
+          set({
+            saving: false,
+            error:
+              error instanceof Error
+                ? error.message
+                : "Failed to create campaign",
+          });
+          return false;
+        }
+      },
 
-  updateCampaign: async ({ id, title, content, campaignID }) => {
-    if (!id) {
-      set({ error: "id is required" });
-      return false;
-    }
+      updateCampaign: async ({ id, title, content, campaignID }) => {
+        if (!id) {
+          set({ error: "id is required" });
+          return false;
+        }
 
-    set({ saving: true, error: null });
+        set({ saving: true, error: null });
 
-    try {
-      const response = await fetch("/api/campaign", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id, title, content, campaignID }),
-      });
+        try {
+          const response = await fetch("/api/campaign", {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ id, title, content, campaignID }),
+          });
 
-      const payload = (await response.json()) as {
-        ok: boolean;
-        error?: string;
-        campaign?: Campaign;
-      };
+          const payload = (await response.json()) as {
+            ok: boolean;
+            error?: string;
+            campaign?: Campaign;
+          };
 
-      if (!response.ok || !payload.ok || !payload.campaign) {
-        throw new Error(payload.error ?? "Failed to update campaign");
-      }
+          if (!response.ok || !payload.ok || !payload.campaign) {
+            throw new Error(payload.error ?? "Failed to update campaign");
+          }
 
-      set((state) => ({
-        campaigns: state.campaigns.map((c) =>
-          c.id === id ? payload.campaign! : c,
-        ),
-        saving: false,
-        error: null,
-      }));
+          set((state) => ({
+            campaigns: state.campaigns.map((c) =>
+              c.id === id ? payload.campaign! : c,
+            ),
+            saving: false,
+            error: null,
+          }));
 
-      return true;
-    } catch (error) {
-      set({
-        saving: false,
-        error:
-          error instanceof Error ? error.message : "Failed to update campaign",
-      });
-      return false;
-    }
-  },
+          return true;
+        } catch (error) {
+          set({
+            saving: false,
+            error:
+              error instanceof Error
+                ? error.message
+                : "Failed to update campaign",
+          });
+          return false;
+        }
+      },
 
-  deleteCampaign: async (id) => {
-    set({ deleting: true, error: null });
+      deleteCampaign: async (id) => {
+        set({ deleting: true, error: null });
 
-    try {
-      const response = await fetch(`/api/campaign?id=${id}`, {
-        method: "DELETE",
-      });
+        try {
+          const response = await fetch(`/api/campaign?id=${id}`, {
+            method: "DELETE",
+          });
 
-      const payload = (await response.json()) as {
-        ok: boolean;
-        error?: string;
-      };
+          const payload = (await response.json()) as {
+            ok: boolean;
+            error?: string;
+          };
 
-      if (!response.ok || !payload.ok) {
-        throw new Error(payload.error ?? "Failed to delete campaign");
-      }
+          if (!response.ok || !payload.ok) {
+            throw new Error(payload.error ?? "Failed to delete campaign");
+          }
 
-      set((state) => ({
-        campaigns: state.campaigns.filter((c) => c.id !== id),
-        deleting: false,
-        error: null,
-      }));
+          set((state) => ({
+            campaigns: state.campaigns.filter((c) => c.id !== id),
+            deleting: false,
+            error: null,
+          }));
 
-      return true;
-    } catch (error) {
-      set({
-        deleting: false,
-        error:
-          error instanceof Error ? error.message : "Failed to delete campaign",
-      });
-      return false;
-    }
-  },
-}));
+          return true;
+        } catch (error) {
+          set({
+            deleting: false,
+            error:
+              error instanceof Error
+                ? error.message
+                : "Failed to delete campaign",
+          });
+          return false;
+        }
+      },
+    }),
+    {
+      name: "campaign-storage",
+      storage: createJSONStorage(() => sessionStorage),
+      partialize: (state) => ({
+        campaigns: state.campaigns,
+      }),
+    },
+  ),
+);

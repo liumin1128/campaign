@@ -6,24 +6,31 @@ import type {
   AgentOption,
   FileAttachment,
 } from "@/components/chat/types";
-import { AGENTS, WELCOME_MESSAGE } from "@/components/chat/constants";
+import { AGENTS } from "@/components/chat/constants";
 import { processFiles } from "@/components/chat/utils";
-
-function updateMessage(
-  setMessages: React.Dispatch<React.SetStateAction<Message[]>>,
-  id: string,
-  partial: Partial<Message>,
-) {
-  setMessages((prev) =>
-    prev.map((m) => (m.id === id ? { ...m, ...partial } : m)),
-  );
-}
+import { useActiveSession } from "@/store/chat-store";
 
 export function useChat() {
-  const [messages, setMessages] = useState<Message[]>([WELCOME_MESSAGE]);
+  const {
+    session,
+    sessions,
+    activeSessionId,
+    createSession,
+    switchSession,
+    deleteSession,
+    updateSessionMessages,
+    updateSessionAgent,
+    renameSession,
+  } = useActiveSession();
+
+  const messages = session?.messages ?? [];
+  const messageVersion = messages.length + (messages.at(-1)?.id ?? "");
+  const selectedAgent =
+    AGENTS.find((a) => a.id === session?.selectedAgentId) ?? AGENTS[0];
+  const sessionId = session?.id;
+
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const [selectedAgent, setSelectedAgent] = useState<AgentOption>(AGENTS[0]);
   const [fileAttachments, setFileAttachments] = useState<FileAttachment[]>([]);
   const abortRef = useRef<AbortController | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -32,7 +39,14 @@ export function useChat() {
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+  }, [messageVersion]);
+
+  // 切换会话时清空输入和附件
+  useEffect(() => {
+    setInput("");
+    setFileAttachments([]);
+    setIsLoading(false);
+  }, [sessionId]);
 
   const handleStop = useCallback(() => {
     abortRef.current?.abort();
@@ -40,9 +54,47 @@ export function useChat() {
     setIsLoading(false);
   }, []);
 
+  const handleSetSelectedAgent = useCallback(
+    (agent: AgentOption) => {
+      if (sessionId) {
+        updateSessionAgent(sessionId, agent.id);
+      }
+    },
+    [sessionId, updateSessionAgent],
+  );
+
+  /** 从 activeSession 的消息构建 API 请求消息体 */
+  const buildApiMessages = useCallback(
+    (msgs: Message[]) => {
+      const mapMsg = (m: Message) => ({
+        role: m.role as "user" | "assistant",
+        content:
+          m.role === "user" && m.attachments?.length
+            ? m.content +
+              (m.content ? "\n\n" : "") +
+              m.attachments
+                .map((a) => `[附件：${a.name}]\n\n${a.content}`)
+                .join("\n\n")
+            : m.content,
+      });
+
+      return selectedAgent?.systemPrompt
+        ? [
+            {
+              role: "system" as const,
+              content: selectedAgent.systemPrompt,
+            },
+            ...msgs.map(mapMsg),
+          ]
+        : msgs.map(mapMsg);
+    },
+    [selectedAgent],
+  );
+
   async function handleSend() {
     const trimmed = input.trim();
-    if ((!trimmed && fileAttachments.length === 0) || isLoading) return;
+    if ((!trimmed && fileAttachments.length === 0) || isLoading || !sessionId)
+      return;
 
     const userMsg: Message = {
       id: crypto.randomUUID(),
@@ -51,38 +103,12 @@ export function useChat() {
       attachments: fileAttachments.length > 0 ? fileAttachments : undefined,
     };
 
+    const sid = sessionId;
     const updatedMessages = [...messages, userMsg];
-    setMessages(updatedMessages);
+    updateSessionMessages(sid, updatedMessages);
     setInput("");
     setFileAttachments([]);
     setIsLoading(true);
-
-    const apiMessages = selectedAgent?.systemPrompt
-      ? [
-          { role: "system" as const, content: selectedAgent.systemPrompt },
-          ...updatedMessages.map((m) => ({
-            role: m.role as "user" | "assistant",
-            content:
-              m.role === "user" && m.attachments?.length
-                ? m.content +
-                  (m.content ? "\n\n" : "") +
-                  m.attachments
-                    .map((a) => `[附件：${a.name}]\n\n${a.content}`)
-                    .join("\n\n")
-                : m.content,
-          })),
-        ]
-      : updatedMessages.map((m) => ({
-          role: m.role as "user" | "assistant",
-          content:
-            m.role === "user" && m.attachments?.length
-              ? m.content +
-                (m.content ? "\n\n" : "") +
-                m.attachments
-                  .map((a) => `[附件：${a.name}]\n\n${a.content}`)
-                  .join("\n\n")
-              : m.content,
-        }));
 
     const assistantId = crypto.randomUUID();
     const assistantMsg: Message = {
@@ -91,7 +117,8 @@ export function useChat() {
       content: "",
       reasoning: "",
     };
-    setMessages((prev) => [...prev, assistantMsg]);
+    const withAssistant = [...updatedMessages, assistantMsg];
+    updateSessionMessages(sid, withAssistant);
 
     const controller = new AbortController();
     abortRef.current = controller;
@@ -101,7 +128,7 @@ export function useChat() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          messages: apiMessages,
+          messages: buildApiMessages(updatedMessages),
           enable_search: selectedAgent?.enableSearch ?? false,
         }),
         signal: controller.signal,
@@ -109,18 +136,26 @@ export function useChat() {
 
       if (!resp.ok) {
         const err = await resp.json();
-        updateMessage(setMessages, assistantId, {
-          content: `❌ 请求失败: ${err.error ?? "未知错误"}`,
-        });
+        updateSessionMessages(
+          sid,
+          withAssistant.map((m) =>
+            m.id === assistantId
+              ? { ...m, content: `❌ 请求失败: ${err.error ?? "未知错误"}` }
+              : m,
+          ),
+        );
         setIsLoading(false);
         return;
       }
 
       const reader = resp.body?.getReader();
       if (!reader) {
-        updateMessage(setMessages, assistantId, {
-          content: "❌ 无法读取响应流",
-        });
+        updateSessionMessages(
+          sid,
+          withAssistant.map((m) =>
+            m.id === assistantId ? { ...m, content: "❌ 无法读取响应流" } : m,
+          ),
+        );
         setIsLoading(false);
         return;
       }
@@ -131,8 +166,9 @@ export function useChat() {
       let accumulatedContent = "";
 
       function flushMessage() {
-        setMessages((prev) =>
-          prev.map((m) =>
+        updateSessionMessages(
+          sid,
+          withAssistant.map((m) =>
             m.id === assistantId
               ? {
                   ...m,
@@ -180,17 +216,23 @@ export function useChat() {
       }
     } catch (err) {
       if ((err as Error)?.name === "AbortError") {
-        setMessages((prev) =>
-          prev.map((m) =>
+        updateSessionMessages(
+          sid,
+          withAssistant.map((m) =>
             m.id === assistantId
               ? { ...m, content: m.content + "\n\n_（已停止生成）_" }
               : m,
           ),
         );
       } else {
-        updateMessage(setMessages, assistantId, {
-          content: `❌ 网络错误: ${(err as Error).message}`,
-        });
+        updateSessionMessages(
+          sid,
+          withAssistant.map((m) =>
+            m.id === assistantId
+              ? { ...m, content: `❌ 网络错误: ${(err as Error).message}` }
+              : m,
+          ),
+        );
       }
     } finally {
       setIsLoading(false);
@@ -228,17 +270,24 @@ export function useChat() {
     isLoading,
     selectedAgent,
     fileAttachments,
+    sessions,
+    activeSessionId,
     // refs
     messagesEndRef,
     inputRef,
     fileInputRef,
     // 操作
     setInput,
-    setSelectedAgent,
+    setSelectedAgent: handleSetSelectedAgent,
     handleSend,
     handleStop,
     handleKeyDown,
     handleFileSelect,
     handleRemoveFile,
+    // 会话管理
+    createSession,
+    switchSession,
+    deleteSession,
+    renameSession,
   };
 }
