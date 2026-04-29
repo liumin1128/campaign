@@ -10,12 +10,12 @@
     "termsOfUseUrl": "https://example.com/terms"
   },
   "name": {
-    "short": "TeamDemo",
-    "full": "Teams Demo App"
+    "short": "Campaign",
+    "full": "Campaign Management"
   },
   "description": {
-    "short": "A demo Teams tab app with automated messaging",
-    "full": "A demo Teams application that shows a tab in group chats and can send automated messages to users."
+    "short": "Campaign management tab app with automated messaging",
+    "full": "A campaign management application that shows a tab in group chats and can send automated messages to users."
   },
   "icons": {
     "color": "color.png",
@@ -25,7 +25,7 @@
   "staticTabs": [
     {
       "entityId": "home",
-      "name": "Demo Tab",
+      "name": "Campaign Management",
       "contentUrl": "${{BOT_ENDPOINT}}/tab",
       "scopes": ["personal"]
     }

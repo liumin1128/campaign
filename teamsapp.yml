@@ -6,14 +6,14 @@ environmentFolderPath: ./env
 provision:
   - uses: teamsApp/create
     with:
-      name: TeamDemo${{APP_NAME_SUFFIX}}
+      name: Campaign${{APP_NAME_SUFFIX}}
     writeToEnvironmentFile:
       teamsAppId: TEAMS_APP_ID
 
   # 创建 Bot 的 Entra ID App Registration（不需要 Azure 订阅）
   - uses: botAadApp/create
     with:
-      name: TeamDemo-Bot${{APP_NAME_SUFFIX}}
+      name: Campaign-Bot${{APP_NAME_SUFFIX}}
     writeToEnvironmentFile:
       botId: BOT_ID
       botPassword: SECRET_BOT_PASSWORD
@@ -30,9 +30,9 @@ provision:
   - uses: botFramework/create
     with:
       botId: ${{BOT_ID}}
-      name: TeamDemo-Bot
+      name: Campaign-Bot
       messagingEndpoint: ${{BOT_ENDPOINT}}/api/messages
-      description: Teams Demo Bot
+      description: Campaign Management Bot
 
   - uses: teamsApp/zipAppPackage
     with:
