@@ -51,6 +51,10 @@ export function getPostgresConnectionString(): string {
   );
 }
 
+export function getDeepSeekApiKey(): string {
+  return requireEnv("DEEPSEEK_API_KEY");
+}
+
 export function getOptionalTeamsWebhookUrl(): string | null {
   return (
     process.env.TEAMS_WEBHOOK_URL ??

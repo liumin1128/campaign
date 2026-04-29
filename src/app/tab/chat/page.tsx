@@ -1,35 +1,79 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { TextInput } from "flowbite-react";
-import { PaperPlane } from "flowbite-react-icons/outline";
+import { PaperPlane, Stop } from "flowbite-react-icons/outline";
 
 interface Message {
   id: string;
   role: "user" | "assistant";
   content: string;
+  reasoning?: string;
 }
 
-const sampleMessages: Message[] = [
-  {
-    id: "1",
-    role: "assistant",
-    content: "你好！我是 AI 助手，有什么可以帮助你的吗？",
-  },
-];
+const WELCOME_MESSAGE: Message = {
+  id: "welcome",
+  role: "assistant",
+  content: "你好！我是 AI 助手，有什么可以帮助你的吗？",
+};
+
+function ReasoningBlock({ text }: { text: string }) {
+  const [expanded, setExpanded] = useState(false);
+  const isLong = text.length > 300;
+
+  return (
+    <div className="mb-2 rounded-lg border border-amber-200 bg-amber-50 text-xs dark:border-amber-800 dark:bg-amber-950">
+      <button
+        type="button"
+        onClick={() => setExpanded(!expanded)}
+        className="flex w-full items-center gap-1.5 px-3 py-2 text-amber-700 hover:text-amber-900 dark:text-amber-400 dark:hover:text-amber-200"
+      >
+        <svg
+          className={`size-3 transition-transform ${expanded ? "rotate-90" : ""}`}
+          viewBox="0 0 20 20"
+          fill="currentColor"
+        >
+          <path
+            fillRule="evenodd"
+            d="M7.21 14.77a.75.75 0 01.02-1.06L11.168 10 7.23 6.29a.75.75 0 111.04-1.08l4.5 4.25a.75.75 0 010 1.08l-4.5 4.25a.75.75 0 01-1.06-.02z"
+            clipRule="evenodd"
+          />
+        </svg>
+        <span className="font-medium">思考过程</span>
+        {!expanded && isLong && (
+          <span className="text-amber-500">（过长已折叠）</span>
+        )}
+      </button>
+      {expanded && (
+        <div className="max-h-60 overflow-y-auto border-t border-amber-200 px-3 py-2 text-gray-600 leading-relaxed dark:border-amber-800 dark:text-slate-300">
+          {text}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function ChatPage() {
-  const [messages, setMessages] = useState<Message[]>(sampleMessages);
+  const [messages, setMessages] = useState<Message[]>([WELCOME_MESSAGE]);
   const [input, setInput] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+  const abortRef = useRef<AbortController | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  function handleSend() {
+  const handleStop = useCallback(() => {
+    abortRef.current?.abort();
+    abortRef.current = null;
+    setIsLoading(false);
+  }, []);
+
+  async function handleSend() {
     const trimmed = input.trim();
-    if (!trimmed) return;
+    if (!trimmed || isLoading) return;
 
     const userMsg: Message = {
       id: crypto.randomUUID(),
@@ -37,9 +81,140 @@ export default function ChatPage() {
       content: trimmed,
     };
 
-    setMessages((prev) => [...prev, userMsg]);
+    // 追加用户消息，构建请求消息列表
+    const updatedMessages = [...messages, userMsg];
+    setMessages(updatedMessages);
     setInput("");
+    setIsLoading(true);
+
+    // 创建占位的 AI 回复
+    const assistantId = crypto.randomUUID();
+    const assistantMsg: Message = {
+      id: assistantId,
+      role: "assistant",
+      content: "",
+      reasoning: "",
+    };
+    setMessages((prev) => [...prev, assistantMsg]);
+
+    const controller = new AbortController();
+    abortRef.current = controller;
+
+    try {
+      const resp = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          messages: updatedMessages.map((m) => ({
+            role: m.role,
+            content: m.content,
+          })),
+        }),
+        signal: controller.signal,
+      });
+
+      if (!resp.ok) {
+        const err = await resp.json();
+        updateMessage(assistantId, {
+          content: `❌ 请求失败: ${err.error ?? "未知错误"}`,
+        });
+        setIsLoading(false);
+        return;
+      }
+
+      const reader = resp.body?.getReader();
+      if (!reader) {
+        updateMessage(assistantId, { content: "❌ 无法读取响应流" });
+        setIsLoading(false);
+        return;
+      }
+
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let accumulatedReasoning = "";
+      let accumulatedContent = "";
+
+      // 逐块累积，定期 flush 到 state（每收到一个完整 data: 行就更新）
+      function flushMessage() {
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === assistantId
+              ? {
+                  ...m,
+                  reasoning: accumulatedReasoning,
+                  content: accumulatedContent,
+                }
+              : m,
+          ),
+        );
+      }
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() ?? "";
+
+        for (const line of lines) {
+          const trimmedLine = line.trim();
+          if (!trimmedLine || !trimmedLine.startsWith("data:")) continue;
+
+          const jsonStr = trimmedLine.slice(5).trim();
+
+          try {
+            const parsed = JSON.parse(jsonStr);
+
+            if (parsed.type === "done") {
+              // 流结束
+            } else if (parsed.type === "reasoning") {
+              accumulatedReasoning += parsed.content;
+              flushMessage();
+            } else if (parsed.type === "content") {
+              accumulatedContent += parsed.content;
+              flushMessage();
+            } else if (parsed.type === "error") {
+              accumulatedContent = `❌ ${parsed.content}`;
+              flushMessage();
+            }
+          } catch {
+            // ignore parse errors
+          }
+        }
+      }
+    } catch (err) {
+      if ((err as Error)?.name === "AbortError") {
+        updateMessage(assistantId, {
+          content:
+            (getMessageById(assistantId)?.content ?? "") +
+            "\n\n_（已停止生成）_",
+        });
+      } else {
+        updateMessage(assistantId, {
+          content: `❌ 网络错误: ${(err as Error).message}`,
+        });
+      }
+    } finally {
+      setIsLoading(false);
+      abortRef.current = null;
+    }
   }
+
+  // 辅助：更新指定 id 的消息
+  function updateMessage(id: string, partial: Partial<Message>) {
+    setMessages((prev) =>
+      prev.map((m) => (m.id === id ? { ...m, ...partial } : m)),
+    );
+  }
+
+  // 辅助：获取指定 id 的消息（利用 ref 读最新值）
+  function getMessageById(id: string): Message | undefined {
+    return messagesRef.current?.find((m) => m.id === id);
+  }
+
+  const messagesRef = useRef(messages);
+  messagesRef.current = messages;
 
   function handleKeyDown(e: React.KeyboardEvent) {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -56,7 +231,7 @@ export default function ChatPage() {
           AI Chat
         </h1>
         <p className="mt-1 text-sm text-gray-500 dark:text-slate-400">
-          与 AI 助手进行对话
+          与 AI 助手进行对话 · 支持流式输出
         </p>
       </div>
 
@@ -68,13 +243,36 @@ export default function ChatPage() {
             className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
           >
             <div
-              className={`max-w-[80%] rounded-2xl px-4 py-3 text-sm leading-relaxed ${
-                msg.role === "user"
-                  ? "bg-indigo-600 text-white"
-                  : "bg-gray-100 text-gray-900 dark:bg-slate-800 dark:text-slate-100"
+              className={`max-w-[80%] space-y-1 ${
+                msg.role === "assistant" ? "order-first" : ""
               }`}
             >
-              {msg.content}
+              {/* 推理过程 */}
+              {msg.role === "assistant" && msg.reasoning && (
+                <ReasoningBlock text={msg.reasoning} />
+              )}
+
+              {/* 消息气泡 */}
+              <div
+                className={`rounded-2xl px-4 py-3 text-sm leading-relaxed whitespace-pre-wrap ${
+                  msg.role === "user"
+                    ? "bg-indigo-600 text-white"
+                    : "bg-gray-100 text-gray-900 dark:bg-slate-800 dark:text-slate-100"
+                }`}
+              >
+                {msg.content ||
+                  (isLoading && msg.id === messages[messages.length - 1]?.id ? (
+                    <span className="inline-flex gap-1">
+                      <span className="animate-bounce">.</span>
+                      <span className="animate-bounce [animation-delay:0.2s]">
+                        .
+                      </span>
+                      <span className="animate-bounce [animation-delay:0.4s]">
+                        .
+                      </span>
+                    </span>
+                  ) : null)}
+              </div>
             </div>
           </div>
         ))}
@@ -86,24 +284,40 @@ export default function ChatPage() {
         <div className="flex items-end gap-2">
           <div className="flex-1">
             <TextInput
+              ref={inputRef}
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="输入消息..."
-              className="[&>input]:rounded-2xl [&>input]:border-gray-300 [&>input]:bg-white [&>input]:py-3 [&>input]:text-sm dark:[&>input]:border-slate-600 dark:[&>input]:bg-slate-800 dark:[&>input]:text-slate-100 dark:[&>input]:placeholder-slate-400"
+              disabled={isLoading}
+              placeholder={isLoading ? "AI 正在回复..." : "输入消息..."}
+              className="[&>input]:rounded-2xl [&>input]:border-gray-300 [&>input]:bg-white [&>input]:py-3 [&>input]:text-sm disabled:[&>input]:opacity-50 dark:[&>input]:border-slate-600 dark:[&>input]:bg-slate-800 dark:[&>input]:text-slate-100 dark:[&>input]:placeholder-slate-400"
             />
           </div>
-          <button
-            type="button"
-            onClick={handleSend}
-            disabled={!input.trim()}
-            className="flex size-10 shrink-0 items-center justify-center rounded-full bg-indigo-600 text-white transition hover:bg-indigo-500 disabled:opacity-40 disabled:hover:bg-indigo-600"
-          >
-            <PaperPlane className="size-5" />
-          </button>
+
+          {isLoading ? (
+            <button
+              type="button"
+              onClick={handleStop}
+              className="flex size-10 shrink-0 items-center justify-center rounded-full bg-red-500 text-white transition hover:bg-red-400"
+              title="停止生成"
+            >
+              <Stop className="size-5" />
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={handleSend}
+              disabled={!input.trim()}
+              className="flex size-10 shrink-0 items-center justify-center rounded-full bg-indigo-600 text-white transition hover:bg-indigo-500 disabled:opacity-40 disabled:hover:bg-indigo-600"
+            >
+              <PaperPlane className="size-5" />
+            </button>
+          )}
         </div>
         <p className="mt-2 text-center text-xs text-gray-400 dark:text-slate-500">
-          AI 回复仅供参考，请核实重要信息
+          {isLoading
+            ? "正在生成回复，点击停止按钮中断"
+            : "AI 回复仅供参考，请核实重要信息"}
         </p>
       </div>
     </div>
