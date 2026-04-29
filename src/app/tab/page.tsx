@@ -69,9 +69,9 @@ function CampaignFormModal({
   saving: boolean;
 }) {
   const isEditing = !!campaign;
-  const [campaignID, setCampaignID] = useState("");
-  const [title, setTitle] = useState("");
-  const [content, setContent] = useState("");
+  const [campaignID, setCampaignID] = useState(campaign?.campaignID ?? "");
+  const [title, setTitle] = useState(campaign?.title ?? "");
+  const [content, setContent] = useState(campaign?.content ?? "");
 
   return (
     <Modal show={show} onClose={onClose} size="lg">
@@ -297,9 +297,8 @@ export default function CampaignPage() {
                             campaign.taskProgress.total) *
                             100,
                         )}
-                        size="sm"
+                        size="md"
                         color="blue"
-                        labelProgress
                       />
                       <p className="mt-0.5 text-xs text-gray-400">
                         {campaign.taskProgress.done}/
