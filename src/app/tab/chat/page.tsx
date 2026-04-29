@@ -33,12 +33,6 @@ const AGENTS: AgentOption[] = [
     systemPrompt: "",
   },
   {
-    id: "campaign_planning",
-    name: "营销策划",
-    description: "营销活动策划与提案生成",
-    systemPrompt: "",
-  },
-  {
     id: "data_analysis",
     name: "数据分析",
     description: "销售数据分析和商业洞察提取",
@@ -48,6 +42,12 @@ const AGENTS: AgentOption[] = [
     id: "market_analysis",
     name: "市场分析",
     description: "市场竞争和定价基准分析",
+    systemPrompt: "",
+  },
+  {
+    id: "campaign_planning",
+    name: "营销策划",
+    description: "营销活动策划与提案生成",
     systemPrompt: "",
   },
 ];

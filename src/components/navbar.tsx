@@ -5,16 +5,17 @@ import { useState } from "react";
 import { Cog, Home, MessageDots } from "flowbite-react-icons/outline";
 import { classNames } from "@/utils/common";
 import { useTeamsUserStore } from "@/store/teams-user-store";
+import { usePathname } from "next/navigation";
 
 const navigation = [
-  { name: "Campaigns", href: "/tab", icon: Home, current: true },
-  { name: "Chat", href: "/tab/chat", icon: MessageDots, current: false },
+  { name: "Campaigns", href: "/tab", icon: Home },
+  { name: "Chat", href: "/tab/chat", icon: MessageDots },
   // { name: "Team", href: "#", icon: Users, current: false },
   // { name: "Projects", href: "#", icon: Folder, current: false },
   // { name: "Calendar", href: "#", icon: CalendarMonth, current: false },
   // { name: "Documents", href: "#", icon: FileCopy, current: false },
   // { name: "Reports", href: "#", icon: ChartPie, current: false },
-  { name: "Settings", href: "/tab/settings", icon: Cog, current: false },
+  { name: "Settings", href: "/tab/settings", icon: Cog },
 ];
 const teams = [
   { id: 1, name: "Heroicons", href: "#", initial: "H", current: false },
@@ -85,6 +86,7 @@ function ThemeModeSwitch() {
 }
 
 export function Navbar() {
+  const pathname = usePathname();
   const [profileOpen, setProfileOpen] = useState(false);
   const context = useTeamsUserStore((state) => state.context);
   const info = useTeamsUserStore((state) => state.info);
@@ -102,6 +104,15 @@ export function Navbar() {
     context,
   });
 
+  /** 判断当前导航项是否 active */
+  function isCurrent(href: string) {
+    if (href === "/tab") {
+      // Campaigns: 精确匹配 /tab，或子路径 /tab/campaign/**
+      return pathname === "/tab" || pathname.startsWith("/tab/campaign");
+    }
+    return pathname === href || pathname.startsWith(href + "/");
+  }
+
   return (
     <>
       <nav className="flex flex-1 flex-col">
@@ -110,30 +121,33 @@ export function Navbar() {
             <ul role="list" className="flex flex-1 flex-col gap-y-7">
               <li>
                 <ul role="list" className="-mx-2 space-y-1">
-                  {navigation.map((item) => (
-                    <li key={item.name}>
-                      <a
-                        href={item.href}
-                        className={classNames(
-                          item.current
-                            ? "bg-gray-50 text-indigo-600 dark:bg-slate-800 dark:text-indigo-300"
-                            : "text-gray-700 hover:bg-gray-50 hover:text-indigo-600 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-indigo-300",
-                          "group flex gap-x-3 rounded-md p-2 text-sm/6 font-semibold",
-                        )}
-                      >
-                        <item.icon
-                          aria-hidden="true"
+                  {navigation.map((item) => {
+                    const current = isCurrent(item.href);
+                    return (
+                      <li key={item.name}>
+                        <a
+                          href={item.href}
                           className={classNames(
-                            item.current
-                              ? "text-indigo-600 dark:text-indigo-300"
-                              : "text-gray-400 group-hover:text-indigo-600 dark:text-slate-500 dark:group-hover:text-indigo-300",
-                            "size-6 shrink-0",
+                            current
+                              ? "bg-gray-50 text-indigo-600 dark:bg-slate-800 dark:text-indigo-300"
+                              : "text-gray-700 hover:bg-gray-50 hover:text-indigo-600 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-indigo-300",
+                            "group flex gap-x-3 rounded-md p-2 text-sm/6 font-semibold",
                           )}
-                        />
-                        {item.name}
-                      </a>
-                    </li>
-                  ))}
+                        >
+                          <item.icon
+                            aria-hidden="true"
+                            className={classNames(
+                              current
+                                ? "text-indigo-600 dark:text-indigo-300"
+                                : "text-gray-400 group-hover:text-indigo-600 dark:text-slate-500 dark:group-hover:text-indigo-300",
+                              "size-6 shrink-0",
+                            )}
+                          />
+                          {item.name}
+                        </a>
+                      </li>
+                    );
+                  })}
                 </ul>
               </li>
               {/* <li>
