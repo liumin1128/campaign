@@ -11,6 +11,8 @@ export interface AgentOption {
   name: string;
   description: string;
   systemPrompt: string;
+  /** 是否启用互联网搜索能力（tool calling） */
+  enableSearch?: boolean;
 }
 
 export interface FileAttachment {

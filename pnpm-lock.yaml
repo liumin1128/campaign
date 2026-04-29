@@ -14,6 +14,9 @@ importers:
       '@supabase/supabase-js':
         specifier: ^2.105.0
         version: 2.105.0
+      '@tavily/core':
+        specifier: ^0.7.3
+        version: 0.7.3
       '@tiptap/react':
         specifier: ^3.22.5
         version: 3.22.5(@floating-ui/dom@1.7.6)(@tiptap/core@3.22.5(@tiptap/pm@3.22.5))(@tiptap/pm@3.22.5)(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
@@ -785,6 +788,9 @@ packages:
 
   '@tailwindcss/postcss@4.2.4':
     resolution: {integrity: sha512-wgAVj6nUWAolAu8YFvzT2cTBIElWHkjZwFYovF+xsqKsW2ADxM/X2opxj5NsF/qVccAOjRNe8X2IdPzMsWyHTg==}
+
+  '@tavily/core@0.7.3':
+    resolution: {integrity: sha512-KEXw8xIifY8Rfjq2Wstm8LvlvsNAj4drtpytEmg7BQUtKDcgMmWXm7CB/Mr0nxrcKwnpdTgOt8Ien1iJIUd1yQ==}
 
   '@tiptap/core@3.22.5':
     resolution: {integrity: sha512-L1lhWz6ujGny8LduTJ7MBWYhzigwOvfUJUrJ7IzOJSuy3+OAzisdGDD1GV7LEO/hU0Hr2Mkm1wajRIHExvS9HQ==}
@@ -2078,6 +2084,9 @@ packages:
   jiti@2.6.1:
     resolution: {integrity: sha512-ekilCSN1jwRvIbgeg/57YFh8qQDNbwDb9xT/qu2DAHbFFZUicIl4ygVaAvzveMhMVr3LnpSKTNnwt8PoOfmKhQ==}
     hasBin: true
+
+  js-tiktoken@1.0.21:
+    resolution: {integrity: sha512-biOj/6M5qdgx5TKjDnFT1ymSpM5tbd3ylwDtrQvFQSu0Z7bBYko2dF+W/aUkXUPuk6IVpRxk/3Q2sHOzGlS36g==}
 
   js-tokens@4.0.0:
     resolution: {integrity: sha512-RdJUflcE3cUzKiMqQgsCu06FPu9UdIJO0beYbPhHN4k6apgJtifcoCtT9bcxOpYBtpD2kCM6Sbzg4CausW/PKQ==}
@@ -3819,6 +3828,15 @@ snapshots:
       postcss: 8.5.12
       tailwindcss: 4.2.4
 
+  '@tavily/core@0.7.3':
+    dependencies:
+      axios: 1.15.2
+      https-proxy-agent: 7.0.6
+      js-tiktoken: 1.0.21
+    transitivePeerDependencies:
+      - debug
+      - supports-color
+
   '@tiptap/core@3.22.5(@tiptap/pm@3.22.5)':
     dependencies:
       '@tiptap/pm': 3.22.5
@@ -5388,6 +5406,10 @@ snapshots:
       set-function-name: 2.0.2
 
   jiti@2.6.1: {}
+
+  js-tiktoken@1.0.21:
+    dependencies:
+      base64-js: 1.5.1
 
   js-tokens@4.0.0: {}
 

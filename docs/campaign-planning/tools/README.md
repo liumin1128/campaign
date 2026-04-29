@@ -16,6 +16,23 @@ Files:
 - `market-fare-benchmark.openapi.yaml`: OpenAPI 3.0 definition to register the market benchmark tool in AgentSL Tool Studio.
 - `market-fare-benchmark.examples.json`: sample request and response payloads for route-level fare benchmarking.
 
+## market_context_search_tool (新)
+
+Files:
+
+- `market-context-search.openapi.yaml`: OpenAPI 3.0 definition for the web context search tool.
+- `market-context-search.examples.json`: sample request and response payloads.
+
+**用途：** 搜索互联网上影响市场分析的实时上下文信息，包括：
+
+- `holiday` — 法定节假日、调休安排
+- `semester` — 学校校历、学期安排、寒暑假
+- `news` — 行业新闻、目的地动态
+- `event` — 大型活动、展会、赛事、公告
+- `custom` — 自定义搜索词
+
+**数据源：** 由 Tavily Search API 驱动，专为 AI Agent 优化的结构化搜索结果。
+
 ## What This Tool Does
 
 `campaign_csv_analyzer` is the first tool in the pipeline. It should:

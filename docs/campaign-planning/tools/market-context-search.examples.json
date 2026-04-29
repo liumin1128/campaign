@@ -1,0 +1,99 @@
+{
+  "tool_request_body": {
+    "routes": [
+      {
+        "origin": "Beijing",
+        "destination": "Cape Town",
+        "priority": 1
+      },
+      {
+        "origin": "Shanghai",
+        "destination": "Barcelona",
+        "priority": 2
+      }
+    ],
+    "travel_window": {
+      "start_date": "2026-07-01",
+      "end_date": "2026-08-31"
+    },
+    "context_types": ["holiday", "semester", "news", "event"],
+    "include_answer": true,
+    "max_results_per_query": 5
+  },
+  "tool_success_response": {
+    "ok": true,
+    "results": [
+      {
+        "context_type": "holiday",
+        "query": "2026年 法定节假日 放假安排 调休",
+        "answer": "2026年法定节假日包括元旦（1月1日）、春节（2月17-23日）、清明（4月5日）、劳动节（5月1日）、端午（6月19日）、中秋国庆（9月27日-10月4日）等。其中暑期7-8月无全国性法定节假日。",
+        "results": [
+          {
+            "title": "2026年放假安排时间表",
+            "url": "https://www.gov.cn/...",
+            "content": "国务院办公厅发布2026年放假安排...",
+            "score": 0.95,
+            "published_date": "2025-10-25",
+            "favicon": "https://www.gov.cn/favicon.ico"
+          }
+        ]
+      },
+      {
+        "context_type": "semester",
+        "query": "2026年 学校校历 学期安排 寒暑假",
+        "answer": "2026年中小学暑假一般从7月初开始，8月底结束；大学暑假通常从6月底到8月底。2026年秋季学期一般9月初开学。",
+        "results": [
+          {
+            "title": "2026年全国中小学暑假时间汇总",
+            "url": "https://www.example.com/summer-2026",
+            "content": "各地中小学暑假安排陆续公布...",
+            "score": 0.88,
+            "published_date": "2026-03-15",
+            "favicon": "https://www.example.com/favicon.ico"
+          }
+        ]
+      },
+      {
+        "context_type": "news",
+        "query": "北京 上海 开普敦 巴塞罗那 最新新闻 行业动态",
+        "answer": "近期航空行业动态：多家航司增加中非航线运力；暑期出境游预订量同比增长30%。",
+        "results": [
+          {
+            "title": "暑期出境游市场持续升温",
+            "url": "https://www.example.com/travel-news-1",
+            "content": "随着暑期临近，出境游市场持续升温...",
+            "score": 0.92,
+            "published_date": "2026-04-28",
+            "favicon": "https://www.example.com/favicon.ico"
+          }
+        ]
+      },
+      {
+        "context_type": "event",
+        "query": "北京 上海 大型活动 展会 赛事 公告",
+        "answer": "2026年暑期北京将举办国际旅游博览会；上海有多个音乐节和体育赛事。",
+        "results": [
+          {
+            "title": "2026北京国际旅游博览会",
+            "url": "https://www.example.com/beijing-tourism-expo",
+            "content": "北京国际旅游博览会将于7月举办...",
+            "score": 0.85,
+            "published_date": "2026-04-20",
+            "favicon": "https://www.example.com/favicon.ico"
+          }
+        ]
+      }
+    ],
+    "search_credits_used": 6,
+    "summary": "2026年法定节假日包括元旦（1月1日）、春节（2月17-23日）、清明（4月5日）...暑期7-8月无全国性法定节假日。2026年中小学暑假一般从7月初开始...近期航空行业动态：多家航司增加中非航线运力...",
+    "warnings": ["Tavily API credits used: 6"]
+  },
+  "tool_request_body_custom": {
+    "custom_queries": [
+      "2026年7月 南非 旅游 政策 签证",
+      "西班牙 巴塞罗那 2026年 暑期 旅游 限制"
+    ],
+    "include_answer": true,
+    "max_results_per_query": 3
+  }
+}

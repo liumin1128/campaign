@@ -55,6 +55,10 @@ export function getDeepSeekApiKey(): string {
   return requireEnv("DEEPSEEK_API_KEY");
 }
 
+export function getTavilyApiKey(): string {
+  return requireEnv("TAVILY_API_KEY");
+}
+
 export function getOptionalTeamsWebhookUrl(): string | null {
   return (
     process.env.TEAMS_WEBHOOK_URL ??

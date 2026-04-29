@@ -1,0 +1,179 @@
+openapi: 3.0.0
+info:
+  title: market_context_search_tool
+  version: 1.0.0
+  description: >-
+    Search the web for real-time contextual information relevant to campaign
+    planning, including holidays, semester schedules, current news, announcements,
+    public events, and unexpected incidents. Results are structured for downstream
+    pricing and recommendation agents.
+  contact:
+    name: Campaign Planning Team
+    email:
+      - team@example.com
+servers:
+  - url: https://campaign.react.mobi/
+    description: Official production endpoint. Do not replace with temporary preview domains.
+paths:
+  /api/campaign-tools/market-context-search:
+    post:
+      operationId: market_context_search
+      summary: Search web context for campaign market analysis
+      description: >-
+        Accepts candidate routes and a travel window, then generates targeted
+        web search queries using the Tavily API to retrieve real-time contextual
+        data such as holidays, school calendars, current news, events, and
+        custom topics. Results are returned as structured, agent-ready content.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                routes:
+                  type: array
+                  maxItems: 10
+                  description: Optional route shortlist to scope location-specific context.
+                  items:
+                    type: object
+                    additionalProperties: false
+                    properties:
+                      origin:
+                        type: string
+                        description: Origin city or airport code.
+                      destination:
+                        type: string
+                        description: Destination city or airport code.
+                      via:
+                        type: string
+                      priority:
+                        type: integer
+                travel_window:
+                  type: object
+                  additionalProperties: false
+                  description: Travel period to scope time-sensitive context searches.
+                  properties:
+                    start_date:
+                      type: string
+                      format: date
+                      description: Start of the travel window (YYYY-MM-DD).
+                    end_date:
+                      type: string
+                      format: date
+                      description: End of the travel window (YYYY-MM-DD).
+                context_types:
+                  type: array
+                  description: >-
+                    Types of context to search for. Defaults to all types when
+                    omitted and custom_queries is also omitted.
+                  items:
+                    type: string
+                    enum:
+                      - holiday
+                      - semester
+                      - news
+                      - event
+                      - custom
+                custom_queries:
+                  type: array
+                  description: >-
+                    Custom free-text search queries. Merged with auto-generated
+                    queries from context_types.
+                  items:
+                    type: string
+                include_answer:
+                  type: boolean
+                  default: true
+                  description: Include an LLM-generated answer summary per query.
+                max_results_per_query:
+                  type: integer
+                  default: 5
+                  minimum: 1
+                  maximum: 20
+                  description: Maximum search results per query.
+      responses:
+        "200":
+          description: Context search results.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required:
+                  - ok
+                  - results
+                  - search_credits_used
+                  - warnings
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - true
+                  results:
+                    type: array
+                    description: Search results grouped by context type.
+                    items:
+                      type: object
+                      additionalProperties: false
+                      required:
+                        - context_type
+                        - query
+                        - results
+                      properties:
+                        context_type:
+                          type: string
+                          enum:
+                            - holiday
+                            - semester
+                            - news
+                            - event
+                            - custom
+                        query:
+                          type: string
+                          description: The search query sent to Tavily.
+                        answer:
+                          type: string
+                          description: LLM-generated answer summary (if include_answer was true).
+                        results:
+                          type: array
+                          items:
+                            type: object
+                            additionalProperties: false
+                            properties:
+                              title:
+                                type: string
+                              url:
+                                type: string
+                              content:
+                                type: string
+                              score:
+                                type: number
+                              published_date:
+                                type: string
+                              favicon:
+                                type: string
+                  search_credits_used:
+                    type: integer
+                    description: Total Tavily API credits consumed.
+                  summary:
+                    type: string
+                    description: Concatenated answer summaries from all queries.
+                  warnings:
+                    type: array
+                    items:
+                      type: string
+        "400":
+          description: Invalid request.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - false
+                  error:
+                    type: string
