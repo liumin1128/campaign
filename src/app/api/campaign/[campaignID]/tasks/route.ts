@@ -2,6 +2,7 @@ import { getSupabaseAdminClient } from "@/lib/supabase-server";
 import { getOptionalTeamsWebhookUrl } from "@/lib/env";
 import { sendTeamsWebhookMessage } from "@/lib/teams-webhook";
 import { normalizeRichTextValue } from "@/utils/rich-text";
+import { logUserAction, computeDoneStatus } from "@/lib/action-log";
 
 export const runtime = "nodejs";
 
@@ -282,6 +283,57 @@ export async function PATCH(request: Request, context: RouteContext) {
     } catch (notifyError) {
       console.error("Task completion webhook failed:", notifyError);
     }
+  }
+
+  // 记录用户操作日志
+  const isStatusChangedToDone =
+    previousTask.status !== "done" && updates.status === "done";
+  const isStatusChangedToTodo =
+    previousTask.status === "done" && updates.status === "todo";
+  const hasFieldEdits =
+    hasContentUpdate ||
+    hasDeadlineUpdate ||
+    hasAssignedToUpdate ||
+    hasTextUpdate;
+
+  if (isStatusChangedToDone) {
+    // 状态改为 done → 根据 deadline 判断 status
+    const deadlineSource = hasDeadlineUpdate
+      ? (updates.deadline as string | null)
+      : previousTask.deadline;
+    const doneStatus = computeDoneStatus(deadlineSource);
+
+    void logUserAction({
+      campaignID,
+      userName: sender,
+      action: `完成任务：${data.content}`,
+      taskID: data.id,
+      status: doneStatus,
+    });
+  } else if (isStatusChangedToTodo) {
+    // 状态从 done 改为 todo → 记录重新打开
+    void logUserAction({
+      campaignID,
+      userName: sender,
+      action: `重新打开任务：${data.content}`,
+      taskID: data.id,
+      status: "info",
+    });
+  } else if (hasFieldEdits && !hasStatusUpdate) {
+    // 编辑任务字段 → 记录无色操作
+    const editedFields: string[] = [];
+    if (hasContentUpdate) editedFields.push("内容");
+    if (hasDeadlineUpdate) editedFields.push("截止日期");
+    if (hasAssignedToUpdate) editedFields.push("负责人");
+    if (hasTextUpdate) editedFields.push("备注");
+
+    void logUserAction({
+      campaignID,
+      userName: sender,
+      action: `编辑任务：${data.content}（${editedFields.join("、")}）`,
+      taskID: data.id,
+      status: null,
+    });
   }
 
   return Response.json({

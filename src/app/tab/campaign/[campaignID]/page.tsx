@@ -3,6 +3,7 @@ import { ArrowLeft } from "flowbite-react-icons/outline";
 import CampaignTaskList from "@/components/campaign-task-list";
 import CampaignStepper from "@/components/campaign-stepper";
 import CampaignProgressText from "@/components/campaign-progress-text";
+import CampaignTimeline from "@/components/campaign-timeline";
 
 type CampaignPageProps = {
   params: Promise<{
@@ -58,7 +59,15 @@ export default async function CampaignDetailPage({
         </div>
       </div>
 
-      <CampaignTaskList campaignID={campaignID} />
+      {/* 两栏布局：左侧任务列表 + 右侧固定宽度时间线 */}
+      <div className="flex flex-col gap-5 lg:flex-row">
+        <div className="min-w-0 flex-1">
+          <CampaignTaskList campaignID={campaignID} />
+        </div>
+        <div className="w-[320px] shrink-0">
+          <CampaignTimeline campaignID={campaignID} />
+        </div>
+      </div>
     </div>
   );
 }

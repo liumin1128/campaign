@@ -25,6 +25,7 @@ type CampaignTaskState = {
   activeCampaignID: string | null;
   creatingTask: boolean;
   updatingTaskIDs: number[];
+  lastMutationAt: number | null;
   loadTasks: (campaignID: string) => Promise<void>;
   createTask: (input: {
     campaignID: string;
@@ -65,6 +66,7 @@ export const useCampaignTaskStore = create<CampaignTaskState>()(
       activeCampaignID: null,
       creatingTask: false,
       updatingTaskIDs: [],
+      lastMutationAt: null,
       loadTasks: async (campaignID) => {
         if (!campaignID) {
           set({
@@ -170,6 +172,7 @@ export const useCampaignTaskStore = create<CampaignTaskState>()(
           set((state) => ({
             creatingTask: false,
             error: null,
+            lastMutationAt: Date.now(),
             tasks:
               state.activeCampaignID === campaignID
                 ? [payload.task!, ...state.tasks]
@@ -237,6 +240,7 @@ export const useCampaignTaskStore = create<CampaignTaskState>()(
 
           set((state) => ({
             error: null,
+            lastMutationAt: Date.now(),
             updatingTaskIDs: state.updatingTaskIDs.filter(
               (id) => id !== taskID,
             ),
@@ -298,6 +302,7 @@ export const useCampaignTaskStore = create<CampaignTaskState>()(
 
           set((state) => ({
             error: null,
+            lastMutationAt: Date.now(),
             updatingTaskIDs: state.updatingTaskIDs.filter(
               (id) => id !== taskID,
             ),
@@ -386,6 +391,7 @@ export const useCampaignTaskStore = create<CampaignTaskState>()(
 
           set((state) => ({
             error: null,
+            lastMutationAt: Date.now(),
             updatingTaskIDs: state.updatingTaskIDs.filter(
               (id) => id !== taskID,
             ),
@@ -438,6 +444,7 @@ export const useCampaignTaskStore = create<CampaignTaskState>()(
 
           set((state) => ({
             error: null,
+            lastMutationAt: Date.now(),
             updatingTaskIDs: state.updatingTaskIDs.filter(
               (id) => id !== taskID,
             ),
