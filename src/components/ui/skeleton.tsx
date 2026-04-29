@@ -79,7 +79,7 @@ export function SkeletonStepSection({ taskCount = 2 }: { taskCount?: number }) {
       className="overflow-hidden rounded-xl bg-white shadow-sm ring-1 ring-slate-200/80 dark:bg-transparent dark:ring-slate-800"
     >
       {/* Step Header */}
-      <div className="flex animate-pulse items-center justify-between border-b border-slate-200 px-4 py-4 dark:border-slate-800">
+      <div className="flex animate-pulse items-center justify-between gap-3 px-4 py-4">
         <div className="flex items-center gap-3.5">
           <SkeletonBlock className="h-4 w-4" />
           <SkeletonCircle className="h-7 w-7" />
@@ -92,7 +92,7 @@ export function SkeletonStepSection({ taskCount = 2 }: { taskCount?: number }) {
       </div>
 
       {/* Task rows */}
-      <div className="space-y-3 bg-slate-50 px-4 py-4 dark:bg-slate-950/30">
+      <div className="space-y-3 bg-slate-50 px-4 py-4 dark:bg-slate-950/30 rounded-xl">
         {Array.from({ length: taskCount }).map((_, i) => (
           <SkeletonTaskRow key={i} />
         ))}

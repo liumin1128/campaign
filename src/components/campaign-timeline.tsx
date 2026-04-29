@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useCampaignTaskStore } from "@/store/campaign-task-store";
+import { CampaignTimelineSkeleton } from "@/components/campaign-task-list-skeleton";
 
 type ActionLogRecord = {
   id: number;
@@ -111,6 +112,10 @@ export default function CampaignTimeline({
 
   const isEmpty = !loading && !error && logs.length === 0;
 
+  if (loading) {
+    return <CampaignTimelineSkeleton />;
+  }
+
   return (
     <div className="overflow-hidden rounded-xl bg-white shadow-sm ring-1 ring-slate-200/80 dark:bg-slate-900 dark:ring-slate-800">
       <div className="border-b border-slate-100 px-5 py-4 dark:border-slate-800">
@@ -120,15 +125,8 @@ export default function CampaignTimeline({
       </div>
 
       <div className="px-5 py-4">
-        {/* 加载状态 */}
-        {loading ? (
-          <div className="flex items-center justify-center py-8">
-            <div className="size-5 animate-spin rounded-full border-2 border-slate-200 border-t-indigo-500 dark:border-slate-700 dark:border-t-indigo-400" />
-          </div>
-        ) : null}
-
         {/* 错误状态 */}
-        {!loading && error ? (
+        {error ? (
           <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-300">
             {error}
           </div>
@@ -157,7 +155,7 @@ export default function CampaignTimeline({
         ) : null}
 
         {/* 时间线 */}
-        {!loading && !error && logs.length > 0 ? (
+        {!error && logs.length > 0 ? (
           <ol className="relative border-s border-slate-200 dark:border-slate-700">
             {logs.map((log) => (
               <li key={log.id} className="mb-6 ms-4 last:mb-0">
