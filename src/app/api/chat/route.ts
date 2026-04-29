@@ -65,7 +65,7 @@ export async function POST(request: Request) {
 
         async function pump(): Promise<void> {
           try {
-            const { done, value } = await upstreamReader.read();
+            const { done, value } = await upstreamReader!.read();
 
             if (done) {
               // 处理缓冲区剩余数据
