@@ -142,7 +142,7 @@ export function Navbar() {
                   ))}
                 </ul>
               </li>
-              <li>
+              {/* <li>
                 <div className="text-xs/6 font-semibold text-gray-400 dark:text-slate-500">
                   Your teams
                 </div>
@@ -173,7 +173,7 @@ export function Navbar() {
                     </li>
                   ))}
                 </ul>
-              </li>
+              </li> */}
             </ul>
           </li>
           <li className="-mx-6 mt-auto">
