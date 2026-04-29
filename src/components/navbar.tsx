@@ -1,7 +1,7 @@
 "use client";
 
 import { useThemeMode } from "flowbite-react";
-import { useState } from "react";
+import { useState, useSyncExternalStore } from "react";
 import { Cog, Home, MessageDots } from "flowbite-react-icons/outline";
 import { classNames } from "@/utils/common";
 import { useTeamsUserStore } from "@/store/teams-user-store";
@@ -38,8 +38,17 @@ function formatTeamsData(payload: unknown) {
   return JSON.stringify(payload, null, 2);
 }
 
+function useHydrated() {
+  return useSyncExternalStore(
+    () => () => {},
+    () => true,
+    () => false,
+  );
+}
+
 function ThemeModeSwitch() {
   const { computedMode, toggleMode } = useThemeMode();
+  const hydrated = useHydrated();
 
   const isDark = computedMode === "dark";
   const iconClass =
@@ -49,11 +58,45 @@ function ThemeModeSwitch() {
     <button
       type="button"
       onClick={toggleMode}
-      aria-label={isDark ? "切换到浅色模式" : "切换到深色模式"}
-      title={isDark ? "切换到浅色模式" : "切换到深色模式"}
+      aria-label={
+        hydrated ? (isDark ? "切换到浅色模式" : "切换到深色模式") : "切换主题"
+      }
+      title={
+        hydrated ? (isDark ? "切换到浅色模式" : "切换到深色模式") : "切换主题"
+      }
       className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white text-sm shadow-sm transition hover:border-indigo-200 hover:text-indigo-600 dark:border-slate-600 dark:bg-slate-800 dark:hover:border-indigo-400 dark:hover:text-indigo-300"
     >
-      {isDark ? (
+      {hydrated ? (
+        isDark ? (
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+            className={iconClass}
+          >
+            <circle cx="12" cy="12" r="5" />
+            <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" />
+          </svg>
+        ) : (
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+            className={iconClass}
+          >
+            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+          </svg>
+        )
+      ) : (
+        /* 占位图标，保持尺寸，防止布局偏移 */
         <svg
           viewBox="0 0 24 24"
           fill="none"
@@ -66,19 +109,6 @@ function ThemeModeSwitch() {
         >
           <circle cx="12" cy="12" r="5" />
           <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" />
-        </svg>
-      ) : (
-        <svg
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          aria-hidden="true"
-          className={iconClass}
-        >
-          <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
         </svg>
       )}
     </button>
