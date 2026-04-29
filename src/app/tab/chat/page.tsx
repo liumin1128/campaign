@@ -2,14 +2,65 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import { TextInput } from "flowbite-react";
-import { PaperPlane, Stop } from "flowbite-react-icons/outline";
+import {
+  ChartMixed,
+  ChartLineUp,
+  PaperPlane,
+  Star,
+  Shuffle,
+  Stop,
+} from "flowbite-react-icons/outline";
 
 interface Message {
   id: string;
-  role: "user" | "assistant";
+  role: "system" | "user" | "assistant";
   content: string;
   reasoning?: string;
 }
+
+interface AgentOption {
+  id: string;
+  name: string;
+  description: string;
+  systemPrompt: string;
+}
+
+const AGENTS: AgentOption[] = [
+  {
+    id: "none",
+    name: "无",
+    description: "不使用专属代理，直接与通用 AI 对话",
+    systemPrompt: "",
+  },
+  {
+    id: "campaign_planning",
+    name: "营销策划",
+    description: "营销活动策划与提案生成",
+    systemPrompt: "",
+  },
+  {
+    id: "data_analysis",
+    name: "数据分析",
+    description: "销售数据分析和商业洞察提取",
+    systemPrompt: "",
+  },
+  {
+    id: "market_analysis",
+    name: "市场分析",
+    description: "市场竞争和定价基准分析",
+    systemPrompt: "",
+  },
+];
+
+const AGENT_ICONS: Record<
+  string,
+  React.ComponentType<{ className?: string }>
+> = {
+  none: Shuffle,
+  campaign_planning: Star,
+  data_analysis: ChartMixed,
+  market_analysis: ChartLineUp,
+};
 
 const WELCOME_MESSAGE: Message = {
   id: "welcome",
@@ -57,6 +108,7 @@ export default function ChatPage() {
   const [messages, setMessages] = useState<Message[]>([WELCOME_MESSAGE]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [selectedAgent, setSelectedAgent] = useState<AgentOption>(AGENTS[0]);
   const abortRef = useRef<AbortController | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -87,6 +139,20 @@ export default function ChatPage() {
     setInput("");
     setIsLoading(true);
 
+    // 如果选中了 agent 且 systemPrompt 非空，注入 system prompt
+    const apiMessages = selectedAgent?.systemPrompt
+      ? [
+          { role: "system" as const, content: selectedAgent.systemPrompt },
+          ...updatedMessages.map((m) => ({
+            role: m.role as "user" | "assistant",
+            content: m.content,
+          })),
+        ]
+      : updatedMessages.map((m) => ({
+          role: m.role as "user" | "assistant",
+          content: m.content,
+        }));
+
     // 创建占位的 AI 回复
     const assistantId = crypto.randomUUID();
     const assistantMsg: Message = {
@@ -104,12 +170,7 @@ export default function ChatPage() {
       const resp = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          messages: updatedMessages.map((m) => ({
-            role: m.role,
-            content: m.content,
-          })),
-        }),
+        body: JSON.stringify({ messages: apiMessages }),
         signal: controller.signal,
       });
 
@@ -233,6 +294,81 @@ export default function ChatPage() {
         <p className="mt-1 text-sm text-gray-500 dark:text-slate-400">
           与 AI 助手进行对话 · 支持流式输出
         </p>
+      </div>
+
+      {/* Agent selector */}
+      <div className="border-b border-gray-100 py-3 dark:border-slate-800">
+        <div className="mb-3 flex items-center gap-2">
+          <span className="text-xs font-medium text-gray-400 dark:text-slate-500">
+            Agent:
+          </span>
+        </div>
+
+        <div className="grid grid-cols-2 gap-2">
+          {AGENTS.map((agent) => {
+            const isSelected = selectedAgent?.id === agent.id;
+            const IconComponent = AGENT_ICONS[agent.id];
+
+            return (
+              <button
+                key={agent.id}
+                type="button"
+                onClick={() => setSelectedAgent(agent)}
+                className={`group relative flex flex-col gap-2 rounded-xl border p-3 text-left transition ${
+                  isSelected
+                    ? "border-indigo-300 bg-indigo-50 shadow-sm dark:border-indigo-600 dark:bg-indigo-900/20"
+                    : "border-gray-200 bg-white hover:border-gray-300 hover:shadow-sm dark:border-slate-700 dark:bg-slate-800/50 dark:hover:border-slate-600"
+                }`}
+              >
+                {/* 选中标记 */}
+                {isSelected && (
+                  <span className="absolute right-2 top-2 flex size-5 items-center justify-center rounded-full bg-indigo-600 text-white dark:bg-indigo-500">
+                    <svg
+                      className="size-3"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={3}
+                        d="m4.5 12.75 6 6 9-13.5"
+                      />
+                    </svg>
+                  </span>
+                )}
+
+                {/* 图标 + 名称 */}
+                <div className="flex items-center gap-2.5">
+                  <div
+                    className={`flex size-9 shrink-0 items-center justify-center rounded-lg ${
+                      isSelected
+                        ? "bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300"
+                        : "bg-gray-100 text-gray-500 dark:bg-slate-700 dark:text-slate-400"
+                    }`}
+                  >
+                    {IconComponent && <IconComponent className="size-4.5" />}
+                  </div>
+                  <span
+                    className={`text-sm font-medium ${
+                      isSelected
+                        ? "text-indigo-900 dark:text-indigo-200"
+                        : "text-gray-900 dark:text-slate-100"
+                    }`}
+                  >
+                    {agent.name}
+                  </span>
+                </div>
+
+                {/* 描述 */}
+                <p className="text-xs leading-relaxed text-gray-500 dark:text-slate-400 line-clamp-2">
+                  {agent.description}
+                </p>
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       {/* Messages */}

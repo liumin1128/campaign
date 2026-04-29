@@ -6,7 +6,7 @@ export const maxDuration = 120; // 最长 120 秒
 const DEEPSEEK_BASE = "https://api.deepseek.com";
 
 interface ChatMessage {
-  role: "user" | "assistant";
+  role: "system" | "user" | "assistant";
   content: string;
 }
 
@@ -86,7 +86,7 @@ export async function POST(request: Request) {
             }
 
             await pump();
-          } catch (err) {
+          } catch {
             controller.enqueue(
               encoder.encode(
                 `data: ${JSON.stringify({ type: "error", content: "响应中断" })}\n\n`,
