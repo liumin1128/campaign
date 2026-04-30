@@ -17,7 +17,7 @@ export default async function CampaignDetailPage({
   const { campaignID } = await params;
 
   return (
-    <div className="flex flex-col gap-5">
+    <div className="flex flex-col gap-5 px-4 py-10 sm:px-6 lg:px-8">
       {/* 页面顶部导航和信息 */}
       <div className="overflow-hidden rounded-xl bg-white shadow-sm ring-1 ring-slate-200/80 dark:bg-slate-900 dark:ring-slate-800">
         <div className="px-4 py-5 sm:px-6 sm:py-6">
