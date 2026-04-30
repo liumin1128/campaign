@@ -7,12 +7,14 @@ import { t } from "./i18n";
 // ---------- Types ----------
 
 export interface DevPanelData {
-  /** 当前 Agent 的完整系统提示词（含全局规则 + 语言指令） */
+  /** 发送给 API 的完整 system message 内容（含全局规则 + 语言指令） */
   systemPrompt: string;
   /** 全局规则（单独展示） */
   globalRules: string;
   /** 语言指令片段 */
   langInstruction: string;
+  /** Agent 专属提示词（不含全局规则，便于编辑） */
+  agentPrompt: string;
   /** 发送给 API 的消息列表 */
   apiMessages: Array<{ role: string; content: string }>;
   /** 当前会话的所有消息（用于提取 reasoning） */
@@ -151,12 +153,17 @@ function SystemTab({
         />
       </Section>
 
-      {/* Agent 系统提示词（完整） */}
-      <Section
-        title={`${t(language, "dev_mode_system_prompt_label")} — ${data.agentName}`}
-      >
-        <CodeBlock key={`prompt-${data.agentId}`} content={data.systemPrompt} />
-      </Section>
+      {/* Agent 专属提示词（不含全局规则），仅在有额外提示词时显示 */}
+      {data.agentPrompt.trim() && (
+        <Section
+          title={`${t(language, "dev_mode_system_prompt_label")} — ${data.agentName}`}
+        >
+          <CodeBlock
+            key={`prompt-${data.agentId}`}
+            content={data.agentPrompt}
+          />
+        </Section>
+      )}
     </div>
   );
 }

@@ -138,6 +138,11 @@ export function useChat() {
     ? selectedAgent.systemPrompt + languageInstruction
     : languageInstruction;
 
+  /** 剥离 GLOBAL_EMPHASIS 前缀后的 Agent 专属提示词 */
+  const agentPrompt = selectedAgent?.systemPrompt?.startsWith(GLOBAL_EMPHASIS)
+    ? selectedAgent.systemPrompt.slice(GLOBAL_EMPHASIS.length)
+    : (selectedAgent?.systemPrompt ?? "");
+
   const apiMessages = useMemo(
     () => buildApiMessages(messages),
     [buildApiMessages, messages],
@@ -350,6 +355,7 @@ export function useChat() {
     toggleDevMode,
     apiMessages,
     fullSystemPrompt,
+    agentPrompt,
     globalRules: GLOBAL_EMPHASIS,
     langInstruction: languageInstruction,
     // refs
