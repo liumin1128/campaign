@@ -8,7 +8,7 @@ import type {
 } from "@/components/chat/types";
 import { getLocalizedAgents, t } from "@/components/chat/i18n";
 import { processFiles } from "@/components/chat/utils";
-import { useActiveSession } from "@/store/chat-store";
+import { useActiveSession, useChatStore } from "@/store/chat-store";
 
 export function useChat() {
   const {
@@ -23,6 +23,7 @@ export function useChat() {
     updateSessionMessages,
     updateSessionAgent,
     renameSession,
+    setDraftInput,
   } = useActiveSession();
 
   const messages = session?.messages ?? [];
@@ -44,11 +45,13 @@ export function useChat() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messageVersion]);
 
-  // 切换会话时清空输入和附件
+  // 切换会话时加载目标会话的草稿
   useEffect(() => {
-    setInput("");
     setFileAttachments([]);
     setIsLoading(false);
+    // 直接从 store 读取最新草稿，避免将 draftInputs 加入依赖链导致不必要重跑
+    const draft = useChatStore.getState().draftInputs[sessionId ?? ""] ?? "";
+    setInput(draft);
   }, [sessionId]);
 
   const handleStop = useCallback(() => {
@@ -64,6 +67,28 @@ export function useChat() {
       }
     },
     [sessionId, updateSessionAgent],
+  );
+
+  /** 切换会话时保存当前输入草稿 */
+  const handleSwitchSession = useCallback(
+    (id: string) => {
+      if (sessionId) {
+        setDraftInput(sessionId, input);
+      }
+      switchSession(id);
+    },
+    [sessionId, input, switchSession, setDraftInput],
+  );
+
+  /** 新建会话时保存当前输入草稿 */
+  const handleCreateSession = useCallback(
+    (agentId?: string) => {
+      if (sessionId) {
+        setDraftInput(sessionId, input);
+      }
+      return createSession(agentId);
+    },
+    [sessionId, input, createSession, setDraftInput],
   );
 
   /** 语言回复指令 */
@@ -119,6 +144,7 @@ export function useChat() {
     updateSessionMessages(sid, updatedMessages);
     setInput("");
     setFileAttachments([]);
+    setDraftInput(sid, "");
     setIsLoading(true);
 
     const assistantId = crypto.randomUUID();
@@ -306,8 +332,8 @@ export function useChat() {
     handleFileSelect,
     handleRemoveFile,
     // 会话管理
-    createSession,
-    switchSession,
+    createSession: handleCreateSession,
+    switchSession: handleSwitchSession,
     deleteSession,
     renameSession,
   };

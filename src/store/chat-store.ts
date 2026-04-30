@@ -22,6 +22,7 @@ interface ChatStoreState {
   sessions: ChatSession[];
   activeSessionId: string | null;
   language: Language;
+  draftInputs: Record<string, string>;
   setLanguage: (lang: Language) => void;
   createSession: (agentId?: string) => string;
   switchSession: (id: string) => void;
@@ -29,6 +30,7 @@ interface ChatStoreState {
   updateSessionMessages: (id: string, messages: Message[]) => void;
   updateSessionAgent: (id: string, agentId: string) => void;
   renameSession: (id: string, title: string) => void;
+  setDraftInput: (sessionId: string, draft: string) => void;
 }
 
 function generateTitle(messages: Message[], language: Language): string {
@@ -60,6 +62,7 @@ export const useChatStore = create<ChatStoreState>()(
       sessions: [],
       activeSessionId: null,
       language: "zh",
+      draftInputs: {},
 
       setLanguage: (lang) => set({ language: lang }),
 
@@ -87,17 +90,24 @@ export const useChatStore = create<ChatStoreState>()(
       deleteSession: (id) => {
         set((state) => {
           let sessions = state.sessions.filter((s) => s.id !== id);
+          // 清理该会话的草稿
+          const restDrafts = { ...state.draftInputs };
+          delete restDrafts[id];
           // 删除最后一个时自动创建新会话
           if (sessions.length === 0) {
             const newSession = createNewSession(undefined, state.language);
             sessions = [newSession];
-            return { sessions, activeSessionId: newSession.id };
+            return {
+              sessions,
+              activeSessionId: newSession.id,
+              draftInputs: restDrafts,
+            };
           }
           const activeSessionId =
             state.activeSessionId === id
               ? sessions[0].id
               : state.activeSessionId;
-          return { sessions, activeSessionId };
+          return { sessions, activeSessionId, draftInputs: restDrafts };
         });
       },
 
@@ -132,6 +142,12 @@ export const useChatStore = create<ChatStoreState>()(
           ),
         }));
       },
+
+      setDraftInput: (sessionId, draft) => {
+        set((state) => ({
+          draftInputs: { ...state.draftInputs, [sessionId]: draft },
+        }));
+      },
     }),
     {
       name: "chat-store",
@@ -140,6 +156,7 @@ export const useChatStore = create<ChatStoreState>()(
         sessions: state.sessions,
         activeSessionId: state.activeSessionId,
         language: state.language,
+        draftInputs: state.draftInputs,
       }),
     },
   ),
@@ -165,6 +182,7 @@ export function useActiveSession(): {
   sessions: ChatSession[];
   activeSessionId: string | null;
   language: Language;
+  draftInputs: Record<string, string>;
   setLanguage: (lang: Language) => void;
   createSession: (agentId?: string) => string;
   switchSession: (id: string) => void;
@@ -172,10 +190,12 @@ export function useActiveSession(): {
   updateSessionMessages: (id: string, messages: Message[]) => void;
   updateSessionAgent: (id: string, agentId: string) => void;
   renameSession: (id: string, title: string) => void;
+  setDraftInput: (sessionId: string, draft: string) => void;
 } {
   const sessions = useChatStore((s) => s.sessions);
   const activeSessionId = useChatStore((s) => s.activeSessionId);
   const language = useChatStore((s) => s.language);
+  const draftInputs = useChatStore((s) => s.draftInputs);
   const setLanguage = useChatStore((s) => s.setLanguage);
   const createSession = useChatStore((s) => s.createSession);
   const switchSession = useChatStore((s) => s.switchSession);
@@ -183,6 +203,7 @@ export function useActiveSession(): {
   const updateSessionMessages = useChatStore((s) => s.updateSessionMessages);
   const updateSessionAgent = useChatStore((s) => s.updateSessionAgent);
   const renameSession = useChatStore((s) => s.renameSession);
+  const setDraftInput = useChatStore((s) => s.setDraftInput);
 
   const session = sessions.find((s) => s.id === activeSessionId);
 
@@ -191,6 +212,7 @@ export function useActiveSession(): {
     sessions,
     activeSessionId,
     language,
+    draftInputs,
     setLanguage,
     createSession,
     switchSession,
@@ -198,5 +220,6 @@ export function useActiveSession(): {
     updateSessionMessages,
     updateSessionAgent,
     renameSession,
+    setDraftInput,
   };
 }
