@@ -143,6 +143,8 @@ export default function ChatPage() {
               langInstruction,
               apiMessages,
               messages,
+              agentId: selectedAgent.id,
+              agentName: selectedAgent.name,
             }}
             language={language}
           />

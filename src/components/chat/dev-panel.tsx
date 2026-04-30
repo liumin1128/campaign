@@ -17,6 +17,9 @@ export interface DevPanelData {
   apiMessages: Array<{ role: string; content: string }>;
   /** 当前会话的所有消息（用于提取 reasoning） */
   messages: Message[];
+  /** 当前 Agent 标识信息 */
+  agentId: string;
+  agentName: string;
 }
 
 type Tab = "system" | "messages" | "reasoning";
@@ -59,13 +62,19 @@ export function DevPanel({ isOpen, onClose, data, language }: DevPanelProps) {
     <div className="flex w-96 shrink-0 flex-col border-l border-gray-200 bg-white dark:border-slate-700 dark:bg-slate-900">
       {/* Header */}
       <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3 dark:border-slate-700">
-        <h2 className="text-sm font-semibold text-gray-800 dark:text-slate-200">
-          {t(language, "dev_mode_title")}
-        </h2>
+        <div className="min-w-0 flex-1">
+          <h2 className="text-sm font-semibold text-gray-800 dark:text-slate-200">
+            {t(language, "dev_mode_title")}
+          </h2>
+          <p className="truncate text-[11px] text-gray-500 dark:text-slate-400">
+            {data.agentName}
+            <span className="ml-1 opacity-50">({data.agentId})</span>
+          </p>
+        </div>
         <button
           type="button"
           onClick={onClose}
-          className="rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-slate-800 dark:hover:text-slate-300"
+          className="shrink-0 rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-slate-800 dark:hover:text-slate-300"
           aria-label="Close"
         >
           <svg
@@ -131,17 +140,22 @@ function SystemTab({
     <div className="space-y-4 p-4">
       {/* 全局规则 */}
       <Section title={t(language, "dev_mode_global_rules_label")}>
-        <CodeBlock content={data.globalRules} />
+        <CodeBlock key={`rules-${data.agentId}`} content={data.globalRules} />
       </Section>
 
       {/* 语言指令 */}
       <Section title={t(language, "dev_mode_lang_instruction")}>
-        <CodeBlock content={data.langInstruction} />
+        <CodeBlock
+          key={`lang-${data.agentId}`}
+          content={data.langInstruction}
+        />
       </Section>
 
       {/* Agent 系统提示词（完整） */}
-      <Section title={t(language, "dev_mode_system_prompt_label")}>
-        <CodeBlock content={data.systemPrompt} />
+      <Section
+        title={`${t(language, "dev_mode_system_prompt_label")} — ${data.agentName}`}
+      >
+        <CodeBlock key={`prompt-${data.agentId}`} content={data.systemPrompt} />
       </Section>
     </div>
   );
