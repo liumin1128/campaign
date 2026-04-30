@@ -145,13 +145,16 @@ export const useChatStore = create<ChatStoreState>()(
   ),
 );
 
-// 持久化 hydration 完成后，若无会话则自动创建初始会话
+// 持久化 hydration 完成后，确保始终有一个活跃会话
 if (typeof window !== "undefined" && useChatStore.persist) {
   useChatStore.persist.onFinishHydration(() => {
-    const { sessions, activeSessionId, createSession } =
-      useChatStore.getState();
-    if (sessions.length === 0 && !activeSessionId) {
-      createSession();
+    const state = useChatStore.getState();
+    const hasActiveSession = state.sessions.some(
+      (s) => s.id === state.activeSessionId,
+    );
+    if (!hasActiveSession) {
+      // 无活跃会话时自动创建（即使有遗留会话但 activeSessionId 失效也重建）
+      state.createSession();
     }
   });
 }
