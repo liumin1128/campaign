@@ -24,6 +24,9 @@ export function useChat() {
     updateSessionAgent,
     renameSession,
     setDraftInput,
+    quotedMessages,
+    toggleQuotedMessage,
+    clearQuotedMessages,
   } = useActiveSession();
 
   const messages = session?.messages ?? [];
@@ -132,10 +135,18 @@ export function useChat() {
     if ((!trimmed && fileAttachments.length === 0) || isLoading || !sessionId)
       return;
 
+    // 如果有引用的消息，将多条以 blockquote 格式拼入消息内容
+    const quotePrefix =
+      quotedMessages.length > 0
+        ? quotedMessages
+            .map((qm) => `> ${qm.content.replace(/\n/g, "\n> ")}`)
+            .join("\n\n") + "\n\n"
+        : "";
+
     const userMsg: Message = {
       id: crypto.randomUUID(),
       role: "user",
-      content: trimmed,
+      content: quotePrefix + trimmed,
       attachments: fileAttachments.length > 0 ? fileAttachments : undefined,
     };
 
@@ -318,6 +329,7 @@ export function useChat() {
     language,
     sessions,
     activeSessionId,
+    session,
     // refs
     messagesEndRef,
     inputRef,
@@ -331,6 +343,10 @@ export function useChat() {
     handleKeyDown,
     handleFileSelect,
     handleRemoveFile,
+    // 引用消息
+    quotedMessages,
+    toggleQuotedMessage,
+    clearQuotedMessages,
     // 会话管理
     createSession: handleCreateSession,
     switchSession: handleSwitchSession,

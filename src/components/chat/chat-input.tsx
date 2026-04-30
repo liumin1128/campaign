@@ -2,14 +2,16 @@
 
 import { FileImport, PaperPlane, Stop } from "flowbite-react-icons/outline";
 import { FileCsv } from "flowbite-react-icons/outline";
-import type { FileAttachment, Language } from "./types";
+import type { FileAttachment, Language, QuotedMessage } from "./types";
 import { t } from "./i18n";
+import { QuotePreview } from "./quote-preview";
 
 interface ChatInputProps {
   input: string;
   isLoading: boolean;
   language: Language;
   fileAttachments: FileAttachment[];
+  quotedMessages: QuotedMessage[];
   inputRef: React.RefObject<HTMLTextAreaElement | null>;
   fileInputRef: React.RefObject<HTMLInputElement | null>;
   onInputChange: (value: string) => void;
@@ -19,6 +21,7 @@ interface ChatInputProps {
   onFileSelect: (e: React.ChangeEvent<HTMLInputElement>) => void;
   onRemoveFile: (index: number) => void;
   onLanguageChange: (lang: Language) => void;
+  onRemoveQuote: (id: string) => void;
 }
 
 export function ChatInput({
@@ -26,6 +29,7 @@ export function ChatInput({
   isLoading,
   language,
   fileAttachments,
+  quotedMessages,
   inputRef,
   fileInputRef,
   onInputChange,
@@ -35,9 +39,17 @@ export function ChatInput({
   onFileSelect,
   onRemoveFile,
   onLanguageChange,
+  onRemoveQuote,
 }: ChatInputProps) {
   return (
     <div className="px-4 py-2">
+      {/* 引用预览 */}
+      <QuotePreview
+        quotedMessages={quotedMessages}
+        language={language}
+        onRemove={onRemoveQuote}
+      />
+
       {fileAttachments.length > 0 && (
         <div className="mb-2 flex flex-wrap gap-2">
           {fileAttachments.map((att, idx) => (

@@ -21,5 +21,14 @@ export interface FileAttachment {
   type: "csv" | "text";
 }
 
+/** 被引用的消息 */
+export interface QuotedMessage {
+  id: string;
+  content: string;
+  role: "system" | "user" | "assistant";
+  sessionId: string;
+  sessionTitle: string;
+}
+
 /** 聊天回复语言 */
 export type Language = "zh" | "en";

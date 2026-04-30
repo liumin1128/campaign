@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
-import type { Message, Language } from "@/components/chat/types";
+import type { Message, Language, QuotedMessage } from "@/components/chat/types";
 import {
   getLocalizedAgents,
   getWelcomeMessage,
@@ -23,6 +23,7 @@ interface ChatStoreState {
   activeSessionId: string | null;
   language: Language;
   draftInputs: Record<string, string>;
+  quotedMessages: QuotedMessage[];
   setLanguage: (lang: Language) => void;
   createSession: (agentId?: string) => string;
   switchSession: (id: string) => void;
@@ -31,6 +32,8 @@ interface ChatStoreState {
   updateSessionAgent: (id: string, agentId: string) => void;
   renameSession: (id: string, title: string) => void;
   setDraftInput: (sessionId: string, draft: string) => void;
+  toggleQuotedMessage: (msg: QuotedMessage) => void;
+  clearQuotedMessages: () => void;
 }
 
 function generateTitle(messages: Message[], language: Language): string {
@@ -63,6 +66,7 @@ export const useChatStore = create<ChatStoreState>()(
       activeSessionId: null,
       language: "zh",
       draftInputs: {},
+      quotedMessages: [],
 
       setLanguage: (lang) => set({ language: lang }),
 
@@ -148,6 +152,21 @@ export const useChatStore = create<ChatStoreState>()(
           draftInputs: { ...state.draftInputs, [sessionId]: draft },
         }));
       },
+
+      toggleQuotedMessage: (msg) => {
+        set((state) => {
+          const exists = state.quotedMessages.some((q) => q.id === msg.id);
+          return {
+            quotedMessages: exists
+              ? state.quotedMessages.filter((q) => q.id !== msg.id)
+              : [...state.quotedMessages, msg],
+          };
+        });
+      },
+
+      clearQuotedMessages: () => {
+        set({ quotedMessages: [] });
+      },
     }),
     {
       name: "chat-store",
@@ -157,6 +176,7 @@ export const useChatStore = create<ChatStoreState>()(
         activeSessionId: state.activeSessionId,
         language: state.language,
         draftInputs: state.draftInputs,
+        quotedMessages: state.quotedMessages,
       }),
     },
   ),
@@ -183,6 +203,7 @@ export function useActiveSession(): {
   activeSessionId: string | null;
   language: Language;
   draftInputs: Record<string, string>;
+  quotedMessages: QuotedMessage[];
   setLanguage: (lang: Language) => void;
   createSession: (agentId?: string) => string;
   switchSession: (id: string) => void;
@@ -191,11 +212,14 @@ export function useActiveSession(): {
   updateSessionAgent: (id: string, agentId: string) => void;
   renameSession: (id: string, title: string) => void;
   setDraftInput: (sessionId: string, draft: string) => void;
+  toggleQuotedMessage: (msg: QuotedMessage) => void;
+  clearQuotedMessages: () => void;
 } {
   const sessions = useChatStore((s) => s.sessions);
   const activeSessionId = useChatStore((s) => s.activeSessionId);
   const language = useChatStore((s) => s.language);
   const draftInputs = useChatStore((s) => s.draftInputs);
+  const quotedMessages = useChatStore((s) => s.quotedMessages);
   const setLanguage = useChatStore((s) => s.setLanguage);
   const createSession = useChatStore((s) => s.createSession);
   const switchSession = useChatStore((s) => s.switchSession);
@@ -204,6 +228,8 @@ export function useActiveSession(): {
   const updateSessionAgent = useChatStore((s) => s.updateSessionAgent);
   const renameSession = useChatStore((s) => s.renameSession);
   const setDraftInput = useChatStore((s) => s.setDraftInput);
+  const toggleQuotedMessage = useChatStore((s) => s.toggleQuotedMessage);
+  const clearQuotedMessages = useChatStore((s) => s.clearQuotedMessages);
 
   const session = sessions.find((s) => s.id === activeSessionId);
 
@@ -213,6 +239,7 @@ export function useActiveSession(): {
     activeSessionId,
     language,
     draftInputs,
+    quotedMessages,
     setLanguage,
     createSession,
     switchSession,
@@ -221,5 +248,7 @@ export function useActiveSession(): {
     updateSessionAgent,
     renameSession,
     setDraftInput,
+    toggleQuotedMessage,
+    clearQuotedMessages,
   };
 }

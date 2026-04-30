@@ -1,7 +1,6 @@
 "use client";
 
 import { useChat } from "@/hooks/use-chat";
-import { t } from "@/components/chat/i18n";
 import { AgentSelector } from "@/components/chat/agent-selector";
 import { MessageBubble } from "@/components/chat/message-bubble";
 import { ChatInput } from "@/components/chat/chat-input";
@@ -17,6 +16,8 @@ export default function ChatPage() {
     language,
     sessions,
     activeSessionId,
+    session,
+    quotedMessages,
     messagesEndRef,
     inputRef,
     fileInputRef,
@@ -28,6 +29,8 @@ export default function ChatPage() {
     handleKeyDown,
     handleFileSelect,
     handleRemoveFile,
+    toggleQuotedMessage,
+    clearQuotedMessages,
     createSession,
     switchSession,
     deleteSession,
@@ -70,6 +73,10 @@ export default function ChatPage() {
               isLatest={msg.id === latestAssistantId}
               isLoading={isLoading}
               language={language}
+              sessionId={activeSessionId ?? ""}
+              sessionTitle={session?.title ?? ""}
+              quotedMessages={quotedMessages}
+              onToggleQuote={toggleQuotedMessage}
             />
           ))}
           <div ref={messagesEndRef} />
@@ -82,6 +89,7 @@ export default function ChatPage() {
             isLoading={isLoading}
             language={language}
             fileAttachments={fileAttachments}
+            quotedMessages={quotedMessages}
             inputRef={inputRef}
             fileInputRef={fileInputRef}
             onInputChange={setInput}
@@ -91,6 +99,7 @@ export default function ChatPage() {
             onFileSelect={handleFileSelect}
             onRemoveFile={handleRemoveFile}
             onLanguageChange={setLanguage}
+            onRemoveQuote={clearQuotedMessages}
           />
         </div>
       </div>

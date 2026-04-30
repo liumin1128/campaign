@@ -5,7 +5,8 @@ import { isMarkdownContent } from "@/utils/markdown";
 import MarkdownDisplay from "@/components/markdown-display";
 import { ReasoningBlock } from "./reasoning-block";
 import { CopyButton } from "./copy-button";
-import type { Message, Language } from "./types";
+import { QuoteButton } from "./quote-button";
+import type { Message, Language, QuotedMessage } from "./types";
 import { t } from "./i18n";
 
 function LoadingDots() {
@@ -23,6 +24,10 @@ interface MessageBubbleProps {
   isLatest: boolean;
   isLoading: boolean;
   language: Language;
+  sessionId: string;
+  sessionTitle: string;
+  quotedMessages: QuotedMessage[];
+  onToggleQuote: (msg: QuotedMessage) => void;
 }
 
 export function MessageBubble({
@@ -30,9 +35,13 @@ export function MessageBubble({
   isLatest,
   isLoading,
   language,
+  sessionId,
+  sessionTitle,
+  quotedMessages,
+  onToggleQuote,
 }: MessageBubbleProps) {
   const content = message.content || "";
-  const showCopy = !isLoading && content.length > 0;
+  const showActions = !isLoading && content.length > 0;
 
   return (
     <div
@@ -68,8 +77,15 @@ export function MessageBubble({
           )}
         </div>
 
-        {showCopy && (
-          <div className="flex">
+        {showActions && (
+          <div className="flex gap-0.5">
+            <QuoteButton
+              message={message}
+              sessionId={sessionId}
+              sessionTitle={sessionTitle}
+              quotedMessages={quotedMessages}
+              onToggleQuote={onToggleQuote}
+            />
             <CopyButton content={content} />
           </div>
         )}

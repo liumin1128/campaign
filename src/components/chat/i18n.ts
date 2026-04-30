@@ -54,6 +54,14 @@ const translations = {
     lang_switch_to_zh: "切换到中文回复",
     lang_switch_to_en: "切换到英文回复",
 
+    // 引用消息
+    quote_title: "引用此消息",
+    quote_from: "来自: {session}",
+    quote_you: "你",
+    quote_assistant: "AI",
+    quote_remove: "移除引用",
+    quote_show_full: "点击查看完整内容",
+
     // 错误提示
     stopped: "（已停止生成）",
     error_stream: "❌ 无法读取响应流",
@@ -103,6 +111,14 @@ const translations = {
 
     lang_switch_to_zh: "Switch to Chinese",
     lang_switch_to_en: "Switch to English",
+
+    // 引用消息
+    quote_title: "Quote this message",
+    quote_from: "From: {session}",
+    quote_you: "You",
+    quote_assistant: "AI",
+    quote_remove: "Remove quote",
+    quote_show_full: "Click to view full content",
 
     stopped: "(stopped)",
     error_stream: "❌ Failed to read response stream",
