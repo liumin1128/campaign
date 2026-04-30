@@ -74,6 +74,13 @@ const translations = {
     dev_mode_lang_instruction: "语言指令",
     dev_mode_api_messages_desc: "发送给 DeepSeek API 的完整消息列表",
     dev_mode_no_reasoning: "当前没有思考过程数据",
+    dev_mode_edit: "编辑",
+    dev_mode_save: "保存",
+    dev_mode_cancel: "取消",
+    dev_mode_reset: "重置为默认",
+    dev_mode_edited_badge: "已编辑",
+    dev_mode_edit_global_rules: "编辑全局规则",
+    dev_mode_edit_agent_prompt: "编辑 Agent 系统提示词",
 
     // 错误提示
     stopped: "（已停止生成）",
@@ -145,6 +152,13 @@ const translations = {
     dev_mode_lang_instruction: "Language Instruction",
     dev_mode_api_messages_desc: "Full messages sent to DeepSeek API",
     dev_mode_no_reasoning: "No reasoning data available",
+    dev_mode_edit: "Edit",
+    dev_mode_save: "Save",
+    dev_mode_cancel: "Cancel",
+    dev_mode_reset: "Reset to default",
+    dev_mode_edited_badge: "Edited",
+    dev_mode_edit_global_rules: "Edit Global Rules",
+    dev_mode_edit_agent_prompt: "Edit Agent System Prompt",
 
     stopped: "(stopped)",
     error_stream: "❌ Failed to read response stream",

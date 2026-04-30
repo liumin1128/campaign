@@ -10,6 +10,7 @@ import { getLocalizedAgents, t } from "@/components/chat/i18n";
 import { GLOBAL_EMPHASIS } from "@/components/chat/system-prompts";
 import { processFiles } from "@/components/chat/utils";
 import { useActiveSession, useChatStore } from "@/store/chat-store";
+import { usePromptOverrideStore } from "@/store/prompt-override-store";
 
 export function useChat() {
   const {
@@ -102,6 +103,31 @@ export function useChat() {
       ? "\n\n请使用中文回复，除非用户明确要求使用其他语言。"
       : "\n\nPlease respond in English, unless the user explicitly asks for another language.";
 
+  // ---- 提示词覆盖（dev 面板编辑） ----
+  const overrideGlobalRules = usePromptOverrideStore((s) => s.globalRules);
+  const overrideAgentPrompts = usePromptOverrideStore((s) => s.agentPrompts);
+
+  /** 原始 Agent 专属提示词（不含全局规则部分） */
+  const originalAgentSpecific = selectedAgent?.systemPrompt?.startsWith(
+    GLOBAL_EMPHASIS,
+  )
+    ? selectedAgent.systemPrompt.slice(GLOBAL_EMPHASIS.length)
+    : "";
+
+  /** 生效的全局规则（用户自定义优先） */
+  const effectiveGlobalRules = overrideGlobalRules || GLOBAL_EMPHASIS;
+  /** 生效的 Agent 专属提示词（用户自定义优先） */
+  const effectiveAgentSpecific =
+    overrideAgentPrompts[selectedAgent?.id ?? ""] ?? originalAgentSpecific;
+  /** 完整的生效 system prompt */
+  const effectiveSystemPrompt = effectiveGlobalRules + effectiveAgentSpecific;
+
+  /** 全局规则是否被用户编辑过 */
+  const isGlobalRulesOverridden = !!overrideGlobalRules;
+  /** Agent 提示词是否被用户编辑过 */
+  const isAgentPromptOverridden =
+    (overrideAgentPrompts[selectedAgent?.id ?? ""] ?? "") !== "";
+
   /** 从 activeSession 的消息构建 API 请求消息体 */
   const buildApiMessages = useCallback(
     (msgs: Message[]) => {
@@ -117,9 +143,7 @@ export function useChat() {
             : m.content,
       });
 
-      const systemContent = selectedAgent?.systemPrompt
-        ? selectedAgent.systemPrompt + languageInstruction
-        : languageInstruction;
+      const systemContent = effectiveSystemPrompt + languageInstruction;
 
       return [
         {
@@ -129,19 +153,13 @@ export function useChat() {
         ...msgs.map(mapMsg),
       ];
     },
-    [selectedAgent, languageInstruction],
+    [effectiveSystemPrompt, languageInstruction],
   );
 
   // ---- 开发者模式数据 ----
 
-  const fullSystemPrompt = selectedAgent?.systemPrompt
-    ? selectedAgent.systemPrompt + languageInstruction
-    : languageInstruction;
-
-  /** 剥离 GLOBAL_EMPHASIS 前缀后的 Agent 专属提示词 */
-  const agentPrompt = selectedAgent?.systemPrompt?.startsWith(GLOBAL_EMPHASIS)
-    ? selectedAgent.systemPrompt.slice(GLOBAL_EMPHASIS.length)
-    : (selectedAgent?.systemPrompt ?? "");
+  const fullSystemPrompt = effectiveSystemPrompt + languageInstruction;
+  const agentPrompt = effectiveAgentSpecific;
 
   const apiMessages = useMemo(
     () => buildApiMessages(messages),
@@ -356,8 +374,10 @@ export function useChat() {
     apiMessages,
     fullSystemPrompt,
     agentPrompt,
-    globalRules: GLOBAL_EMPHASIS,
+    globalRules: effectiveGlobalRules,
     langInstruction: languageInstruction,
+    isGlobalRulesOverridden,
+    isAgentPromptOverridden,
     // refs
     messagesEndRef,
     inputRef,

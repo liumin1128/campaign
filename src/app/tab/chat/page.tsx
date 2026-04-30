@@ -28,6 +28,8 @@ export default function ChatPage() {
     agentPrompt,
     globalRules,
     langInstruction,
+    isGlobalRulesOverridden,
+    isAgentPromptOverridden,
     messagesEndRef,
     inputRef,
     fileInputRef,
@@ -149,6 +151,8 @@ export default function ChatPage() {
               agentName: selectedAgent.name,
             }}
             language={language}
+            isGlobalRulesOverridden={isGlobalRulesOverridden}
+            isAgentPromptOverridden={isAgentPromptOverridden}
           />
         )}
       </div>
