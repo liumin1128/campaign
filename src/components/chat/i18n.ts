@@ -1,5 +1,5 @@
 import type { Language, AgentOption, Message } from "./types";
-import { SEARCH_WEB_SYSTEM_PROMPT } from "./system-prompts";
+import { GLOBAL_EMPHASIS, SEARCH_WEB_SYSTEM_PROMPT } from "./system-prompts";
 
 // ============= 文案翻译 =============
 
@@ -16,7 +16,7 @@ const translations = {
     agent_campaign_planning_desc: "营销活动策划与提案生成",
 
     // 欢迎语
-    welcome_message: "你好！我是 AI 助手，有什么可以帮助你的吗？",
+    welcome_message: "有什么可以帮助你的？",
 
     // Chat 页面
     page_title: "AI Chat",
@@ -73,7 +73,7 @@ const translations = {
     agent_campaign_planning_desc:
       "Marketing campaign planning and proposal generation",
 
-    welcome_message: "Hello! I'm your AI assistant. How can I help you?",
+    welcome_message: "How can I help you?",
 
     page_title: "AI Chat",
     page_desc: "Chat with AI assistant · Streaming output supported",
@@ -134,14 +134,16 @@ export function getLocalizedAgents(language: Language): AgentOption[] {
       id: "none",
       name: t(language, "agent_none_name"),
       description: t(language, "agent_none_desc"),
-      systemPrompt: "",
+      systemPrompt: GLOBAL_EMPHASIS,
       enableSearch: false,
     },
     {
       id: "data_analysis",
       name: t(language, "agent_data_analysis_name"),
       description: t(language, "agent_data_analysis_desc"),
-      systemPrompt: `    # 角色定义
+      systemPrompt: `${GLOBAL_EMPHASIS}
+
+    # 角色定义
 你是一位拥有10年经验资深航空公司资深数据分析师和商业顾问，擅长处理大规模CSV数据，并从中挖掘商业价值。
 
 你的任务流程如下：
@@ -181,7 +183,8 @@ export function getLocalizedAgents(language: Language): AgentOption[] {
       id: "market_analysis",
       name: t(language, "agent_market_analysis_name"),
       description: t(language, "agent_market_analysis_desc"),
-      systemPrompt: `
+      systemPrompt: `${GLOBAL_EMPHASIS}
+
     # 角色定义
 你是一位拥有10年经验的资深航空公司市场分析专家。你擅长分析市场竞争格局、定价策略和市场需求趋势。
 ${SEARCH_WEB_SYSTEM_PROMPT}`,
@@ -191,7 +194,7 @@ ${SEARCH_WEB_SYSTEM_PROMPT}`,
       id: "campaign_planning",
       name: t(language, "agent_campaign_planning_name"),
       description: t(language, "agent_campaign_planning_desc"),
-      systemPrompt: `# 角色定义
+      systemPrompt: `${GLOBAL_EMPHASIS}\n\n# 角色定义
 你是一位拥有10年经验的资深航空公司收益管理与数字营销专家**，同时具备数据科学家和战略咨询顾问的视角。你擅长通过多维度数据分析，结合市场动态与热点事件，制定高ROI（投资回报率）的精准营销方案。
 
 # 任务背景
