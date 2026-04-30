@@ -1,12 +1,13 @@
 "use client";
 
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import type {
   Message,
   AgentOption,
   FileAttachment,
 } from "@/components/chat/types";
 import { getLocalizedAgents, t } from "@/components/chat/i18n";
+import { GLOBAL_EMPHASIS } from "@/components/chat/system-prompts";
 import { processFiles } from "@/components/chat/utils";
 import { useActiveSession, useChatStore } from "@/store/chat-store";
 
@@ -39,6 +40,7 @@ export function useChat() {
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [fileAttachments, setFileAttachments] = useState<FileAttachment[]>([]);
+  const [devMode, setDevMode] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -129,6 +131,19 @@ export function useChat() {
     },
     [selectedAgent, languageInstruction],
   );
+
+  // ---- 开发者模式数据 ----
+
+  const fullSystemPrompt = selectedAgent?.systemPrompt
+    ? selectedAgent.systemPrompt + languageInstruction
+    : languageInstruction;
+
+  const apiMessages = useMemo(
+    () => buildApiMessages(messages),
+    [buildApiMessages, messages],
+  );
+
+  const toggleDevMode = useCallback(() => setDevMode((v) => !v), []);
 
   async function handleSend() {
     const trimmed = input.trim();
@@ -330,6 +345,13 @@ export function useChat() {
     sessions,
     activeSessionId,
     session,
+    // 开发者模式
+    devMode,
+    toggleDevMode,
+    apiMessages,
+    fullSystemPrompt,
+    globalRules: GLOBAL_EMPHASIS,
+    langInstruction: languageInstruction,
     // refs
     messagesEndRef,
     inputRef,

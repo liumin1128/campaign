@@ -62,6 +62,19 @@ const translations = {
     quote_remove: "移除引用",
     quote_show_full: "点击查看完整内容",
 
+    // 开发者模式
+    dev_mode_toggle: "开发者模式",
+    dev_mode_title: "开发者面板",
+    dev_mode_tab_system: "系统提示词",
+    dev_mode_tab_messages: "API 消息",
+    dev_mode_tab_reasoning: "思考过程",
+    dev_mode_empty: "暂无数据",
+    dev_mode_system_prompt_label: "Agent 系统提示词",
+    dev_mode_global_rules_label: "全局规则",
+    dev_mode_lang_instruction: "语言指令",
+    dev_mode_api_messages_desc: "发送给 DeepSeek API 的完整消息列表",
+    dev_mode_no_reasoning: "当前没有思考过程数据",
+
     // 错误提示
     stopped: "（已停止生成）",
     error_stream: "❌ 无法读取响应流",
@@ -119,6 +132,19 @@ const translations = {
     quote_assistant: "AI",
     quote_remove: "Remove quote",
     quote_show_full: "Click to view full content",
+
+    // 开发者模式
+    dev_mode_toggle: "Developer Mode",
+    dev_mode_title: "Dev Panel",
+    dev_mode_tab_system: "System Prompt",
+    dev_mode_tab_messages: "API Messages",
+    dev_mode_tab_reasoning: "Reasoning",
+    dev_mode_empty: "No data",
+    dev_mode_system_prompt_label: "Agent System Prompt",
+    dev_mode_global_rules_label: "Global Rules",
+    dev_mode_lang_instruction: "Language Instruction",
+    dev_mode_api_messages_desc: "Full messages sent to DeepSeek API",
+    dev_mode_no_reasoning: "No reasoning data available",
 
     stopped: "(stopped)",
     error_stream: "❌ Failed to read response stream",
