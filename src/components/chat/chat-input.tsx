@@ -119,7 +119,7 @@ export function ChatInput({
               language === "zh" ? "lang_switch_to_en" : "lang_switch_to_zh",
             )}
           >
-            {language === "zh" ? "中" : "EN"}
+            {language === "zh" ? "EN" : "中"}
           </button>
 
           {/* 右侧操作按钮 */}
