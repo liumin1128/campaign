@@ -38,7 +38,7 @@ export default function ChatPage() {
   )?.id;
 
   return (
-    <div className="flex h-[calc(100vh-8rem)]">
+    <div className="flex h-screen">
       {/* 左侧对话列表 */}
       <SessionSelector
         sessions={sessions}
@@ -51,19 +51,9 @@ export default function ChatPage() {
       />
 
       {/* 右侧主内容 */}
-      <div className="flex flex-1 flex-col">
-        {/* Header */}
-        <div className="border-b border-gray-200 px-6 pb-4 pt-4 dark:border-slate-700">
-          <h1 className="text-xl font-semibold text-gray-900 dark:text-slate-100">
-            AI Chat
-          </h1>
-          <p className="mt-1 text-sm text-gray-500 dark:text-slate-400">
-            {t(language, "page_desc")}
-          </p>
-        </div>
-
-        {/* Agent selector */}
-        <div className="px-6">
+      <div className="flex flex-1 flex-col min-w-0">
+        {/* Agent selector — 紧凑一行 */}
+        <div className="shrink-0 border-b border-gray-100 dark:border-slate-800">
           <AgentSelector
             selectedAgent={selectedAgent}
             language={language}
@@ -71,8 +61,8 @@ export default function ChatPage() {
           />
         </div>
 
-        {/* Messages */}
-        <div className="flex-1 space-y-4 overflow-y-auto px-6 py-4">
+        {/* Messages — 紧贴左侧 */}
+        <div className="flex-1 space-y-3 overflow-y-auto px-4 py-3">
           {messages.map((msg) => (
             <MessageBubble
               key={msg.id}
@@ -85,8 +75,8 @@ export default function ChatPage() {
           <div ref={messagesEndRef} />
         </div>
 
-        {/* Input area */}
-        <div className="px-6 pb-4">
+        {/* Input area — 紧贴底部 */}
+        <div className="shrink-0 border-t border-gray-100 dark:border-slate-800">
           <ChatInput
             input={input}
             isLoading={isLoading}

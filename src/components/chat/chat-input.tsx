@@ -37,25 +37,25 @@ export function ChatInput({
   onLanguageChange,
 }: ChatInputProps) {
   return (
-    <div className="border-t border-gray-200 pt-4 dark:border-slate-700">
+    <div className="px-4 py-2">
       {fileAttachments.length > 0 && (
         <div className="mb-2 flex flex-wrap gap-2">
           {fileAttachments.map((att, idx) => (
             <div
               key={idx}
-              className="flex items-center gap-2 rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-1.5 dark:border-indigo-800 dark:bg-indigo-950/30"
+              className="flex items-center gap-2 rounded-lg border border-indigo-200 bg-indigo-50 px-2.5 py-1 dark:border-indigo-800 dark:bg-indigo-950/30"
             >
-              <FileCsv className="size-4 shrink-0 text-indigo-600 dark:text-indigo-400" />
-              <span className="max-w-[200px] truncate text-sm text-indigo-700 dark:text-indigo-300">
+              <FileCsv className="size-3.5 shrink-0 text-indigo-600 dark:text-indigo-400" />
+              <span className="max-w-45 truncate text-xs text-indigo-700 dark:text-indigo-300">
                 {att.name}
               </span>
               <button
                 type="button"
                 onClick={() => onRemoveFile(idx)}
-                className="flex size-5 shrink-0 items-center justify-center rounded-full text-indigo-400 hover:bg-indigo-200 hover:text-indigo-700 dark:hover:bg-indigo-800 dark:hover:text-indigo-200"
+                className="flex size-4 shrink-0 items-center justify-center rounded-full text-indigo-400 hover:bg-indigo-200 hover:text-indigo-700 dark:hover:bg-indigo-800 dark:hover:text-indigo-200"
               >
                 <svg
-                  className="size-3.5"
+                  className="size-3"
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
@@ -74,10 +74,10 @@ export function ChatInput({
       )}
 
       <div
-        className={`relative rounded-2xl border bg-white transition-colors ${
+        className={`relative rounded-xl border bg-white transition-colors ${
           isLoading
             ? "border-gray-200 dark:border-slate-700"
-            : "border-gray-300 focus-within:border-indigo-400 focus-within:ring-2 focus-within:ring-indigo-100 dark:border-slate-600 dark:focus-within:border-indigo-500 dark:focus-within:ring-indigo-900/40"
+            : "border-gray-300 focus-within:border-indigo-400 focus-within:ring-1 focus-within:ring-indigo-100 dark:border-slate-600 dark:focus-within:border-indigo-500 dark:focus-within:ring-indigo-900/40"
         } dark:bg-slate-800`}
       >
         <textarea
@@ -86,21 +86,22 @@ export function ChatInput({
           onChange={(e) => onInputChange(e.target.value)}
           onKeyDown={onKeyDown}
           disabled={isLoading}
+          rows={1}
           placeholder={
             isLoading
               ? t(language, "chat_input_loading_placeholder")
               : t(language, "chat_input_placeholder")
           }
-          className="h-[140px] w-full resize-none bg-transparent px-4 pb-12 pt-4 text-sm text-gray-900 outline-none placeholder:text-gray-400 disabled:opacity-50 dark:text-slate-100 dark:placeholder-slate-500"
+          className="h-auto max-h-20 min-h-9 w-full resize-none bg-transparent px-3 pb-8 pt-2 text-sm text-gray-900 outline-none placeholder:text-gray-400 disabled:opacity-50 dark:text-slate-100 dark:placeholder-slate-500"
         />
 
-        <div className="absolute bottom-0 left-0 right-0 flex items-center justify-between p-2">
+        <div className="absolute bottom-0 left-0 right-0 flex items-center justify-between px-1.5 py-1">
           {/* 语言切换 */}
           <button
             type="button"
             onClick={() => onLanguageChange(language === "zh" ? "en" : "zh")}
             disabled={isLoading}
-            className="flex size-8 items-center justify-center rounded-lg text-xs font-semibold text-gray-400 transition hover:bg-gray-100 hover:text-gray-600 disabled:opacity-40 dark:hover:bg-slate-700 dark:hover:text-slate-300"
+            className="flex size-6 items-center justify-center rounded-md text-[10px] font-semibold text-gray-400 transition hover:bg-gray-100 hover:text-gray-600 disabled:opacity-40 dark:hover:bg-slate-700 dark:hover:text-slate-300"
             title={t(
               language,
               language === "zh" ? "lang_switch_to_en" : "lang_switch_to_zh",
@@ -110,7 +111,7 @@ export function ChatInput({
           </button>
 
           {/* 右侧操作按钮 */}
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-0.5">
             <input
               ref={fileInputRef}
               type="file"
@@ -124,10 +125,10 @@ export function ChatInput({
               <button
                 type="button"
                 onClick={onStop}
-                className="flex size-8 items-center justify-center rounded-lg bg-red-500 text-white transition hover:bg-red-400"
+                className="flex size-6 items-center justify-center rounded-md bg-red-500 text-white transition hover:bg-red-400"
                 title={t(language, "stop_title")}
               >
-                <Stop className="size-4" />
+                <Stop className="size-3.5" />
               </button>
             ) : (
               <>
@@ -135,27 +136,24 @@ export function ChatInput({
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
                   disabled={isLoading}
-                  className="flex size-8 items-center justify-center rounded-lg text-gray-400 transition hover:bg-gray-100 hover:text-gray-600 disabled:opacity-40 dark:hover:bg-slate-700 dark:hover:text-slate-300"
+                  className="flex size-6 items-center justify-center rounded-md text-gray-400 transition hover:bg-gray-100 hover:text-gray-600 disabled:opacity-40 dark:hover:bg-slate-700 dark:hover:text-slate-300"
                   title={t(language, "upload_file_title")}
                 >
-                  <FileImport className="size-4.5" />
+                  <FileImport className="size-3.5" />
                 </button>
                 <button
                   type="button"
                   onClick={onSend}
                   disabled={!input.trim() && fileAttachments.length === 0}
-                  className="flex size-8 items-center justify-center rounded-lg bg-indigo-600 text-white transition hover:bg-indigo-500 disabled:opacity-40 disabled:hover:bg-indigo-600"
+                  className="flex size-6 items-center justify-center rounded-md bg-indigo-600 text-white transition hover:bg-indigo-500 disabled:opacity-40 disabled:hover:bg-indigo-600"
                 >
-                  <PaperPlane className="size-4.5" />
+                  <PaperPlane className="size-3.5" />
                 </button>
               </>
             )}
           </div>
         </div>
       </div>
-      <p className="mt-2 text-center text-xs text-gray-400 dark:text-slate-500">
-        {isLoading ? t(language, "loading_hint") : t(language, "send_hint")}
-      </p>
     </div>
   );
 }

@@ -221,7 +221,7 @@ export default function CampaignPage() {
   };
 
   return (
-    <div>
+    <div className="px-4 py-10 sm:px-6 lg:px-8">
       {/* Header */}
       <div className="mb-6 flex items-center justify-between">
         <h2 className="text-xl font-semibold text-gray-900">Campaigns</h2>
