@@ -49,7 +49,7 @@ export function QuotePreview({
 
               {/* 缩略内容 — hover 时显示全部 */}
               <p
-                className="cursor-help text-xs leading-relaxed text-indigo-800 dark:text-indigo-200 line-clamp-2"
+                className="cursor-help truncate text-xs leading-relaxed text-indigo-800 dark:text-indigo-200"
                 title={qm.content}
               >
                 {truncate(qm.content)}

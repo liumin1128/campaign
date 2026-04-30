@@ -99,7 +99,10 @@ export default function ChatPage() {
             onFileSelect={handleFileSelect}
             onRemoveFile={handleRemoveFile}
             onLanguageChange={setLanguage}
-            onRemoveQuote={clearQuotedMessages}
+            onRemoveQuote={(id) => {
+              const msg = quotedMessages.find((q) => q.id === id);
+              if (msg) toggleQuotedMessage(msg);
+            }}
           />
         </div>
       </div>
