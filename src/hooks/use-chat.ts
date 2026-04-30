@@ -47,6 +47,13 @@ export function useChat() {
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // 默认新增一个会话
+  useEffect(() => {
+    if (!sessionId && sessions.length === 0) {
+      createSession();
+    }
+  }, [sessionId, sessions.length, createSession]);
+
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messageVersion]);
