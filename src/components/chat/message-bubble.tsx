@@ -4,6 +4,7 @@ import { FileCsv } from "flowbite-react-icons/outline";
 import { isMarkdownContent } from "@/utils/markdown";
 import MarkdownDisplay from "@/components/markdown-display";
 import { ReasoningBlock } from "./reasoning-block";
+import { CopyButton } from "./copy-button";
 import type { Message, Language } from "./types";
 import { t } from "./i18n";
 
@@ -30,9 +31,12 @@ export function MessageBubble({
   isLoading,
   language,
 }: MessageBubbleProps) {
+  const content = message.content || "";
+  const showCopy = !isLoading && content.length > 0;
+
   return (
     <div
-      className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}
+      className={`flex group ${message.role === "user" ? "justify-end" : "justify-start"}`}
     >
       <div
         className={`max-w-[80%] space-y-1 ${
@@ -43,22 +47,30 @@ export function MessageBubble({
           <ReasoningBlock text={message.reasoning} language={language} />
         )}
 
-        {message.role === "assistant" &&
-        message.content &&
-        isMarkdownContent(message.content) ? (
-          <div className="rounded-2xl bg-gray-100 px-4 py-3 text-gray-900 dark:bg-slate-800 dark:text-slate-100">
-            <MarkdownDisplay content={message.content} />
-          </div>
-        ) : (
-          <div
-            className={`rounded-2xl px-4 py-3 text-sm leading-relaxed whitespace-pre-wrap ${
-              message.role === "user"
-                ? "bg-indigo-600 text-white"
-                : "bg-gray-100 text-gray-900 dark:bg-slate-800 dark:text-slate-100"
-            }`}
-          >
-            {message.content ||
-              (isLoading && isLatest ? <LoadingDots /> : null)}
+        <div className="relative">
+          {message.role === "assistant" &&
+          message.content &&
+          isMarkdownContent(message.content) ? (
+            <div className="rounded-2xl bg-white px-4 py-3 text-gray-900 dark:bg-slate-800 dark:text-slate-100">
+              <MarkdownDisplay content={message.content} />
+            </div>
+          ) : (
+            <div
+              className={`rounded-2xl px-4 py-3 text-sm leading-relaxed whitespace-pre-wrap ${
+                message.role === "user"
+                  ? "bg-indigo-600 text-white"
+                  : "bg-white text-gray-900 dark:bg-slate-800 dark:text-slate-100"
+              }`}
+            >
+              {message.content ||
+                (isLoading && isLatest ? <LoadingDots /> : null)}
+            </div>
+          )}
+        </div>
+
+        {showCopy && (
+          <div className="flex">
+            <CopyButton content={content} />
           </div>
         )}
 
