@@ -216,6 +216,7 @@ export function useChat() {
         body: JSON.stringify({
           messages: buildApiMessages(updatedMessages),
           enable_search: selectedAgent?.enableSearch ?? false,
+          session_id: sessionId,
         }),
         signal: controller.signal,
       });

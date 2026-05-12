@@ -515,3 +515,235 @@ export async function sendMessage(options: {
     metadata: options.metadata,
   });
 }
+
+// ---------- SSE 流转换适配器 ----------
+
+/**
+ * AgentSL SSE 事件（原始格式）
+ */
+interface AgentSLStreamEvent {
+  job_id: string;
+  event_type:
+    | "stream:ready"
+    | "agent_entering"
+    | "agent_exiting"
+    | "response_start"
+    | "response_streaming"
+    | "response_end"
+    | "job:completed"
+    | "stream:closed";
+  timestamp?: string;
+  content?: string;
+  status?: JobStatus;
+  message?: string;
+  [key: string]: unknown;
+}
+
+/**
+ * 前端 SSE 事件格式
+ */
+export type ChatSSEEvent =
+  | { type: "content"; content: string }
+  | { type: "reasoning"; content: string }
+  | { type: "done" }
+  | { type: "error"; content: string }
+  | { type: "status"; status: string; message?: string };
+
+/**
+ * SSE 响应头
+ */
+export const SSE_HEADERS = {
+  "Content-Type": "text/event-stream",
+  "Cache-Control": "no-cache",
+  Connection: "keep-alive",
+};
+
+/**
+ * 创建 AgentSL → 前端格式的 SSE 流转换器
+ *
+ * 从 AgentSL 的 /run/stream/{job_id} SSE 流读取原始事件，
+ * 转换为前端期望的 `ChatSSEEvent` 格式。
+ */
+export function createAgentSLSSEStream(
+  jobId: string,
+): ReadableStream<Uint8Array> {
+  const encoder = new TextEncoder();
+
+  return new ReadableStream({
+    async start(controller) {
+      let agentSLStream: ReadableStream<Uint8Array> | null = null;
+
+      try {
+        agentSLStream = await streamJobEvents(jobId);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        controller.enqueue(
+          encoder.encode(
+            `data: ${JSON.stringify({ type: "error", content: msg })}\n\n`,
+          ),
+        );
+        controller.enqueue(encoder.encode('data: {"type":"done"}\n\n'));
+        controller.close();
+        return;
+      }
+
+      const reader = agentSLStream.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      function enqueueSSE(event: ChatSSEEvent) {
+        controller.enqueue(
+          encoder.encode(`data: ${JSON.stringify(event)}\n\n`),
+        );
+      }
+
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) {
+            // 流意外结束，发送 done
+            enqueueSSE({ type: "done" });
+            controller.close();
+            return;
+          }
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split("\n");
+          buffer = lines.pop() ?? "";
+
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed || !trimmed.startsWith("data:")) continue;
+
+            const jsonStr = trimmed.slice(5).trim();
+            try {
+              const event: AgentSLStreamEvent = JSON.parse(jsonStr);
+
+              switch (event.event_type) {
+                case "response_streaming":
+                  // 流式内容块 → content 事件
+                  if (event.content) {
+                    enqueueSSE({ type: "content", content: event.content });
+                  }
+                  break;
+
+                case "job:completed":
+                  if (event.status === "success") {
+                    enqueueSSE({
+                      type: "status",
+                      status: "success",
+                      message: "Job completed",
+                    });
+                    enqueueSSE({ type: "done" });
+                  } else if (
+                    event.status === "failed" ||
+                    event.status === "timeout"
+                  ) {
+                    // 尝试获取详细错误信息
+                    let errorMsg = event.message ?? `Job ${event.status}`;
+                    try {
+                      const jobDetails = await getJob(event.job_id);
+                      if (jobDetails.job_results?.error_message) {
+                        errorMsg = jobDetails.job_results.error_message;
+                      }
+                    } catch {
+                      // 获取详情失败，使用事件中的 message
+                    }
+                    enqueueSSE({
+                      type: "error",
+                      content: errorMsg,
+                    });
+                    enqueueSSE({ type: "done" });
+                  }
+                  break;
+
+                case "agent_entering":
+                  enqueueSSE({
+                    type: "status",
+                    status: "agent_entering",
+                    message: "Agent started",
+                  });
+                  break;
+
+                case "response_start":
+                  enqueueSSE({
+                    type: "status",
+                    status: "response_start",
+                    message: "Generating response",
+                  });
+                  break;
+
+                case "stream:closed":
+                  // Steam 正常关闭，如果之前没有 done 则补发
+                  break;
+
+                // stream:ready, agent_exiting, response_end 等忽略
+                default:
+                  break;
+              }
+            } catch {
+              // JSON 解析失败，跳过该行
+            }
+          }
+        }
+      } catch {
+        enqueueSSE({
+          type: "error",
+          content: "AgentSL 流响应中断",
+        });
+        enqueueSSE({ type: "done" });
+        controller.close();
+      }
+    },
+  });
+}
+
+/**
+ * 创建带终止保护的 SSE 响应
+ *
+ * 当客户端断开连接时自动取消 AgentSL Job。
+ */
+export function createAgentSLSSEResponse(
+  jobId: string,
+  abortSignal?: AbortSignal | null,
+): Response {
+  const stream = createAgentSLSSEStream(jobId);
+
+  // 如果提供了 abort signal，在客户端断开时取消 Job
+  if (abortSignal) {
+    abortSignal.addEventListener("abort", () => {
+      cancelJob(jobId).catch((err) =>
+        console.warn(`[AgentSL] 取消 Job ${jobId} 失败:`, err),
+      );
+    });
+  }
+
+  return new Response(stream, { headers: SSE_HEADERS });
+}
+
+/**
+ * 将通用聊天消息转换为 AgentSL 消息格式
+ *
+ * 仅提取最后一条 user 消息的纯文本内容。
+ * AgentSL 通过 session_id 维护对话历史，无需发送完整消息链。
+ *
+ * 重要：AgentSL Agent 有自己的系统指令，不要在消息中附加 system prompt，
+ * 否则会被视为 prompt injection 并拒绝请求。
+ */
+export function toAgentSLMessage(
+  messages: Array<{ role: string; content: string }>,
+): { text: string; systemContext?: string } {
+  // 提取 system 消息（仅用于日志/调试，不发送给 AgentSL）
+  const systemMessages = messages.filter((m) => m.role === "system");
+  const systemContext =
+    systemMessages.length > 0
+      ? systemMessages.map((m) => m.content).join("\n\n")
+      : undefined;
+
+  // 只取最后一条 user 消息的纯文本，不附加任何 system 内容
+  const userMessages = messages.filter((m) => m.role === "user");
+  const lastUserMsg = userMessages.at(-1);
+  const text = lastUserMsg?.content ?? "";
+
+  return { text, systemContext };
+}
