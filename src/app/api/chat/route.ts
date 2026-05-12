@@ -116,25 +116,83 @@ async function askWithTools(
   };
 }
 
-/** 执行 search_web tool call */
+/** 执行 search_web tool call，支持重试与退避 */
 async function executeToolCall(
   toolCall: NonNullable<DeepSeekMessage["tool_calls"]>[0],
 ): Promise<string> {
   const args = JSON.parse(toolCall.function.arguments);
-  const result = await searchWeb(args.query, {
-    topic: args.topic ?? "general",
-    maxResults: 6,
-    includeAnswer: true,
-    timeRange: args.time_range ?? undefined,
-  });
+  const query: string = args.query;
+  const topic: "general" | "news" = args.topic ?? "general";
+  const timeRange: string | undefined = args.time_range;
 
+  const MAX_RETRIES = 3;
+
+  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+    try {
+      // 首次用原始参数；重试时逐步放宽：去掉时间范围 → 强制 general
+      const retryTimeRange: "day" | "week" | "month" | "year" | undefined =
+        attempt === 0 &&
+        (timeRange === "day" ||
+          timeRange === "week" ||
+          timeRange === "month" ||
+          timeRange === "year")
+          ? timeRange
+          : undefined;
+
+      const opts = {
+        topic: (attempt === 0 ? topic : attempt === 1 ? topic : "general") as
+          | "general"
+          | "news",
+        maxResults: 6,
+        includeAnswer: true,
+        timeRange: retryTimeRange,
+      };
+
+      const result = await searchWeb(query, opts);
+
+      const hasResults = result.results.length > 0 || !!result.answer;
+
+      if (hasResults) {
+        // 有结果，立即返回
+        return formatSearchResult(query, result);
+      }
+
+      // 无结果：等待后退避重试
+      if (attempt < MAX_RETRIES - 1) {
+        const delayMs = (attempt + 1) * 3000; // 3s → 6s
+        console.warn(
+          `[search_web] 第 ${attempt + 1} 次搜索无结果，${delayMs / 1000}s 后重试（query: ${query}）`,
+        );
+        await new Promise((r) => setTimeout(r, delayMs));
+      }
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : String(err);
+      console.error(`[search_web] 第 ${attempt + 1} 次搜索异常: ${errMsg}`);
+      if (attempt < MAX_RETRIES - 1) {
+        const delayMs = (attempt + 1) * 3000;
+        await new Promise((r) => setTimeout(r, delayMs));
+      } else {
+        return `搜索失败（已重试 ${MAX_RETRIES} 次）: ${errMsg}`;
+      }
+    }
+  }
+
+  // 全部重试后仍无结果
+  return `搜索"${query}"未找到相关结果（已尝试 ${MAX_RETRIES} 次）。建议更换搜索词或扩大搜索范围。`;
+}
+
+/** 将搜索结果格式化为文本 */
+function formatSearchResult(
+  query: string,
+  result: Awaited<ReturnType<typeof searchWeb>>,
+): string {
   const lines: string[] = [];
 
   if (result.answer) {
     lines.push(`## 搜索摘要\n${result.answer}\n`);
   }
 
-  lines.push(`## 搜索结果（搜索词: ${args.query}）\n`);
+  lines.push(`## 搜索结果（搜索词: ${query}）\n`);
 
   for (const item of result.results) {
     lines.push(
