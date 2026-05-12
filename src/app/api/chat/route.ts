@@ -345,6 +345,41 @@ const SSE_HEADERS = {
   Connection: "keep-alive",
 };
 
+// ---------- 将已有内容直接包装为 SSE 流 ----------
+
+function streamStaticContent(message: DeepSeekMessage): Response {
+  const encoder = new TextEncoder();
+
+  const stream = new ReadableStream({
+    start(controller) {
+      // 发送 reasoning_content（如果有）
+      const reasoning = (message as unknown as Record<string, unknown>)
+        .reasoning_content as string | undefined;
+      if (reasoning) {
+        controller.enqueue(
+          encoder.encode(
+            `data: ${JSON.stringify({ type: "reasoning", content: reasoning })}\n\n`,
+          ),
+        );
+      }
+
+      // 发送主内容
+      if (message.content) {
+        controller.enqueue(
+          encoder.encode(
+            `data: ${JSON.stringify({ type: "content", content: message.content })}\n\n`,
+          ),
+        );
+      }
+
+      controller.enqueue(encoder.encode('data: {"type":"done"}\n\n'));
+      controller.close();
+    },
+  });
+
+  return new Response(stream, { headers: SSE_HEADERS });
+}
+
 // ---------- 流式响应的公共入口 ----------
 
 async function streamFinalResponse(
@@ -432,13 +467,13 @@ export async function POST(request: Request) {
           }
         }
 
-        // 模型决定不再调用工具，将协商得到的 assistant 消息追加到历史后流式输出
+        // 模型已在非流式阶段生成了完整回复，直接包装为 SSE 流返回
+        // 不再二次调用 API，否则模型会认为已回答过只给简短后续
         if (result.message.content) {
-          currentMessages.push(result.message);
-          return streamFinalResponse(apiKey, currentMessages);
+          return streamStaticContent(result.message);
         }
 
-        // content 为 null（如 stop 时），直接流式
+        // content 为 null（如 stop 时），让模型继续流式生成
         return streamFinalResponse(apiKey, currentMessages);
       }
 
