@@ -62,6 +62,51 @@ const SEARCH_WEB_TOOL = {
 
 const TOOLS = [SEARCH_WEB_TOOL];
 
+// ---------- DSML 格式检测与解析 ----------
+// DeepSeek 模型有时会在 content 中直接输出 DSML 格式的工具调用，
+// 而不是通过 API 的 tool_calls 字段返回，需要检测并手动处理。
+
+const DSML_PATTERN =
+  /(?:<｜｜DSML｜｜tool_calls>|<｜tool▁calls｜>|<\|tool_calls\|>)/;
+
+function containsDSMLToolCalls(content: string): boolean {
+  return DSML_PATTERN.test(content);
+}
+
+/**
+ * 解析 content 中的 DSML 格式工具调用，返回结构化的 tool_calls 数组。
+ * 支持 <｜｜DSML｜｜invoke> 和 <｜｜DSML｜｜parameter> 标记。
+ */
+function parseDSMLToolCalls(
+  content: string,
+): NonNullable<DeepSeekMessage["tool_calls"]> | null {
+  const invokeRe =
+    /<｜｜DSML｜｜invoke\s+name="(\w+)">([\s\S]*?)<\/｜｜DSML｜｜invoke>/g;
+  const calls: NonNullable<DeepSeekMessage["tool_calls"]> = [];
+
+  let m: RegExpExecArray | null;
+  while ((m = invokeRe.exec(content)) !== null) {
+    const name = m[1];
+    const paramBlock = m[2];
+
+    const paramRe =
+      /<｜｜DSML｜｜parameter\s+name="(\w+)"[^>]*>([\s\S]*?)<\/｜｜DSML｜｜parameter>/g;
+    const args: Record<string, string> = {};
+    let pm: RegExpExecArray | null;
+    while ((pm = paramRe.exec(paramBlock)) !== null) {
+      args[pm[1]] = pm[2].trim();
+    }
+
+    calls.push({
+      id: `dsml_${Date.now()}_${calls.length}`,
+      type: "function",
+      function: { name, arguments: JSON.stringify(args) },
+    });
+  }
+
+  return calls.length > 0 ? calls : null;
+}
+
 // ---------- DeepSeek API helpers ----------
 
 async function callDeepSeek(
@@ -353,11 +398,43 @@ export async function POST(request: Request) {
         result.message.tool_calls?.length;
 
       if (!hasToolCalls) {
+        // 检测 content 中是否包含 DSML 格式的工具调用
+        // DeepSeek 有时在 content 中直接输出 DSML 标记而非使用 tool_calls 字段
+        if (
+          result.message.content &&
+          containsDSMLToolCalls(result.message.content)
+        ) {
+          const dsmlCalls = parseDSMLToolCalls(result.message.content);
+          if (dsmlCalls) {
+            console.warn(
+              `[chat] 检测到 DSML 格式工具调用（round ${round + 1}），手动解析执行`,
+            );
+            // 用解析出的 tool_calls 替代原始 content
+            const assistantMsg: DeepSeekMessage = {
+              role: "assistant",
+              content: null,
+              tool_calls: dsmlCalls,
+            };
+            currentMessages.push(assistantMsg);
+
+            for (const toolCall of dsmlCalls) {
+              if (toolCall.function.name === "search_web") {
+                const toolResult = await executeToolCall(toolCall);
+                currentMessages.push({
+                  role: "tool",
+                  tool_call_id: toolCall.id,
+                  name: "search_web",
+                  content: toolResult,
+                });
+              }
+            }
+            continue; // 继续循环让模型基于搜索结果生成回复
+          }
+        }
+
         // 模型决定不再调用工具，将协商得到的 assistant 消息追加到历史后流式输出
         if (result.message.content) {
           currentMessages.push(result.message);
-
-          // 继续流式生成后续内容
           return streamFinalResponse(apiKey, currentMessages);
         }
 
