@@ -18,6 +18,7 @@ export const runtime = "nodejs";
 export const maxDuration = 60;
 
 const DEEPSEEK_BASE = "https://api.deepseek.com";
+const QUERY_MODEL_ATTEMPTS = 2;
 
 interface QueryRequest {
   question?: string;
@@ -32,7 +33,6 @@ type QueryAgentResponse =
 
 export async function POST(request: Request) {
   try {
-    const apiKey = getDeepSeekApiKey();
     const body = (await request.json()) as QueryRequest;
 
     if (!body.question?.trim()) {
@@ -49,12 +49,26 @@ export async function POST(request: Request) {
       );
     }
 
-    const response = await requestQueryDecision({
-      apiKey,
+    const requestArgs = {
       question: body.question,
       profile: compactProfileForQuery(body.profile),
       previousResults: compactPreviousResultsForQuery(body.previousResults ?? []),
       domain: body.domain ?? "campaign",
+    } satisfies Omit<Parameters<typeof requestQueryDecision>[0], "apiKey">;
+
+    let apiKey: string | null = null;
+    try {
+      apiKey = getDeepSeekApiKey();
+    } catch {
+      return Response.json({
+        ok: true,
+        ...createFallbackQueryDecision(requestArgs),
+      });
+    }
+
+    const response = await requestQueryDecision({
+      apiKey,
+      ...requestArgs,
     });
 
     return Response.json({ ok: true, ...response });
@@ -76,6 +90,73 @@ async function requestQueryDecision(args: {
   previousResults: unknown[];
   domain: "campaign" | "general";
 }): Promise<QueryAgentResponse> {
+  for (let attempt = 1; attempt <= QUERY_MODEL_ATTEMPTS; attempt++) {
+    try {
+      const response = await requestQueryDecisionOnce(args);
+      if (response.type === "queries" && response.queries.length === 0) {
+        continue;
+      }
+      return response;
+    } catch (error) {
+      if (attempt === QUERY_MODEL_ATTEMPTS) {
+        return createFallbackQueryDecision(args, error);
+      }
+    }
+  }
+
+  return createFallbackQueryDecision(args);
+}
+
+async function requestQueryDecisionOnce(args: {
+  apiKey: string;
+  question: string;
+  profile: CsvQueryProfileContext;
+  previousResults: unknown[];
+  domain: "campaign" | "general";
+}): Promise<QueryAgentResponse> {
+  const content = await requestQueryModelContent(args);
+  const parsed = extractJsonObject(content);
+
+  if (Array.isArray(parsed)) {
+    const queries = normalizeQueries(parsed, args.profile);
+    return queries.length > 0
+      ? { type: "queries", queries, rationale: "Parsed a query list directly." }
+      : createFallbackQueryDecision(args);
+  }
+
+  if (!parsed || typeof parsed !== "object") {
+    return createFallbackQueryDecision(args);
+  }
+
+  const record = parsed as Record<string, unknown>;
+  if (typeof record.finalAnswer === "string" && record.finalAnswer.trim()) {
+    return { type: "final", finalAnswer: record.finalAnswer.trim() };
+  }
+
+  if (Array.isArray(record.queries)) {
+    const queries = normalizeQueries(record.queries, args.profile);
+    if (queries.length === 0) {
+      return createFallbackQueryDecision(args);
+    }
+
+    return {
+      type: "queries",
+      queries,
+      rationale:
+        typeof record.rationale === "string" ? record.rationale : undefined,
+    };
+  }
+
+  return createFallbackQueryDecision(args);
+}
+
+async function requestQueryModelContent(args: {
+  apiKey: string;
+  question: string;
+  profile: CsvQueryProfileContext;
+  previousResults: unknown[];
+  domain: "campaign" | "general";
+}) {
   const resp = await fetch(`${DEEPSEEK_BASE}/chat/completions`, {
     method: "POST",
     headers: {
@@ -109,27 +190,11 @@ async function requestQueryDecision(args: {
 
   const data = await resp.json();
   const content = data.choices?.[0]?.message?.content;
-  const parsed = extractJsonObject(content);
-
-  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-    throw new Error("Query agent did not return valid JSON.");
+  if (typeof content !== "string" || !content.trim()) {
+    throw new Error("Query agent returned empty content.");
   }
 
-  const record = parsed as Record<string, unknown>;
-  if (typeof record.finalAnswer === "string" && record.finalAnswer.trim()) {
-    return { type: "final", finalAnswer: record.finalAnswer.trim() };
-  }
-
-  if (Array.isArray(record.queries)) {
-    return {
-      type: "queries",
-      queries: normalizeQueries(record.queries, args.profile),
-      rationale:
-        typeof record.rationale === "string" ? record.rationale : undefined,
-    };
-  }
-
-  throw new Error("Query agent returned neither queries nor finalAnswer.");
+  return content;
 }
 
 function buildQuerySystemPrompt(domain: "campaign" | "general") {
@@ -244,6 +309,166 @@ function normalizeQuery(
   }
 
   return [];
+}
+
+function createFallbackQueryDecision(args: {
+  question: string;
+  profile: CsvQueryProfileContext;
+  previousResults: unknown[];
+}, reason?: unknown): QueryAgentResponse {
+  const finalAnswer = buildFallbackFinalAnswer(args.question, args.previousResults);
+  if (finalAnswer) {
+    return { type: "final", finalAnswer };
+  }
+
+  const aggregateQuery = createFallbackAggregateQuery(args.question, args.profile);
+  if (aggregateQuery) {
+    return {
+      type: "queries",
+      queries: [aggregateQuery],
+      rationale: formatFallbackRationale(reason),
+    };
+  }
+
+  return {
+    type: "final",
+    finalAnswer: isChineseQuestion(args.question)
+      ? "模型没有返回可执行的 JSON 查询计划，并且当前字段画像不足以生成保底查询。请指定要分组或统计的字段名。"
+      : "The model did not return an executable JSON query plan, and the current profile was not sufficient to build a fallback query. Please specify the fields to group or count.",
+  };
+}
+
+function formatFallbackRationale(reason: unknown) {
+  const reasonText = reason instanceof Error ? reason.message : String(reason ?? "");
+  return reasonText
+    ? `Query planning fell back to a safe local aggregate query: ${reasonText}`
+    : "Query planning fell back to a safe local aggregate query.";
+}
+
+function createFallbackAggregateQuery(
+  question: string,
+  profile: CsvQueryProfileContext,
+): CsvDataQuery | null {
+  const groupBy = inferFallbackGroupBy(question, profile);
+  const countField = groupBy[0] ?? profile.columns[0]?.name;
+  if (!countField) {
+    return null;
+  }
+
+  return {
+    type: "aggregate",
+    plan: {
+      goal: "fallback_count_by_group",
+      requiredFields: groupBy,
+      filters: [],
+      groupBy,
+      metrics: [{ name: "row_count", field: countField, agg: "count" }],
+      ranking: { sortBy: "row_count", direction: "desc", limit: 50 },
+    },
+  };
+}
+
+function inferFallbackGroupBy(
+  question: string,
+  profile: CsvQueryProfileContext,
+): string[] {
+  const lowerQuestion = question.toLowerCase();
+  const origin = findColumnBySemantic(profile, "origin");
+  const destination = findColumnBySemantic(profile, "destination");
+  const route = findColumnBySemantic(profile, "route");
+
+  if (
+    origin &&
+    destination &&
+    (lowerQuestion.includes("origin") ||
+      lowerQuestion.includes("destination") ||
+      lowerQuestion.includes("od") ||
+      lowerQuestion.includes("o&d") ||
+      question.includes("组合") ||
+      question.includes("航线"))
+  ) {
+    return [origin.name, destination.name];
+  }
+
+  if (route) {
+    return [route.name];
+  }
+
+  if (origin && destination) {
+    return [origin.name, destination.name];
+  }
+
+  const dimension = profile.columns.find(
+    (column) => column.type === "string" || column.type === "date",
+  );
+  return dimension ? [dimension.name] : profile.columns.slice(0, 1).map((column) => column.name);
+}
+
+function findColumnBySemantic(
+  profile: CsvQueryProfileContext,
+  semanticType: NonNullable<CsvQueryProfileContext["columns"][number]["semanticType"]>,
+) {
+  return profile.columns.find((column) => column.semanticType === semanticType);
+}
+
+function buildFallbackFinalAnswer(
+  question: string,
+  previousResults: unknown[],
+): string | null {
+  const aggregateContext = previousResults
+    .map((result) => toRecord(result))
+    .findLast((result) => Boolean(toRecord(result?.aggregateResult)));
+  const aggregateResult = toRecord(aggregateContext?.aggregateResult);
+  const resultRows = Array.isArray(aggregateResult?.resultRows)
+    ? aggregateResult.resultRows.flatMap((row) => {
+        const record = toRecord(row);
+        return record ? [record] : [];
+      })
+    : [];
+
+  if (!aggregateResult || resultRows.length === 0) {
+    return null;
+  }
+
+  const query = toRecord(aggregateContext?.query);
+  const plan = toRecord(query?.plan);
+  const groupBy = Array.isArray(plan?.groupBy)
+    ? plan.groupBy.flatMap((field) => (typeof field === "string" ? [field] : []))
+    : [];
+  const topRow = resultRows[0];
+  const metricName =
+    "row_count" in topRow
+      ? "row_count"
+      : Object.keys(topRow).find((key) => !groupBy.includes(key));
+  const metricValue = metricName ? topRow[metricName] : undefined;
+  const topLabel = groupBy.length > 0
+    ? groupBy.map((field) => `${field}=${String(topRow[field] ?? "")}`).join(" / ")
+    : JSON.stringify(topRow);
+  const totalGroupCount = Number(aggregateResult.totalGroupCount);
+
+  if (isChineseQuestion(question)) {
+    const totalText = Number.isFinite(totalGroupCount)
+      ? `共有 ${totalGroupCount} 种组合`
+      : "已完成组合聚合";
+    const metricText = metricName ? `，${metricName} 为 ${String(metricValue)}` : "";
+    return `${totalText}。最受欢迎的组合是 ${topLabel}${metricText}。结果基于本地聚合查询；如结果被截断，完整组合数以 totalGroupCount 为准。`;
+  }
+
+  const totalText = Number.isFinite(totalGroupCount)
+    ? `There are ${totalGroupCount} combinations`
+    : "The combinations have been aggregated";
+  const metricText = metricName ? ` with ${metricName} = ${String(metricValue)}` : "";
+  return `${totalText}. The most popular combination is ${topLabel}${metricText}. This is based on the local aggregate query; if rows were truncated, totalGroupCount is the full combination count.`;
+}
+
+function isChineseQuestion(question: string) {
+  return /[\u3400-\u9fff]/.test(question);
+}
+
+function toRecord(value: unknown): Record<string, unknown> | null {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
 }
 
 function normalizeFilters(value: unknown): FilterRule[] {

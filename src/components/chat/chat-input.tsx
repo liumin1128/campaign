@@ -86,7 +86,7 @@ export function ChatInput({
                 {att.name}
                 {att.size ? ` · ${formatBytes(att.size)}` : ""}
                 {att.type === "csv-analysis"
-                  ? ` · ${getAnalysisLabel(language, att)}`
+                  ? ` · ${getAnalysisLabel(language, att)}${getAnalysisProgressText(att)}`
                   : ""}
               </span>
               <button
@@ -238,4 +238,18 @@ function getAnalysisLabel(language: Language, attachment: FileAttachment) {
                 ? "csv_analysis_completed"
                 : "csv_analysis_failed",
   );
+}
+
+function getAnalysisProgressText(attachment: FileAttachment) {
+  const progress = attachment.analysis?.progress;
+  if (typeof progress !== "number") {
+    return "";
+  }
+
+  const percent = Math.round(Math.max(0, Math.min(progress, 1)) * 100);
+  if (percent <= 0 || percent >= 100) {
+    return "";
+  }
+
+  return ` ${percent}%`;
 }

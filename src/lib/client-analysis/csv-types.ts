@@ -208,4 +208,4 @@ export const SAMPLE_VALUE_LIMIT = 10;
 export const MAX_QUERY_RESULT_ROWS = 50;
 export const MAX_QUERY_COLUMNS = 20;
 export const MAX_QUERY_DISTINCT_VALUES = 100;
-export const MAX_QUERY_ITERATIONS = 6;
+export const MAX_QUERY_ITERATIONS = 12;

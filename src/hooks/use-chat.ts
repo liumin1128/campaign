@@ -942,21 +942,32 @@ async function runFreeCsvQueryAnalysis(args: {
   content: string;
 }> {
   const queryResults: CsvDataQueryResult[] = [...(args.previousResults ?? [])];
+  const recoveryNotes: string[] = [];
+  const progressLog: string[] = [];
+  const updateProgressStatus = (current: string) => {
+    args.onStatus([...progressLog, current].join("\n"));
+  };
 
   for (let iteration = 0; iteration < MAX_QUERY_ITERATIONS; iteration++) {
-    args.onAttachmentPatch({ status: "planning", queryResults });
-    args.onStatus(
+    const roundNumber = iteration + 1;
+    args.onAttachmentPatch({
+      status: "planning",
+      progress: getQueryRoundProgress(iteration, 0),
+      queryResults,
+    });
+    updateProgressStatus(
       iteration === 0
-        ? "模型正在选择要查询的行、列或聚合口径…"
-        : `模型正在基于第 ${iteration} 轮结果继续查询…`,
+        ? `第 ${roundNumber} 轮：模型正在选择要查询的行、列或聚合口径…`
+        : `第 ${roundNumber} 轮：模型正在基于已有结果继续查询…`,
     );
 
-    const decision = await requestDataQueries({
+    const decision = await requestDataQueriesWithFallback({
       question: args.question,
       profile: args.profile,
       previousResults: queryResults,
       domain: args.domain,
       signal: args.signal,
+      recoveryNotes,
     });
 
     if (decision.type === "final") {
@@ -977,19 +988,73 @@ async function runFreeCsvQueryAnalysis(args: {
       break;
     }
 
-    args.onAttachmentPatch({ status: "executing", queryResults });
-    args.onStatus(
-      `正在本地执行模型请求的 ${decision.queries.length} 个数据查询…`,
+    const rationaleText = formatRationaleForStatus(decision.rationale);
+    if (rationaleText) {
+      progressLog.push(`第 ${roundNumber} 轮模型意图：${rationaleText}`);
+    }
+
+    const queryCandidates = buildExecutableQueryCandidates(
+      decision.queries,
+      args.question,
+      args.profile,
+    );
+    args.onAttachmentPatch({
+      status: "executing",
+      progress: getQueryRoundProgress(iteration, 0.35),
+      queryResults,
+    });
+    updateProgressStatus(
+      `第 ${roundNumber} 轮：准备在浏览器本地执行 ${queryCandidates.length} 个数据查询…`,
     );
 
-    for (const query of decision.queries) {
-      const result = await executeQueryInWorker(args.workerKey, query);
-      queryResults.push(result);
+    let successfulQueries = 0;
+    for (const [queryIndex, query] of queryCandidates.entries()) {
+      const queryNumber = queryIndex + 1;
+      args.onAttachmentPatch({
+        status: "executing",
+        progress: getQueryRoundProgress(
+          iteration,
+          0.35 + (queryIndex / queryCandidates.length) * 0.45,
+        ),
+        queryResults,
+      });
+      updateProgressStatus(
+        `第 ${roundNumber} 轮：正在执行第 ${queryNumber}/${queryCandidates.length} 个本地查询（${describeCsvDataQuery(query)}）…`,
+      );
+
+      try {
+        const result = await executeQueryInWorker(args.workerKey, query);
+        queryResults.push(result);
+        successfulQueries += 1;
+        args.onAttachmentPatch({
+          status: "executing",
+          progress: getQueryRoundProgress(
+            iteration,
+            0.35 + (queryNumber / queryCandidates.length) * 0.45,
+          ),
+          queryResults,
+        });
+        updateProgressStatus(
+          `第 ${roundNumber} 轮：已完成第 ${queryNumber}/${queryCandidates.length} 个本地查询（${describeCsvDataQuery(query)}）。`,
+        );
+      } catch (error) {
+        recoveryNotes.push(
+          `本地查询失败，已尝试后备查询：${formatErrorMessage(error)}`,
+        );
+        updateProgressStatus(
+          `第 ${roundNumber} 轮：第 ${queryNumber}/${queryCandidates.length} 个本地查询失败，继续尝试后备查询…`,
+        );
+      }
+    }
+
+    if (successfulQueries === 0) {
+      recoveryNotes.push("本轮没有可执行成功的查询，已进入总结阶段。");
+      break;
     }
   }
 
-  args.onAttachmentPatch({ status: "summarizing", queryResults });
-  args.onStatus("正在根据已查询的数据生成结论…");
+  args.onAttachmentPatch({ status: "summarizing", progress: 0.92, queryResults });
+  updateProgressStatus("正在根据已查询的数据生成结论…");
 
   const summary = await requestDataQueriesFinalAnswer({
     question: args.question,
@@ -997,6 +1062,7 @@ async function runFreeCsvQueryAnalysis(args: {
     previousResults: queryResults,
     domain: args.domain,
     signal: args.signal,
+    recoveryNotes,
   });
   const content = buildQueryAttachmentContent({
     profileSummary: args.profileSummary,
@@ -1005,6 +1071,21 @@ async function runFreeCsvQueryAnalysis(args: {
   });
 
   return { summary, queryResults, content };
+}
+
+function getQueryRoundProgress(iteration: number, roundProgress: number) {
+  const progress = (iteration + Math.max(0, Math.min(roundProgress, 1))) /
+    MAX_QUERY_ITERATIONS;
+  return Math.max(0.01, Math.min(progress, 0.9));
+}
+
+function formatRationaleForStatus(rationale: string | undefined) {
+  if (!rationale?.trim()) {
+    return "";
+  }
+
+  const singleLine = rationale.replace(/\s+/g, " ").trim();
+  return singleLine.length > 180 ? `${singleLine.slice(0, 177)}...` : singleLine;
 }
 
 function buildQueryAttachmentContent(args: {
@@ -1039,6 +1120,40 @@ type DataQueryDecision =
   | { type: "queries"; queries: CsvDataQuery[]; rationale?: string }
   | { type: "final"; finalAnswer: string };
 
+async function requestDataQueriesWithFallback(args: {
+  question: string;
+  profile: CsvProfile;
+  previousResults: CsvDataQueryResult[];
+  domain: "campaign" | "general";
+  signal: AbortSignal;
+  recoveryNotes: string[];
+}): Promise<DataQueryDecision> {
+  try {
+    const decision = await requestDataQueries(args);
+    if (decision.type === "queries" && decision.queries.length === 0) {
+      args.recoveryNotes.push("模型没有返回可执行查询，已切换到本地后备查询。");
+      return {
+        type: "queries",
+        queries: [createLocalFallbackAggregateQuery(args.question, args.profile)],
+      };
+    }
+
+    return decision;
+  } catch (error) {
+    if ((error as Error)?.name === "AbortError") {
+      throw error;
+    }
+
+    args.recoveryNotes.push(
+      `查询规划失败，已切换到本地后备查询：${formatErrorMessage(error)}`,
+    );
+    return {
+      type: "queries",
+      queries: [createLocalFallbackAggregateQuery(args.question, args.profile)],
+    };
+  }
+}
+
 async function requestDataQueries(args: {
   question: string;
   profile: CsvProfile;
@@ -1070,7 +1185,7 @@ async function requestDataQueries(args: {
   return {
     type: "queries",
     queries: Array.isArray(data.queries) ? data.queries : [],
-    rationale: data.rationale,
+    rationale: typeof data.rationale === "string" ? data.rationale : undefined,
   };
 }
 
@@ -1080,12 +1195,189 @@ async function requestDataQueriesFinalAnswer(args: {
   previousResults: CsvDataQueryResult[];
   domain: "campaign" | "general";
   signal: AbortSignal;
+  recoveryNotes?: string[];
 }): Promise<string> {
-  const decision = await requestDataQueries(args);
+  let decision: DataQueryDecision;
+  try {
+    decision = await requestDataQueries(args);
+  } catch (error) {
+    if ((error as Error)?.name === "AbortError") {
+      throw error;
+    }
 
-  if (decision.type === "final") {
-    return decision.finalAnswer;
+    return buildLocalFallbackSummary({
+      question: args.question,
+      queryResults: args.previousResults,
+      recoveryNotes: [
+        ...(args.recoveryNotes ?? []),
+        `总结请求失败，已使用本地结果生成简要结论：${formatErrorMessage(error)}`,
+      ],
+    });
   }
 
-  return "已达到本地查询轮次上限，但模型仍需要更多查询。请缩小问题范围，或指定要查看的行、列、筛选条件。";
+  if (decision.type === "final") {
+    return appendRecoveryNotes(decision.finalAnswer, args.recoveryNotes ?? []);
+  }
+
+  return buildLocalFallbackSummary({
+    question: args.question,
+    queryResults: args.previousResults,
+    recoveryNotes: [
+      ...(args.recoveryNotes ?? []),
+      "已达到本地查询轮次上限，模型仍请求更多查询。",
+    ],
+  });
+}
+
+function buildExecutableQueryCandidates(
+  queries: CsvDataQuery[],
+  question: string,
+  profile: CsvProfile,
+) {
+  const fallback = createLocalFallbackAggregateQuery(question, profile);
+  const seen = new Set<string>();
+  return [...queries, fallback].filter((query) => {
+    const key = JSON.stringify(query);
+    if (seen.has(key)) {
+      return false;
+    }
+    seen.add(key);
+    return true;
+  });
+}
+
+function describeCsvDataQuery(query: CsvDataQuery) {
+  if (query.type === "aggregate") {
+    const groupText = query.plan.groupBy.length > 0
+      ? query.plan.groupBy.join(" + ")
+      : "全表";
+    const metricText = query.plan.metrics
+      .map((metric) => metric.name || `${metric.agg}(${metric.field})`)
+      .join(", ");
+    return `聚合：按 ${groupText}，计算 ${metricText || "指标"}`;
+  }
+
+  if (query.type === "filterRows") {
+    return `筛选明细：${query.filters.length} 个条件`;
+  }
+
+  if (query.type === "distinctValues") {
+    return `唯一值：${query.column}`;
+  }
+
+  if (query.type === "columnStats") {
+    return `字段统计：${query.column}`;
+  }
+
+  if (query.type === "columns") {
+    return `读取字段：${query.columns.join(", ")}`;
+  }
+
+  return "读取行";
+}
+
+function createLocalFallbackAggregateQuery(
+  question: string,
+  profile: CsvProfile,
+): CsvDataQuery {
+  const groupBy = inferLocalFallbackGroupBy(question, profile);
+  const countField = groupBy[0] ?? profile.columns[0]?.name ?? "";
+
+  return {
+    type: "aggregate",
+    plan: {
+      goal: "local_fallback_count_by_group",
+      requiredFields: groupBy,
+      filters: [],
+      groupBy,
+      metrics: [{ name: "row_count", field: countField, agg: "count" }],
+      ranking: { sortBy: "row_count", direction: "desc", limit: 50 },
+    },
+  };
+}
+
+function inferLocalFallbackGroupBy(question: string, profile: CsvProfile): string[] {
+  const lowerQuestion = question.toLowerCase();
+  const origin = findProfileColumnBySemantic(profile, "origin");
+  const destination = findProfileColumnBySemantic(profile, "destination");
+  const route = findProfileColumnBySemantic(profile, "route");
+
+  if (
+    origin &&
+    destination &&
+    (lowerQuestion.includes("origin") ||
+      lowerQuestion.includes("destination") ||
+      lowerQuestion.includes("od") ||
+      lowerQuestion.includes("o&d") ||
+      question.includes("组合") ||
+      question.includes("航线"))
+  ) {
+    return [origin.name, destination.name];
+  }
+
+  if (route) {
+    return [route.name];
+  }
+
+  if (origin && destination) {
+    return [origin.name, destination.name];
+  }
+
+  const dimension = profile.columns.find(
+    (column) => column.type === "string" || column.type === "date",
+  );
+  return dimension ? [dimension.name] : profile.columns.slice(0, 1).map((column) => column.name);
+}
+
+function findProfileColumnBySemantic(
+  profile: CsvProfile,
+  semanticType: NonNullable<CsvProfile["columns"][number]["semanticType"]>,
+) {
+  return profile.columns.find((column) => column.semanticType === semanticType);
+}
+
+function buildLocalFallbackSummary(args: {
+  question: string;
+  queryResults: CsvDataQueryResult[];
+  recoveryNotes: string[];
+}) {
+  const aggregate = args.queryResults
+    .map((result) => result.aggregateResult)
+    .findLast(Boolean);
+  const topRow = aggregate?.resultRows[0];
+  const groupBy = aggregate?.plan.groupBy ?? [];
+  const metricName = topRow
+    ? "row_count" in topRow
+      ? "row_count"
+      : Object.keys(topRow).find((key) => !groupBy.includes(key))
+    : undefined;
+  const metricValue = metricName && topRow ? topRow[metricName] : undefined;
+  const topLabel =
+    topRow && groupBy.length > 0
+      ? groupBy.map((field) => `${field}=${String(topRow[field] ?? "")}`).join(" / ")
+      : topRow
+        ? JSON.stringify(topRow)
+        : "";
+  const notes = args.recoveryNotes.length
+    ? `\n\n恢复记录：${args.recoveryNotes.join("；")}`
+    : "";
+
+  if (!aggregate || !topRow) {
+    return `本地查询没有得到可总结的聚合结果。请指定要查询的字段或缩小问题范围。${notes}`;
+  }
+
+  const metricText = metricName ? `，${metricName} 为 ${String(metricValue)}` : "";
+  return `本地聚合结果显示：共有 ${aggregate.totalGroupCount} 个分组，最靠前的分组是 ${topLabel}${metricText}。结果基于 ${aggregate.matchedRowCount}/${aggregate.rowCount} 行数据。${notes}`;
+}
+
+function appendRecoveryNotes(summary: string, recoveryNotes: string[]) {
+  if (recoveryNotes.length === 0) {
+    return summary;
+  }
+
+  return `${summary}\n\n恢复记录：${recoveryNotes.join("；")}`;
+}
+
+function formatErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : String(error);
 }
