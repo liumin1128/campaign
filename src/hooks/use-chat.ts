@@ -36,6 +36,17 @@ import {
 import { useActiveSession, useChatStore } from "@/store/chat-store";
 import { usePromptOverrideStore } from "@/store/prompt-override-store";
 
+type ActiveCsvContext = {
+  id: string;
+  name: string;
+  size?: number;
+  profile: CsvProfile;
+  profileSummary: CsvProfileSummary;
+  queryResults?: CsvDataQueryResult[];
+  summary?: string;
+  content?: string;
+};
+
 export function useChat() {
   const {
     session,
@@ -72,6 +83,7 @@ export function useChat() {
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const largeCsvInputRef = useRef<HTMLInputElement>(null);
+  const csvContextsRef = useRef<Record<string, ActiveCsvContext[]>>({});
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -95,6 +107,7 @@ export function useChat() {
   useEffect(() => {
     return () => {
       resetAllCsvWorkers();
+      csvContextsRef.current = {};
     };
   }, []);
 
@@ -127,6 +140,30 @@ export function useChat() {
       return createSession(agentId);
     },
     [sessionId, input, createSession, setDraftInput],
+  );
+
+  const replaceCsvContexts = useCallback(
+    (id: string, nextContexts: ActiveCsvContext[]) => {
+      const nextIds = new Set(nextContexts.map((context) => context.id));
+      for (const context of csvContextsRef.current[id] ?? []) {
+        if (!nextIds.has(context.id)) {
+          resetCsvWorker(context.id);
+        }
+      }
+      csvContextsRef.current[id] = nextContexts;
+    },
+    [],
+  );
+
+  const handleDeleteSession = useCallback(
+    (id: string) => {
+      for (const context of csvContextsRef.current[id] ?? []) {
+        resetCsvWorker(context.id);
+      }
+      delete csvContextsRef.current[id];
+      deleteSession(id);
+    },
+    [deleteSession],
   );
 
   /** 语言回复指令 */
@@ -225,6 +262,13 @@ export function useChat() {
         quotePrefix + (trimmed || defaultCsvQuestion),
         csvAnalysisAttachments,
       );
+      return;
+    }
+
+    const activeCsvContexts =
+      sessionId && trimmed ? csvContextsRef.current[sessionId] ?? [] : [];
+    if (activeCsvContexts.length > 0) {
+      await handleCsvContextFollowup(quotePrefix + trimmed, activeCsvContexts);
       return;
     }
 
@@ -549,6 +593,7 @@ export function useChat() {
 
     try {
       const finalAttachments: FileAttachment[] = [];
+      const finalContexts: ActiveCsvContext[] = [];
       const summaries: string[] = [];
 
       for (const [index, analysisAttachment] of csvAnalysisAttachments.entries()) {
@@ -595,6 +640,18 @@ export function useChat() {
         };
 
         finalAttachments.push(finalAttachment);
+        if (attachmentId) {
+          finalContexts.push({
+            id: attachmentId,
+            name: analysisAttachment.name,
+            size: analysisAttachment.size,
+            profile,
+            profileSummary,
+            queryResults,
+            summary,
+            content,
+          });
+        }
         summaries.push(
           csvAnalysisAttachments.length > 1
             ? `## ${analysisAttachment.name}\n\n${summary}`
@@ -629,11 +686,7 @@ export function useChat() {
       });
 
       updateSessionMessages(sid, finalMessages);
-      for (const attachment of csvAnalysisAttachments) {
-        if (attachment.id) {
-          resetCsvWorker(attachment.id);
-        }
-      }
+      replaceCsvContexts(sid, finalContexts);
       setFileAttachments([]);
     } catch (error) {
       const aborted = (error as Error)?.name === "AbortError";
@@ -657,6 +710,119 @@ export function useChat() {
           error: errorMessage,
         });
       }
+    } finally {
+      setIsLoading(false);
+      abortRef.current = null;
+    }
+  }
+
+  async function handleCsvContextFollowup(
+    userContent: string,
+    csvContexts: ActiveCsvContext[],
+  ) {
+    if (!sessionId || isLoading) return;
+
+    const sid = sessionId;
+    const assistantId = crypto.randomUUID();
+    const userMsg: Message = {
+      id: crypto.randomUUID(),
+      role: "user",
+      content: userContent,
+    };
+    const assistantMsg: Message = {
+      id: assistantId,
+      role: "assistant",
+      content:
+        csvContexts.length > 1
+          ? `正在基于 ${csvContexts.length} 个已上传 CSV 继续查询…`
+          : `正在基于已上传 CSV「${csvContexts[0].name}」继续查询…`,
+      reasoning: "",
+    };
+    const updatedMessages = [...messages, userMsg, assistantMsg];
+
+    updateSessionMessages(sid, updatedMessages);
+    setInput("");
+    setDraftInput(sid, "");
+    setIsLoading(true);
+
+    const controller = new AbortController();
+    abortRef.current = controller;
+
+    try {
+      const nextContexts: ActiveCsvContext[] = [];
+      const summaries: string[] = [];
+
+      for (const [index, context] of csvContexts.entries()) {
+        const statusPrefix =
+          csvContexts.length > 1
+            ? `(${index + 1}/${csvContexts.length}) ${context.name}：`
+            : "";
+
+        updateAssistantMessage(
+          sid,
+          updatedMessages,
+          assistantId,
+          `${statusPrefix}模型正在决定要继续读取哪些数据…`,
+        );
+
+        const queryAnalysis = await runFreeCsvQueryAnalysis({
+          workerKey: context.id,
+          question: userContent,
+          profile: context.profile,
+          profileSummary: context.profileSummary,
+          previousResults: context.queryResults,
+          domain:
+            selectedAgent?.id === "campaign_planning" ? "campaign" : "general",
+          signal: controller.signal,
+          onStatus: (message) => {
+            updateAssistantMessage(
+              sid,
+              updatedMessages,
+              assistantId,
+              `${statusPrefix}${message}`,
+            );
+          },
+          onAttachmentPatch: () => {},
+        });
+
+        nextContexts.push({
+          ...context,
+          queryResults: queryAnalysis.queryResults,
+          summary: queryAnalysis.summary,
+          content: queryAnalysis.content,
+        });
+        summaries.push(
+          csvContexts.length > 1
+            ? `## ${context.name}\n\n${queryAnalysis.summary}`
+            : queryAnalysis.summary,
+        );
+      }
+
+      replaceCsvContexts(sid, nextContexts);
+      updateSessionMessages(
+        sid,
+        updatedMessages.map((message) =>
+          message.id === assistantId
+            ? { ...message, content: summaries.join("\n\n") }
+            : message,
+        ),
+      );
+    } catch (error) {
+      const aborted = (error as Error)?.name === "AbortError";
+      const errorMessage = aborted
+        ? t(language, "stopped")
+        : error instanceof Error
+          ? error.message
+          : String(error);
+
+      updateSessionMessages(
+        sid,
+        updatedMessages.map((message) =>
+          message.id === assistantId
+            ? { ...message, content: `❌ ${errorMessage}` }
+            : message,
+        ),
+      );
     } finally {
       setIsLoading(false);
       abortRef.current = null;
@@ -731,7 +897,7 @@ export function useChat() {
     // 会话管理
     createSession: handleCreateSession,
     switchSession: handleSwitchSession,
-    deleteSession,
+    deleteSession: handleDeleteSession,
     renameSession,
   };
 }
@@ -765,6 +931,7 @@ async function runFreeCsvQueryAnalysis(args: {
   question: string;
   profile: CsvProfile;
   profileSummary: CsvProfileSummary;
+  previousResults?: CsvDataQueryResult[];
   domain: "campaign" | "general";
   signal: AbortSignal;
   onStatus: (message: string) => void;
@@ -774,7 +941,7 @@ async function runFreeCsvQueryAnalysis(args: {
   queryResults: CsvDataQueryResult[];
   content: string;
 }> {
-  const queryResults: CsvDataQueryResult[] = [];
+  const queryResults: CsvDataQueryResult[] = [...(args.previousResults ?? [])];
 
   for (let iteration = 0; iteration < MAX_QUERY_ITERATIONS; iteration++) {
     args.onAttachmentPatch({ status: "planning", queryResults });
