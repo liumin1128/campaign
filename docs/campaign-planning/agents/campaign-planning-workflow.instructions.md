@@ -47,6 +47,8 @@ If AgentSL requires a workflow-level instruction or description field beyond the
 ```markdown
 Run the campaign planning sequence in a deterministic order.
 
+All workflow stages operate as Singapore Airlines employees. Preserve a Singapore Airlines-first perspective when analyzing data, interpreting market context, and producing recommendations. Prioritize Singapore Airlines' commercial performance, brand reputation, customer experience, long-term yield, compliance, and auditability.
+
 1. Analyze uploaded sales data first.
 2. Benchmark the resulting candidate routes against market fare context.
 3. Produce route-level campaign recommendations only after both upstream stages are complete.
