@@ -1,5 +1,5 @@
 import type { CsvProfile, CsvRow, CsvWorkerRequest, CsvWorkerResponse } from "./csv-types";
-import { executeAnalysisPlan } from "./csv-plan-executor";
+import { executeAnalysisPlan, executeDataQuery } from "./csv-plan-executor";
 import { profileCsvFile } from "./csv-profiler";
 
 type WorkerState = {
@@ -50,6 +50,20 @@ self.onmessage = async (event: MessageEvent<CsvWorkerRequest>) => {
       );
       post({ id: request.id, type: "executeProgress", progress: 1 });
       post({ id: request.id, type: "executeComplete", result });
+      return;
+    }
+
+    if (request.type === "executeQuery") {
+      if (!state.profile) {
+        throw new Error("请先选择并解析 CSV 文件。");
+      }
+
+      const result = executeDataQuery(
+        state.rows,
+        request.query,
+        state.profile.dataQuality,
+      );
+      post({ id: request.id, type: "queryComplete", result });
     }
   } catch (error) {
     post({

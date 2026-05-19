@@ -1,8 +1,13 @@
 import {
+  MAX_QUERY_COLUMNS,
+  MAX_QUERY_DISTINCT_VALUES,
+  MAX_QUERY_RESULT_ROWS,
   MAX_RESULT_ROWS,
   type AnalysisPlan,
   type AnalysisResult,
   type CsvDataQuality,
+  type CsvDataQuery,
+  type CsvDataQueryResult,
   type CsvRow,
   type MetricRule,
 } from "./csv-types";
@@ -81,6 +86,116 @@ export function executeAnalysisPlan(
   };
 }
 
+export function executeDataQuery(
+  rows: CsvRow[],
+  query: CsvDataQuery,
+  dataQuality: CsvDataQuality,
+): CsvDataQueryResult {
+  const warnings: string[] = [];
+  const allColumns = Object.keys(rows[0] ?? {});
+
+  if (query.type === "aggregate") {
+    return {
+      query,
+      rowCount: rows.length,
+      aggregateResult: executeAnalysisPlan(rows, query.plan, dataQuality),
+      warnings,
+    };
+  }
+
+  if (query.type === "rows") {
+    const selectedRows = selectRowsByPosition(rows, query, warnings);
+    return {
+      query,
+      rowCount: rows.length,
+      matchedRowCount: selectedRows.length,
+      rows: projectRows(selectedRows, query.columns, allColumns, warnings),
+      warnings,
+    };
+  }
+
+  if (query.type === "columns") {
+    const start = normalizeStartRow(query.startRow);
+    const limit = normalizeLimit(query.limit);
+    const selectedRows = rows.slice(start, start + limit);
+    return {
+      query,
+      rowCount: rows.length,
+      matchedRowCount: selectedRows.length,
+      rows: projectRows(selectedRows, query.columns, allColumns, warnings),
+      warnings,
+    };
+  }
+
+  if (query.type === "filterRows") {
+    const plan: AnalysisPlan = {
+      goal: "query_filter_rows",
+      requiredFields: [],
+      filters: query.filters,
+      groupBy: [],
+      metrics: [{ name: "row_count", field: allColumns[0] ?? "", agg: "count" }],
+    };
+    const limit = normalizeLimit(query.limit);
+    const matchedRows = rows.filter((row) => matchesFilters(row, plan));
+    return {
+      query,
+      rowCount: rows.length,
+      matchedRowCount: matchedRows.length,
+      rows: projectRows(matchedRows.slice(0, limit), query.columns, allColumns, warnings),
+      warnings: [
+        ...warnings,
+        ...(matchedRows.length > limit
+          ? [`筛选结果已截断为前 ${limit} 行。`]
+          : []),
+      ],
+    };
+  }
+
+  if (query.type === "distinctValues") {
+    if (!allColumns.includes(query.column)) {
+      return {
+        query,
+        rowCount: rows.length,
+        values: [],
+        warnings: [`字段不存在：${query.column}`],
+      };
+    }
+
+    const limit = Math.min(
+      normalizeLimit(query.limit, MAX_QUERY_DISTINCT_VALUES),
+      MAX_QUERY_DISTINCT_VALUES,
+    );
+    const values = Array.from(
+      new Set(rows.map((row) => row[query.column] ?? "").filter(Boolean)),
+    );
+
+    return {
+      query,
+      rowCount: rows.length,
+      matchedRowCount: values.length,
+      values: values.slice(0, limit),
+      warnings:
+        values.length > limit ? [`唯一值已截断为前 ${limit} 个。`] : warnings,
+    };
+  }
+
+  if (!allColumns.includes(query.column)) {
+    return {
+      query,
+      rowCount: rows.length,
+      stats: {},
+      warnings: [`字段不存在：${query.column}`],
+    };
+  }
+
+  return {
+    query,
+    rowCount: rows.length,
+    stats: buildColumnStats(rows, query.column),
+    warnings,
+  };
+}
+
 function matchesFilters(row: CsvRow, plan: AnalysisPlan): boolean {
   return plan.filters.every((filter) => {
     const rawValue = row[filter.field] ?? "";
@@ -133,6 +248,106 @@ function matchesFilters(row: CsvRow, plan: AnalysisPlan): boolean {
       ? rawValue >= String(compareValue)
       : rawValue <= String(compareValue);
   });
+}
+
+function selectRowsByPosition(
+  rows: CsvRow[],
+  query: Extract<CsvDataQuery, { type: "rows" }>,
+  warnings: string[],
+) {
+  if (query.rowNumbers?.length) {
+    const selectedRows = query.rowNumbers.flatMap((rowNumber) => {
+      const index = Math.floor(rowNumber) - 1;
+      return rows[index] ? [rows[index]] : [];
+    });
+    if (selectedRows.length < query.rowNumbers.length) {
+      warnings.push("部分行号超出 CSV 范围，已跳过。");
+    }
+    return selectedRows.slice(0, normalizeLimit(query.limit));
+  }
+
+  const start = normalizeStartRow(query.startRow);
+  const limit = normalizeLimit(query.limit);
+  return rows.slice(start, start + limit);
+}
+
+function projectRows(
+  rows: CsvRow[],
+  requestedColumns: string[] | undefined,
+  allColumns: string[],
+  warnings: string[],
+) {
+  const columns = normalizeColumns(requestedColumns, allColumns, warnings);
+  return rows.map((row, index) => ({
+    rowNumber: index + 1,
+    ...Object.fromEntries(columns.map((column) => [column, row[column] ?? ""])),
+  }));
+}
+
+function normalizeColumns(
+  requestedColumns: string[] | undefined,
+  allColumns: string[],
+  warnings: string[],
+) {
+  const validColumns =
+    requestedColumns?.filter((column) => allColumns.includes(column)) ?? allColumns;
+  if (requestedColumns && validColumns.length < requestedColumns.length) {
+    warnings.push("部分请求字段不存在，已跳过。");
+  }
+
+  if (validColumns.length > MAX_QUERY_COLUMNS) {
+    warnings.push(`字段过多，已截断为前 ${MAX_QUERY_COLUMNS} 列。`);
+  }
+
+  return validColumns.slice(0, MAX_QUERY_COLUMNS);
+}
+
+function normalizeStartRow(startRow: number | undefined) {
+  if (!Number.isFinite(startRow) || !startRow || startRow < 1) {
+    return 0;
+  }
+
+  return Math.floor(startRow) - 1;
+}
+
+function normalizeLimit(limit: number | undefined, fallback = MAX_QUERY_RESULT_ROWS) {
+  if (!Number.isFinite(limit) || !limit || limit < 1) {
+    return fallback;
+  }
+
+  return Math.min(Math.floor(limit), fallback);
+}
+
+function buildColumnStats(rows: CsvRow[], column: string) {
+  const values = rows.map((row) => row[column] ?? "");
+  const nonEmptyValues = values.filter((value) => value.trim() !== "");
+  const numericValues = nonEmptyValues.flatMap((value) => {
+    const number = parseNumber(value);
+    return number === null ? [] : [number];
+  });
+  const distinctValues = new Set(nonEmptyValues);
+
+  return {
+    rowCount: rows.length,
+    nonEmptyCount: nonEmptyValues.length,
+    missingCount: rows.length - nonEmptyValues.length,
+    distinctCount: distinctValues.size,
+    min:
+      numericValues.length > 0
+        ? Math.min(...numericValues)
+        : Array.from(distinctValues).sort()[0] ?? null,
+    max:
+      numericValues.length > 0
+        ? Math.max(...numericValues)
+        : Array.from(distinctValues).sort().at(-1) ?? null,
+    avg:
+      numericValues.length > 0
+        ? roundNumber(
+            numericValues.reduce((total, value) => total + value, 0) /
+              numericValues.length,
+          )
+        : null,
+  };
 }
 
 function getGroupValues(row: CsvRow, groupBy: string[]) {

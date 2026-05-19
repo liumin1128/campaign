@@ -103,6 +103,51 @@ export interface AnalysisResult {
   warnings: string[];
 }
 
+export type CsvDataQuery =
+  | {
+      type: "rows";
+      rowNumbers?: number[];
+      startRow?: number;
+      limit?: number;
+      columns?: string[];
+    }
+  | {
+      type: "columns";
+      columns: string[];
+      startRow?: number;
+      limit?: number;
+    }
+  | {
+      type: "filterRows";
+      filters: FilterRule[];
+      columns?: string[];
+      limit?: number;
+    }
+  | {
+      type: "distinctValues";
+      column: string;
+      limit?: number;
+    }
+  | {
+      type: "columnStats";
+      column: string;
+    }
+  | {
+      type: "aggregate";
+      plan: AnalysisPlan;
+    };
+
+export interface CsvDataQueryResult {
+  query: CsvDataQuery;
+  rowCount: number;
+  matchedRowCount?: number;
+  rows?: Array<Record<string, string | number>>;
+  values?: string[];
+  stats?: Record<string, string | number | null>;
+  aggregateResult?: AnalysisResult;
+  warnings: string[];
+}
+
 export type CsvAnalysisStatus =
   | "profiling"
   | "profiled"
@@ -120,6 +165,7 @@ export interface CsvAnalysisState {
   profileSummary?: CsvProfileSummary;
   plan?: AnalysisPlan;
   result?: AnalysisResult;
+  queryResults?: CsvDataQueryResult[];
   summary?: string;
   error?: string;
   notes?: string[];
@@ -127,13 +173,15 @@ export interface CsvAnalysisState {
 
 export type CsvWorkerRequest =
   | { id: string; type: "profile"; file: File; options?: CsvProfileOptions }
-  | { id: string; type: "executePlan"; plan: AnalysisPlan };
+  | { id: string; type: "executePlan"; plan: AnalysisPlan }
+  | { id: string; type: "executeQuery"; query: CsvDataQuery };
 
 export type CsvWorkerResponse =
   | { id: string; type: "profileProgress"; progress: number }
   | { id: string; type: "profileComplete"; profile: CsvProfile }
   | { id: string; type: "executeProgress"; progress: number }
   | { id: string; type: "executeComplete"; result: AnalysisResult }
+  | { id: string; type: "queryComplete"; result: CsvDataQueryResult }
   | { id: string; type: "error"; error: string };
 
 export interface CsvProfileOptions {
@@ -148,3 +196,7 @@ export const MAX_RESULT_ROWS = 100;
 export const DEFAULT_RESULT_LIMIT = 20;
 export const SAMPLE_ROW_LIMIT = 20;
 export const SAMPLE_VALUE_LIMIT = 10;
+export const MAX_QUERY_RESULT_ROWS = 50;
+export const MAX_QUERY_COLUMNS = 20;
+export const MAX_QUERY_DISTINCT_VALUES = 100;
+export const MAX_QUERY_ITERATIONS = 6;

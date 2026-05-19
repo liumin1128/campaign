@@ -14,17 +14,18 @@ import {
   summarizeProfile,
 } from "@/lib/client-analysis/csv-analysis-prompts";
 import {
-  executePlanInWorker,
+  executeQueryInWorker,
   profileCsvInWorker,
   resetAllCsvWorkers,
   resetCsvWorker,
 } from "@/lib/client-analysis/csv-worker-client";
 import {
   LARGE_CSV_MAX_BYTES,
-  type AnalysisPlan,
-  type AnalysisResult,
+  MAX_QUERY_ITERATIONS,
   type CsvAnalysisState,
   type CsvAnalysisStatus,
+  type CsvDataQuery,
+  type CsvDataQueryResult,
   type CsvProfile,
   type CsvProfileSummary,
 } from "@/lib/client-analysis/csv-types";
@@ -559,68 +560,30 @@ export function useChat() {
           sid,
           updatedMessages,
           assistantId,
-          `${statusPrefix}正在生成 CSV 本地分析计划…`,
+          `${statusPrefix}模型正在决定要查询哪些数据…`,
         );
 
-        const planResponse = await requestAnalysisPlan({
+        const queryAnalysis = await runFreeCsvQueryAnalysis({
+          workerKey: attachmentId!,
           question: userContent,
           profile,
+          profileSummary,
           domain:
             selectedAgent?.id === "campaign_planning" ? "campaign" : "general",
           signal: controller.signal,
-        });
-        const plan = planResponse.plan;
-        const notes = planResponse.notes ?? [];
-
-        updateAnalysisAttachment(attachmentId, {
-          status: "executing",
-          plan,
-          notes,
-        });
-        updateAssistantMessage(
-          sid,
-          updatedMessages,
-          assistantId,
-          `${statusPrefix}正在本地执行 CSV 聚合分析…`,
-        );
-
-        const result = await executePlanInWorker(
-          attachmentId!,
-          plan,
-          (progress) => {
-            updateAnalysisAttachment(attachmentId, {
-              status: "executing",
-              progress,
-            });
+          onStatus: (message) => {
+            updateAssistantMessage(
+              sid,
+              updatedMessages,
+              assistantId,
+              `${statusPrefix}${message}`,
+            );
           },
-        );
-
-        updateAnalysisAttachment(attachmentId, {
-          status: "summarizing",
-          result,
+          onAttachmentPatch: (patch) => {
+            updateAnalysisAttachment(attachmentId, patch);
+          },
         });
-        updateAssistantMessage(
-          sid,
-          updatedMessages,
-          assistantId,
-          `${statusPrefix}正在根据聚合结果生成结论…`,
-        );
-
-        const summary = await requestAnalysisSummary({
-          question: userContent,
-          profileSummary,
-          plan,
-          result,
-          domain:
-            selectedAgent?.id === "campaign_planning" ? "campaign" : "general",
-          signal: controller.signal,
-        });
-        const content = buildAnalysisAttachmentContent({
-          profileSummary,
-          plan,
-          result,
-          summary,
-        });
+        const { summary, queryResults, content } = queryAnalysis;
         const finalAttachment: FileAttachment = {
           ...toStoredAttachment(analysisAttachment),
           content,
@@ -634,8 +597,7 @@ export function useChat() {
         );
         updateAnalysisAttachment(attachmentId, {
           status: "completed",
-          plan,
-          result,
+          queryResults,
           summary,
           content,
         });
@@ -793,18 +755,132 @@ function updateAssistantMessage(
   );
 }
 
-async function requestAnalysisPlan(args: {
+async function runFreeCsvQueryAnalysis(args: {
+  workerKey: string;
   question: string;
   profile: CsvProfile;
+  profileSummary: CsvProfileSummary;
   domain: "campaign" | "general";
   signal: AbortSignal;
-}): Promise<{ plan: AnalysisPlan; notes?: string[] }> {
-  const resp = await fetch("/api/chat/analysis/plan", {
+  onStatus: (message: string) => void;
+  onAttachmentPatch: (patch: Partial<CsvAnalysisState> & { content?: string }) => void;
+}): Promise<{
+  summary: string;
+  queryResults: CsvDataQueryResult[];
+  content: string;
+}> {
+  const queryResults: CsvDataQueryResult[] = [];
+
+  for (let iteration = 0; iteration < MAX_QUERY_ITERATIONS; iteration++) {
+    args.onAttachmentPatch({ status: "planning", queryResults });
+    args.onStatus(
+      iteration === 0
+        ? "模型正在选择要查询的行、列或聚合口径…"
+        : `模型正在基于第 ${iteration} 轮结果继续查询…`,
+    );
+
+    const decision = await requestDataQueries({
+      question: args.question,
+      profile: args.profile,
+      previousResults: queryResults,
+      domain: args.domain,
+      signal: args.signal,
+    });
+
+    if (decision.type === "final") {
+      const content = buildQueryAttachmentContent({
+        profileSummary: args.profileSummary,
+        queryResults,
+        summary: decision.finalAnswer,
+      });
+
+      return {
+        summary: decision.finalAnswer,
+        queryResults,
+        content,
+      };
+    }
+
+    if (decision.queries.length === 0) {
+      break;
+    }
+
+    args.onAttachmentPatch({ status: "executing", queryResults });
+    args.onStatus(
+      `正在本地执行模型请求的 ${decision.queries.length} 个数据查询…`,
+    );
+
+    for (const query of decision.queries) {
+      const result = await executeQueryInWorker(args.workerKey, query);
+      queryResults.push(result);
+    }
+  }
+
+  args.onAttachmentPatch({ status: "summarizing", queryResults });
+  args.onStatus("正在根据已查询的数据生成结论…");
+
+  const summary = await requestDataQueriesFinalAnswer({
+    question: args.question,
+    profile: args.profile,
+    previousResults: queryResults,
+    domain: args.domain,
+    signal: args.signal,
+  });
+  const content = buildQueryAttachmentContent({
+    profileSummary: args.profileSummary,
+    queryResults,
+    summary,
+  });
+
+  return { summary, queryResults, content };
+}
+
+function buildQueryAttachmentContent(args: {
+  profileSummary: CsvProfileSummary;
+  queryResults: CsvDataQueryResult[];
+  summary: string;
+}) {
+  const lastAggregate = args.queryResults
+    .map((result) => result.aggregateResult)
+    .findLast(Boolean);
+
+  const baseContent = buildAnalysisAttachmentContent({
+    profileSummary: args.profileSummary,
+    result: lastAggregate,
+    summary: args.summary,
+  });
+  const querySummary = args.queryResults
+    .map((result, index) => {
+      const resultSize =
+        result.aggregateResult?.resultRows.length ??
+        result.rows?.length ??
+        result.values?.length ??
+        (result.stats ? 1 : 0);
+      return `${index + 1}. ${result.query.type}，返回 ${resultSize} 条/项`;
+    })
+    .join("\n");
+
+  return `${baseContent}\n\n模型本地查询记录：\n${querySummary || "未执行额外查询"}`;
+}
+
+type DataQueryDecision =
+  | { type: "queries"; queries: CsvDataQuery[]; rationale?: string }
+  | { type: "final"; finalAnswer: string };
+
+async function requestDataQueries(args: {
+  question: string;
+  profile: CsvProfile;
+  previousResults: CsvDataQueryResult[];
+  domain: "campaign" | "general";
+  signal: AbortSignal;
+}): Promise<DataQueryDecision> {
+  const resp = await fetch("/api/chat/analysis/query", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       question: args.question,
       profile: args.profile,
+      previousResults: args.previousResults,
       domain: args.domain,
     }),
     signal: args.signal,
@@ -812,37 +888,32 @@ async function requestAnalysisPlan(args: {
 
   const data = await resp.json();
   if (!resp.ok || !data.ok) {
-    throw new Error(data.error ?? "CSV 分析计划生成失败。");
+    throw new Error(data.error ?? "CSV 自由查询失败。");
   }
 
-  return { plan: data.plan, notes: data.notes };
+  if (data.finalAnswer) {
+    return { type: "final", finalAnswer: data.finalAnswer };
+  }
+
+  return {
+    type: "queries",
+    queries: Array.isArray(data.queries) ? data.queries : [],
+    rationale: data.rationale,
+  };
 }
 
-async function requestAnalysisSummary(args: {
+async function requestDataQueriesFinalAnswer(args: {
   question: string;
-  profileSummary: CsvProfileSummary;
-  plan: AnalysisPlan;
-  result: AnalysisResult;
+  profile: CsvProfile;
+  previousResults: CsvDataQueryResult[];
   domain: "campaign" | "general";
   signal: AbortSignal;
 }): Promise<string> {
-  const resp = await fetch("/api/chat/analysis/summarize", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      question: args.question,
-      profileSummary: args.profileSummary,
-      plan: args.plan,
-      result: args.result,
-      domain: args.domain,
-    }),
-    signal: args.signal,
-  });
+  const decision = await requestDataQueries(args);
 
-  const data = await resp.json();
-  if (!resp.ok || !data.ok) {
-    throw new Error(data.error ?? "CSV 分析结论生成失败。");
+  if (decision.type === "final") {
+    return decision.finalAnswer;
   }
 
-  return data.summary;
+  return "已达到本地查询轮次上限，但模型仍需要更多查询。请缩小问题范围，或指定要查看的行、列、筛选条件。";
 }

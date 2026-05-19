@@ -3,6 +3,8 @@
 import type {
   AnalysisPlan,
   AnalysisResult,
+  CsvDataQuery,
+  CsvDataQueryResult,
   CsvProfile,
   CsvProfileOptions,
   CsvWorkerRequest,
@@ -10,7 +12,7 @@ import type {
 } from "./csv-types";
 
 type PendingRequest = {
-  resolve: (value: CsvProfile | AnalysisResult) => void;
+  resolve: (value: CsvProfile | AnalysisResult | CsvDataQueryResult) => void;
   reject: (reason?: unknown) => void;
   onProgress?: (progress: number) => void;
 };
@@ -45,6 +47,16 @@ export function executePlanInWorker(
   return sendWorkerRequest(workerKey, id, request, onProgress) as Promise<AnalysisResult>;
 }
 
+export function executeQueryInWorker(
+  workerKey: string,
+  query: CsvDataQuery,
+): Promise<CsvDataQueryResult> {
+  const id = crypto.randomUUID();
+  const request: CsvWorkerRequest = { id, type: "executeQuery", query };
+
+  return sendWorkerRequest(workerKey, id, request) as Promise<CsvDataQueryResult>;
+}
+
 export function resetCsvWorker(workerKey: string) {
   const entry = workers.get(workerKey);
   if (!entry) {
@@ -73,10 +85,12 @@ function sendWorkerRequest(
 ) {
   const entry = getWorkerEntry(workerKey);
 
-  return new Promise<CsvProfile | AnalysisResult>((resolve, reject) => {
+  return new Promise<CsvProfile | AnalysisResult | CsvDataQueryResult>(
+    (resolve, reject) => {
     entry.pendingRequests.set(id, { resolve, reject, onProgress });
     entry.worker.postMessage(request);
-  });
+    },
+  );
 }
 
 function getWorkerEntry(workerKey: string) {
@@ -117,6 +131,11 @@ function getWorkerEntry(workerKey: string) {
     }
 
     if (response.type === "executeComplete") {
+      pending.resolve(response.result);
+      return;
+    }
+
+    if (response.type === "queryComplete") {
       pending.resolve(response.result);
       return;
     }
