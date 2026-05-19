@@ -51,7 +51,8 @@ export function useChat() {
     clearQuotedMessages,
   } = useActiveSession();
 
-  const messages = session?.messages ?? [];
+  const sessionMessages = session?.messages;
+  const messages = useMemo(() => sessionMessages ?? [], [sessionMessages]);
   const messageVersion = messages.length + (messages.at(-1)?.id ?? "");
   const agents = getLocalizedAgents(language);
   const selectedAgent =

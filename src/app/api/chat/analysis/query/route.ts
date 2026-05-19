@@ -153,6 +153,8 @@ Available response shapes:
 
 Rules:
 - Use only fields that exist in profile.
+- Read profile.dataQuality.parseMetadata to understand the detected encoding, delimiter, and parser confidence.
+- If parser confidence is low or fields look like whole rows, mention the parsing uncertainty instead of forcing an analysis.
 - Never ask for all rows or all columns. Max rows per query is ${MAX_QUERY_RESULT_ROWS}; max columns is ${MAX_QUERY_COLUMNS}; max distinct values is ${MAX_QUERY_DISTINCT_VALUES}.
 - Prefer aggregate, columnStats, and distinctValues before row-level inspection.
 - Use row-level queries when the user explicitly asks for specific rows or when examples are needed.
@@ -182,7 +184,14 @@ function compactProfile(profile: CsvProfile) {
           : undefined,
     })),
     sampleRows: profile.sampleRows.slice(0, 5),
-    dataQuality: profile.dataQuality,
+    dataQuality: {
+      parseMetadata: profile.dataQuality.parseMetadata,
+      emptyRowCount: profile.dataQuality.emptyRowCount,
+      inconsistentRowCount: profile.dataQuality.inconsistentRowCount,
+      duplicateHeaderCount: profile.dataQuality.duplicateHeaderCount,
+      totalMissingCells: profile.dataQuality.totalMissingCells,
+      warnings: profile.dataQuality.warnings,
+    },
   };
 }
 

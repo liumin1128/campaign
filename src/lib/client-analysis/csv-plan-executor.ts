@@ -25,6 +25,11 @@ type GroupState = {
   metrics: Record<string, MetricState>;
 };
 
+type IndexedCsvRow = {
+  row: CsvRow;
+  rowNumber: number;
+};
+
 export function executeAnalysisPlan(
   rows: CsvRow[],
   plan: AnalysisPlan,
@@ -93,6 +98,10 @@ export function executeDataQuery(
 ): CsvDataQueryResult {
   const warnings: string[] = [];
   const allColumns = Object.keys(rows[0] ?? {});
+  const indexedRows = rows.map((row, index) => ({
+    row,
+    rowNumber: index + 1,
+  }));
 
   if (query.type === "aggregate") {
     return {
@@ -104,7 +113,7 @@ export function executeDataQuery(
   }
 
   if (query.type === "rows") {
-    const selectedRows = selectRowsByPosition(rows, query, warnings);
+    const selectedRows = selectRowsByPosition(indexedRows, query, warnings);
     return {
       query,
       rowCount: rows.length,
@@ -117,7 +126,7 @@ export function executeDataQuery(
   if (query.type === "columns") {
     const start = normalizeStartRow(query.startRow);
     const limit = normalizeLimit(query.limit);
-    const selectedRows = rows.slice(start, start + limit);
+    const selectedRows = indexedRows.slice(start, start + limit);
     return {
       query,
       rowCount: rows.length,
@@ -136,7 +145,7 @@ export function executeDataQuery(
       metrics: [{ name: "row_count", field: allColumns[0] ?? "", agg: "count" }],
     };
     const limit = normalizeLimit(query.limit);
-    const matchedRows = rows.filter((row) => matchesFilters(row, plan));
+    const matchedRows = indexedRows.filter(({ row }) => matchesFilters(row, plan));
     return {
       query,
       rowCount: rows.length,
@@ -251,7 +260,7 @@ function matchesFilters(row: CsvRow, plan: AnalysisPlan): boolean {
 }
 
 function selectRowsByPosition(
-  rows: CsvRow[],
+  rows: IndexedCsvRow[],
   query: Extract<CsvDataQuery, { type: "rows" }>,
   warnings: string[],
 ) {
@@ -272,15 +281,15 @@ function selectRowsByPosition(
 }
 
 function projectRows(
-  rows: CsvRow[],
+  rows: IndexedCsvRow[],
   requestedColumns: string[] | undefined,
   allColumns: string[],
   warnings: string[],
 ) {
   const columns = normalizeColumns(requestedColumns, allColumns, warnings);
-  return rows.map((row, index) => ({
-    rowNumber: index + 1,
+  return rows.map(({ row, rowNumber }) => ({
     ...Object.fromEntries(columns.map((column) => [column, row[column] ?? ""])),
+    rowNumber,
   }));
 }
 

@@ -159,7 +159,14 @@ function compactProfile(profile: CsvProfile) {
           : undefined,
     })),
     sampleRows: profile.sampleRows.slice(0, 5),
-    dataQuality: profile.dataQuality,
+    dataQuality: {
+      parseMetadata: profile.dataQuality.parseMetadata,
+      emptyRowCount: profile.dataQuality.emptyRowCount,
+      inconsistentRowCount: profile.dataQuality.inconsistentRowCount,
+      duplicateHeaderCount: profile.dataQuality.duplicateHeaderCount,
+      totalMissingCells: profile.dataQuality.totalMissingCells,
+      warnings: profile.dataQuality.warnings,
+    },
   };
 }
 

@@ -23,7 +23,15 @@ export type CsvSemanticType =
   | "id"
   | "unknown";
 
+export interface CsvParseMetadata {
+  encoding: string;
+  delimiter: string;
+  delimiterName: string;
+  confidence: number;
+}
+
 export interface CsvDataQuality {
+  parseMetadata?: CsvParseMetadata;
   emptyRowCount: number;
   inconsistentRowCount: number;
   duplicateHeaderCount: number;

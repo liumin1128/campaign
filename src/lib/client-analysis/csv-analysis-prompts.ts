@@ -32,6 +32,7 @@ export function buildAnalysisAttachmentContent(args: {
     `文件大小：${formatBytes(profileSummary.fileSize)}`,
     `行数：${profileSummary.rowCount}`,
     `列数：${profileSummary.columnCount}`,
+    `解析：${describeParseMetadata(profileSummary.dataQuality.parseMetadata)}`,
     `字段：${profileSummary.columns
       .slice(0, 24)
       .map((column) => `${column.name}(${column.type})`)
@@ -90,4 +91,14 @@ export function formatBytes(bytes: number): string {
   }
 
   return `${value.toFixed(value >= 10 ? 1 : 2)} ${units[unitIndex]}`;
+}
+
+function describeParseMetadata(
+  metadata: CsvProfileSummary["dataQuality"]["parseMetadata"],
+) {
+  if (!metadata) {
+    return "未记录";
+  }
+
+  return `${metadata.encoding} / ${metadata.delimiterName}，置信度 ${Math.round(metadata.confidence * 100)}%`;
 }
