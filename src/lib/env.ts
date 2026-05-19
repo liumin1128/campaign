@@ -55,29 +55,6 @@ export function getDeepSeekApiKey(): string {
   return requireEnv("DEEPSEEK_API_KEY");
 }
 
-/** AgentSL Runner API 令牌 */
-export function getAgentSLApiToken(): string {
-  return requireEnv("AGENTSL_API_TOKEN");
-}
-
-/** AgentSL Runner 用户 ID */
-export function getAgentSLUserId(): string {
-  return requireEnv("AGENTSL_USERID");
-}
-
-/** AgentSL Runner Agent ID */
-export function getAgentSLId(): string {
-  return requireEnv("AGENTSL_ID");
-}
-
-/** AgentSL Runner API 基础 URL（可选配置，默认值在 agentsl.ts 中） */
-export function getAgentSLBaseUrl(): string {
-  return (
-    process.env.AGENTSL_BASE_URL ??
-    "https://api.nonprod.kariba-agentsl-runner.de.sin.auto2.nonprod.c0.sq.com.sg"
-  );
-}
-
 export function getTavilyApiKey(): string {
   return requireEnv("TAVILY_API_KEY");
 }
