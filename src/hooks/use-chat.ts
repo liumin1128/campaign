@@ -14,6 +14,10 @@ import {
   summarizeProfile,
 } from "@/lib/client-analysis/csv-analysis-prompts";
 import {
+  compactPreviousResultsForQuery,
+  compactProfileForQuery,
+} from "@/lib/client-analysis/csv-query-payload";
+import {
   executeQueryInWorker,
   profileCsvInWorker,
   resetAllCsvWorkers,
@@ -880,8 +884,8 @@ async function requestDataQueries(args: {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       question: args.question,
-      profile: args.profile,
-      previousResults: args.previousResults,
+      profile: compactProfileForQuery(args.profile),
+      previousResults: compactPreviousResultsForQuery(args.previousResults),
       domain: args.domain,
     }),
     signal: args.signal,

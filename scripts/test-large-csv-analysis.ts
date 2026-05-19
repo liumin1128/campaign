@@ -168,14 +168,16 @@ const testCases: TestCase[] = [
       const groupColumn =
         findColumnByType(profile, "string") ?? profile.columns[0]?.name;
       const metricColumn = findColumnByType(profile, "number");
-      assert(Boolean(groupColumn), "没有可分组字段");
-      assert(Boolean(metricColumn), "没有数值字段可聚合");
+      assert(groupColumn, "没有可分组字段");
+      assert(metricColumn, "没有数值字段可聚合");
+      const safeGroupColumn = groupColumn;
+      const safeMetricColumn = metricColumn;
       const plan: AnalysisPlan = {
         goal: "test_custom_sum",
-        requiredFields: [groupColumn, metricColumn],
+        requiredFields: [safeGroupColumn, safeMetricColumn],
         filters: [],
-        groupBy: [groupColumn],
-        metrics: [{ name: "test_sum", field: metricColumn, agg: "sum" }],
+        groupBy: [safeGroupColumn],
+        metrics: [{ name: "test_sum", field: safeMetricColumn, agg: "sum" }],
         ranking: { sortBy: "test_sum", direction: "desc", limit: 10 },
       };
       const result = executeDataQuery(
@@ -285,7 +287,7 @@ function createSampleFilter(rows: CsvRow[], profile: CsvProfile) {
   }
 
   const fallbackColumn = profile.columns[0]?.name;
-  assert(Boolean(fallbackColumn), "没有可筛选字段");
+  assert(fallbackColumn, "没有可筛选字段");
   return { field: fallbackColumn, op: "contains" as const, value: "" };
 }
 

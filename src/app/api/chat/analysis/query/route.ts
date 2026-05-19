@@ -1,13 +1,17 @@
 import { getDeepSeekApiKey } from "@/lib/env";
 import {
+  compactPreviousResultsForQuery,
+  compactProfileForQuery,
+  type CsvQueryProfileContext,
+  type CsvQueryResultContext,
+} from "@/lib/client-analysis/csv-query-payload";
+import {
   MAX_QUERY_COLUMNS,
   MAX_QUERY_DISTINCT_VALUES,
   MAX_QUERY_RESULT_ROWS,
   type CsvDataQuery,
-  type CsvDataQueryResult,
   type FilterRule,
   type AnalysisPlan,
-  type CsvProfile,
 } from "@/lib/client-analysis/csv-types";
 
 export const runtime = "nodejs";
@@ -17,8 +21,8 @@ const DEEPSEEK_BASE = "https://api.deepseek.com";
 
 interface QueryRequest {
   question?: string;
-  profile?: CsvProfile;
-  previousResults?: CsvDataQueryResult[];
+  profile?: CsvQueryProfileContext;
+  previousResults?: CsvQueryResultContext[];
   domain?: "campaign" | "general";
 }
 
@@ -48,8 +52,8 @@ export async function POST(request: Request) {
     const response = await requestQueryDecision({
       apiKey,
       question: body.question,
-      profile: compactProfile(body.profile),
-      previousResults: compactPreviousResults(body.previousResults ?? []),
+      profile: compactProfileForQuery(body.profile),
+      previousResults: compactPreviousResultsForQuery(body.previousResults ?? []),
       domain: body.domain ?? "campaign",
     });
 
@@ -158,61 +162,11 @@ Rules:
 - Never ask for all rows or all columns. Max rows per query is ${MAX_QUERY_RESULT_ROWS}; max columns is ${MAX_QUERY_COLUMNS}; max distinct values is ${MAX_QUERY_DISTINCT_VALUES}.
 - Prefer aggregate, columnStats, and distinctValues before row-level inspection.
 - Use row-level queries when the user explicitly asks for specific rows or when examples are needed.
+- rowNumber is 1-based data-row numbering after the header row. If the user asks for "row N" or "第 N 行数据", request {"type":"rows","rowNumbers":[N]}.
 - You may make multiple small queries, then finalAnswer after previousResults are sufficient.
 - State limitations if previousResults are insufficient.
 - Reply finalAnswer in the user's language.
 - Domain is ${domain}; for campaign work prefer route/origin/destination, revenue, passengers/demand, yield, cabin, and date fields when relevant.`;
-}
-
-function compactProfile(profile: CsvProfile) {
-  return {
-    fileName: profile.fileName,
-    fileSize: profile.fileSize,
-    rowCount: profile.rowCount,
-    columnCount: profile.columnCount,
-    columns: profile.columns.slice(0, 160).map((column) => ({
-      name: column.name,
-      type: column.type,
-      semanticType: column.semanticType,
-      missingRate: Number(column.missingRate.toFixed(4)),
-      sampleValues: column.sampleValues.slice(0, 8),
-      min: column.min,
-      max: column.max,
-      avg:
-        typeof column.avg === "number"
-          ? Number(column.avg.toFixed(4))
-          : undefined,
-    })),
-    sampleRows: profile.sampleRows.slice(0, 5),
-    dataQuality: {
-      parseMetadata: profile.dataQuality.parseMetadata,
-      emptyRowCount: profile.dataQuality.emptyRowCount,
-      inconsistentRowCount: profile.dataQuality.inconsistentRowCount,
-      duplicateHeaderCount: profile.dataQuality.duplicateHeaderCount,
-      totalMissingCells: profile.dataQuality.totalMissingCells,
-      warnings: profile.dataQuality.warnings,
-    },
-  };
-}
-
-function compactPreviousResults(results: CsvDataQueryResult[]) {
-  return results.slice(-12).map((result) => ({
-    query: result.query,
-    rowCount: result.rowCount,
-    matchedRowCount: result.matchedRowCount,
-    rows: result.rows?.slice(0, MAX_QUERY_RESULT_ROWS),
-    values: result.values?.slice(0, MAX_QUERY_DISTINCT_VALUES),
-    stats: result.stats,
-    aggregateResult: result.aggregateResult
-      ? {
-          rowCount: result.aggregateResult.rowCount,
-          matchedRowCount: result.aggregateResult.matchedRowCount,
-          resultRows: result.aggregateResult.resultRows.slice(0, MAX_QUERY_RESULT_ROWS),
-          warnings: result.aggregateResult.warnings,
-        }
-      : undefined,
-    warnings: result.warnings,
-  }));
 }
 
 function normalizeQueries(rawQueries: unknown[]): CsvDataQuery[] {
