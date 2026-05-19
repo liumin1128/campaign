@@ -9,6 +9,25 @@ import type {
 import { getLocalizedAgents, t } from "@/components/chat/i18n";
 import { GLOBAL_EMPHASIS } from "@/components/chat/system-prompts";
 import { processFiles } from "@/components/chat/utils";
+import {
+  buildAnalysisAttachmentContent,
+  summarizeProfile,
+} from "@/lib/client-analysis/csv-analysis-prompts";
+import {
+  executePlanInWorker,
+  profileCsvInWorker,
+  resetAllCsvWorkers,
+  resetCsvWorker,
+} from "@/lib/client-analysis/csv-worker-client";
+import {
+  LARGE_CSV_MAX_BYTES,
+  type AnalysisPlan,
+  type AnalysisResult,
+  type CsvAnalysisState,
+  type CsvAnalysisStatus,
+  type CsvProfile,
+  type CsvProfileSummary,
+} from "@/lib/client-analysis/csv-types";
 import { useActiveSession, useChatStore } from "@/store/chat-store";
 import { usePromptOverrideStore } from "@/store/prompt-override-store";
 
@@ -46,6 +65,7 @@ export function useChat() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const largeCsvInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -64,6 +84,12 @@ export function useChat() {
     abortRef.current?.abort();
     abortRef.current = null;
     setIsLoading(false);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      resetAllCsvWorkers();
+    };
   }, []);
 
   const handleSetSelectedAgent = useCallback(
@@ -180,6 +206,21 @@ export function useChat() {
             .map((qm) => `> ${qm.content.replace(/\n/g, "\n> ")}`)
             .join("\n\n") + "\n\n"
         : "";
+
+    const csvAnalysisAttachments = fileAttachments.filter(
+      (attachment) => attachment.type === "csv-analysis",
+    );
+    if (csvAnalysisAttachments.length > 0) {
+      const defaultCsvQuestion =
+        language === "zh"
+          ? "请基于这个 CSV 做一次概要分析并给出可执行洞察。"
+          : "Please summarize this CSV and provide actionable insights.";
+      await handleCsvAnalysisSend(
+        quotePrefix + (trimmed || defaultCsvQuestion),
+        csvAnalysisAttachments,
+      );
+      return;
+    }
 
     const userMsg: Message = {
       id: crypto.randomUUID(),
@@ -353,8 +394,331 @@ export function useChat() {
     e.target.value = "";
   }
 
+  async function handleLargeCsvSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files ?? []);
+    e.target.value = "";
+
+    if (files.length === 0) return;
+
+    const validAttachments: Array<{ file: File; attachment: FileAttachment }> = [];
+
+    for (const file of files) {
+      const isCSV = file.name.endsWith(".csv") || file.type === "text/csv";
+      if (!isCSV) {
+        alert(`不支持的文件类型：${file.name}，已跳过。`);
+        continue;
+      }
+
+      if (file.size > LARGE_CSV_MAX_BYTES) {
+        alert(`CSV 文件过大：${file.name}。当前本地分析第一版最多支持 50MB，已跳过。`);
+        continue;
+      }
+
+      const id = crypto.randomUUID();
+      validAttachments.push({
+        file,
+        attachment: {
+          id,
+          name: file.name,
+          type: "csv-analysis",
+          size: file.size,
+          content: `[CSV 本地分析：${file.name}]\n正在读取字段画像。原始 CSV 文件保留在浏览器本地。`,
+          analysis: {
+            id,
+            status: "profiling",
+            progress: 0,
+          },
+        },
+      });
+    }
+
+    if (validAttachments.length === 0) return;
+
+    setFileAttachments((prev) => [
+      ...prev,
+      ...validAttachments.map((item) => item.attachment),
+    ]);
+
+    await Promise.all(
+      validAttachments.map(async ({ file, attachment }) => {
+        const id = attachment.id!;
+        try {
+          const profile = await profileCsvInWorker(
+            id,
+            file,
+            undefined,
+            (progress) => {
+              updateAnalysisAttachment(id, {
+                status: "profiling",
+                progress,
+              });
+            },
+          );
+          const profileSummary = summarizeProfile(profile);
+          const content = buildAnalysisAttachmentContent({ profileSummary });
+
+          updateAnalysisAttachment(id, {
+            status: "profiled",
+            progress: 1,
+            profile,
+            profileSummary,
+            content,
+          });
+        } catch (error) {
+          updateAnalysisAttachment(id, {
+            status: "failed",
+            error: error instanceof Error ? error.message : String(error),
+            content: `[CSV 本地分析：${file.name}]\n分析失败：${
+              error instanceof Error ? error.message : String(error)
+            }`,
+          });
+        }
+      }),
+    );
+  }
+
   function handleRemoveFile(index: number) {
-    setFileAttachments((prev) => prev.filter((_, i) => i !== index));
+    setFileAttachments((prev) => {
+      const removed = prev[index];
+      if (removed?.type === "csv-analysis" && removed.id) {
+        resetCsvWorker(removed.id);
+      }
+      return prev.filter((_, i) => i !== index);
+    });
+  }
+
+  async function handleCsvAnalysisSend(
+    userContent: string,
+    csvAnalysisAttachments: FileAttachment[],
+  ) {
+    if (!sessionId || isLoading) return;
+
+    const notReadyAttachment = csvAnalysisAttachments.find(
+      (attachment) =>
+        !attachment.analysis?.profile || !attachment.analysis?.profileSummary,
+    );
+    if (notReadyAttachment) {
+      alert("CSV 字段画像还没有准备好，请稍等片刻再发送。");
+      return;
+    }
+
+    const failedAttachment = csvAnalysisAttachments.find(
+      (attachment) => attachment.analysis?.status === "failed",
+    );
+    if (failedAttachment) {
+      alert(failedAttachment.analysis?.error ?? "CSV 分析失败，请重新添加文件。");
+      return;
+    }
+
+    const sid = sessionId;
+    const assistantId = crypto.randomUUID();
+    const userId = crypto.randomUUID();
+    const initialStoredAttachments = csvAnalysisAttachments.map(toStoredAttachment);
+    const userMsg: Message = {
+      id: userId,
+      role: "user",
+      content: userContent,
+      attachments: [
+        ...fileAttachments
+          .filter((attachment) => attachment.type !== "csv-analysis")
+          .map(toStoredAttachment),
+        ...initialStoredAttachments,
+      ],
+    };
+    const assistantMsg: Message = {
+      id: assistantId,
+      role: "assistant",
+      content: "正在生成 CSV 本地分析计划…",
+      reasoning: "",
+    };
+    const updatedMessages = [...messages, userMsg, assistantMsg];
+
+    updateSessionMessages(sid, updatedMessages);
+    setInput("");
+    setDraftInput(sid, "");
+    setIsLoading(true);
+
+    const controller = new AbortController();
+    abortRef.current = controller;
+
+    try {
+      const finalAttachments: FileAttachment[] = [];
+      const summaries: string[] = [];
+
+      for (const [index, analysisAttachment] of csvAnalysisAttachments.entries()) {
+        const attachmentId = analysisAttachment.id;
+        const profile = analysisAttachment.analysis!.profile!;
+        const profileSummary = analysisAttachment.analysis!.profileSummary!;
+        const statusPrefix =
+          csvAnalysisAttachments.length > 1
+            ? `(${index + 1}/${csvAnalysisAttachments.length}) ${analysisAttachment.name}：`
+            : "";
+
+        updateAnalysisAttachment(attachmentId, { status: "planning" });
+        updateAssistantMessage(
+          sid,
+          updatedMessages,
+          assistantId,
+          `${statusPrefix}正在生成 CSV 本地分析计划…`,
+        );
+
+        const planResponse = await requestAnalysisPlan({
+          question: userContent,
+          profile,
+          domain:
+            selectedAgent?.id === "campaign_planning" ? "campaign" : "general",
+          signal: controller.signal,
+        });
+        const plan = planResponse.plan;
+        const notes = planResponse.notes ?? [];
+
+        updateAnalysisAttachment(attachmentId, {
+          status: "executing",
+          plan,
+          notes,
+        });
+        updateAssistantMessage(
+          sid,
+          updatedMessages,
+          assistantId,
+          `${statusPrefix}正在本地执行 CSV 聚合分析…`,
+        );
+
+        const result = await executePlanInWorker(
+          attachmentId!,
+          plan,
+          (progress) => {
+            updateAnalysisAttachment(attachmentId, {
+              status: "executing",
+              progress,
+            });
+          },
+        );
+
+        updateAnalysisAttachment(attachmentId, {
+          status: "summarizing",
+          result,
+        });
+        updateAssistantMessage(
+          sid,
+          updatedMessages,
+          assistantId,
+          `${statusPrefix}正在根据聚合结果生成结论…`,
+        );
+
+        const summary = await requestAnalysisSummary({
+          question: userContent,
+          profileSummary,
+          plan,
+          result,
+          domain:
+            selectedAgent?.id === "campaign_planning" ? "campaign" : "general",
+          signal: controller.signal,
+        });
+        const content = buildAnalysisAttachmentContent({
+          profileSummary,
+          plan,
+          result,
+          summary,
+        });
+        const finalAttachment: FileAttachment = {
+          ...toStoredAttachment(analysisAttachment),
+          content,
+        };
+
+        finalAttachments.push(finalAttachment);
+        summaries.push(
+          csvAnalysisAttachments.length > 1
+            ? `## ${analysisAttachment.name}\n\n${summary}`
+            : summary,
+        );
+        updateAnalysisAttachment(attachmentId, {
+          status: "completed",
+          plan,
+          result,
+          summary,
+          content,
+        });
+      }
+
+      const summary = summaries.join("\n\n");
+      const finalMessages = updatedMessages.map((message) => {
+        if (message.id === userId) {
+          return {
+            ...message,
+            attachments: message.attachments?.map((attachment) =>
+              finalAttachments.find(
+                (finalAttachment) => finalAttachment.id === attachment.id,
+              ) ?? attachment,
+            ),
+          };
+        }
+
+        if (message.id === assistantId) {
+          return { ...message, content: summary };
+        }
+
+        return message;
+      });
+
+      updateSessionMessages(sid, finalMessages);
+      for (const attachment of csvAnalysisAttachments) {
+        if (attachment.id) {
+          resetCsvWorker(attachment.id);
+        }
+      }
+      setFileAttachments([]);
+    } catch (error) {
+      const aborted = (error as Error)?.name === "AbortError";
+      const errorMessage = aborted
+        ? t(language, "stopped")
+        : error instanceof Error
+          ? error.message
+          : String(error);
+
+      updateSessionMessages(
+        sid,
+        updatedMessages.map((message) =>
+          message.id === assistantId
+            ? { ...message, content: `❌ ${errorMessage}` }
+            : message,
+        ),
+      );
+      for (const attachment of csvAnalysisAttachments) {
+        updateAnalysisAttachment(attachment.id, {
+          status: "failed",
+          error: errorMessage,
+        });
+      }
+    } finally {
+      setIsLoading(false);
+      abortRef.current = null;
+    }
+  }
+
+  function updateAnalysisAttachment(
+    id: string | undefined,
+    patch: Partial<CsvAnalysisState> & { content?: string },
+  ) {
+    if (!id) return;
+
+    setFileAttachments((prev) =>
+      prev.map((attachment) => {
+        if (attachment.id !== id || attachment.type !== "csv-analysis") {
+          return attachment;
+        }
+
+        return {
+          ...attachment,
+          content: patch.content ?? attachment.content,
+          analysis: {
+            ...(attachment.analysis ?? { status: "profiling" as CsvAnalysisStatus }),
+            ...patch,
+            id,
+          },
+        };
+      }),
+    );
   }
 
   return {
@@ -382,6 +746,7 @@ export function useChat() {
     messagesEndRef,
     inputRef,
     fileInputRef,
+    largeCsvInputRef,
     // 操作
     setInput,
     setLanguage,
@@ -390,6 +755,7 @@ export function useChat() {
     handleStop,
     handleKeyDown,
     handleFileSelect,
+    handleLargeCsvSelect,
     handleRemoveFile,
     // 引用消息
     quotedMessages,
@@ -401,4 +767,82 @@ export function useChat() {
     deleteSession,
     renameSession,
   };
+}
+
+function toStoredAttachment(attachment: FileAttachment): FileAttachment {
+  return {
+    id: attachment.id,
+    name: attachment.name,
+    content: attachment.content,
+    type: attachment.type,
+    size: attachment.size,
+  };
+}
+
+function updateAssistantMessage(
+  sessionId: string,
+  baseMessages: Message[],
+  assistantId: string,
+  content: string,
+) {
+  useChatStore.getState().updateSessionMessages(
+    sessionId,
+    baseMessages.map((message) =>
+      message.id === assistantId ? { ...message, content } : message,
+    ),
+  );
+}
+
+async function requestAnalysisPlan(args: {
+  question: string;
+  profile: CsvProfile;
+  domain: "campaign" | "general";
+  signal: AbortSignal;
+}): Promise<{ plan: AnalysisPlan; notes?: string[] }> {
+  const resp = await fetch("/api/chat/analysis/plan", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      question: args.question,
+      profile: args.profile,
+      domain: args.domain,
+    }),
+    signal: args.signal,
+  });
+
+  const data = await resp.json();
+  if (!resp.ok || !data.ok) {
+    throw new Error(data.error ?? "CSV 分析计划生成失败。");
+  }
+
+  return { plan: data.plan, notes: data.notes };
+}
+
+async function requestAnalysisSummary(args: {
+  question: string;
+  profileSummary: CsvProfileSummary;
+  plan: AnalysisPlan;
+  result: AnalysisResult;
+  domain: "campaign" | "general";
+  signal: AbortSignal;
+}): Promise<string> {
+  const resp = await fetch("/api/chat/analysis/summarize", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      question: args.question,
+      profileSummary: args.profileSummary,
+      plan: args.plan,
+      result: args.result,
+      domain: args.domain,
+    }),
+    signal: args.signal,
+  });
+
+  const data = await resp.json();
+  if (!resp.ok || !data.ok) {
+    throw new Error(data.error ?? "CSV 分析结论生成失败。");
+  }
+
+  return data.summary;
 }

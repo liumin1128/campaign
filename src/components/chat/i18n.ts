@@ -26,6 +26,7 @@ const translations = {
     chat_input_placeholder: "输入消息，Shift+Enter 换行...",
     chat_input_loading_placeholder: "AI 正在回复...",
     upload_file_title: "上传文件（支持 CSV）",
+    upload_large_csv_title: "添加大 CSV 本地分析",
     stop_title: "停止生成",
     send_hint: "回车发送 · 支持 CSV 文件上传解析",
     loading_hint: "正在生成回复，点击停止按钮中断",
@@ -49,6 +50,14 @@ const translations = {
     // 文件类型
     file_type_csv: "CSV",
     file_type_text: "文本",
+    file_type_csv_analysis: "本地分析",
+    csv_analysis_profiling: "正在读取字段",
+    csv_analysis_profiled: "已读取字段",
+    csv_analysis_planning: "正在生成计划",
+    csv_analysis_executing: "正在执行聚合",
+    csv_analysis_summarizing: "正在生成结论",
+    csv_analysis_completed: "分析完成",
+    csv_analysis_failed: "分析失败",
 
     // 语言切换 tooltip
     lang_switch_to_zh: "切换到中文回复",
@@ -109,6 +118,7 @@ const translations = {
     chat_input_placeholder: "Type a message, Shift+Enter for new line...",
     chat_input_loading_placeholder: "AI is responding...",
     upload_file_title: "Upload files (CSV supported)",
+    upload_large_csv_title: "Add large CSV for local analysis",
     stop_title: "Stop generating",
     send_hint: "Enter to send · CSV file upload supported",
     loading_hint: "Generating response, click stop to interrupt",
@@ -128,6 +138,14 @@ const translations = {
 
     file_type_csv: "CSV",
     file_type_text: "Text",
+    file_type_csv_analysis: "Local analysis",
+    csv_analysis_profiling: "Reading fields",
+    csv_analysis_profiled: "Fields ready",
+    csv_analysis_planning: "Planning",
+    csv_analysis_executing: "Aggregating",
+    csv_analysis_summarizing: "Summarizing",
+    csv_analysis_completed: "Analysis ready",
+    csv_analysis_failed: "Analysis failed",
 
     lang_switch_to_zh: "Switch to Chinese",
     lang_switch_to_en: "Switch to English",

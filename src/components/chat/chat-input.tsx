@@ -1,10 +1,16 @@
 "use client";
 
-import { FileImport, PaperPlane, Stop } from "flowbite-react-icons/outline";
+import {
+  Database,
+  FileImport,
+  PaperPlane,
+  Stop,
+} from "flowbite-react-icons/outline";
 import { FileCsv } from "flowbite-react-icons/outline";
 import type { FileAttachment, Language, QuotedMessage } from "./types";
 import { t } from "./i18n";
 import { QuotePreview } from "./quote-preview";
+import { formatBytes } from "@/lib/client-analysis/csv-analysis-prompts";
 
 interface ChatInputProps {
   input: string;
@@ -14,11 +20,13 @@ interface ChatInputProps {
   quotedMessages: QuotedMessage[];
   inputRef: React.RefObject<HTMLTextAreaElement | null>;
   fileInputRef: React.RefObject<HTMLInputElement | null>;
+  largeCsvInputRef: React.RefObject<HTMLInputElement | null>;
   onInputChange: (value: string) => void;
   onSend: () => void;
   onStop: () => void;
   onKeyDown: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void;
   onFileSelect: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  onLargeCsvSelect: (e: React.ChangeEvent<HTMLInputElement>) => void;
   onRemoveFile: (index: number) => void;
   onLanguageChange: (lang: Language) => void;
   onRemoveQuote: (id: string) => void;
@@ -32,11 +40,13 @@ export function ChatInput({
   quotedMessages,
   inputRef,
   fileInputRef,
+  largeCsvInputRef,
   onInputChange,
   onSend,
   onStop,
   onKeyDown,
   onFileSelect,
+  onLargeCsvSelect,
   onRemoveFile,
   onLanguageChange,
   onRemoveQuote,
@@ -55,16 +65,38 @@ export function ChatInput({
           {fileAttachments.map((att, idx) => (
             <div
               key={idx}
-              className="flex items-center gap-2 rounded-lg border border-indigo-200 bg-indigo-50 px-2.5 py-1 dark:border-indigo-800 dark:bg-indigo-950/30"
+              className={`flex max-w-full items-center gap-2 rounded-lg border px-2.5 py-1 ${
+                att.type === "csv-analysis"
+                  ? "border-emerald-200 bg-emerald-50 dark:border-emerald-800 dark:bg-emerald-950/30"
+                  : "border-indigo-200 bg-indigo-50 dark:border-indigo-800 dark:bg-indigo-950/30"
+              }`}
             >
-              <FileCsv className="size-3.5 shrink-0 text-indigo-600 dark:text-indigo-400" />
-              <span className="max-w-45 truncate text-xs text-indigo-700 dark:text-indigo-300">
+              {att.type === "csv-analysis" ? (
+                <Database className="size-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
+              ) : (
+                <FileCsv className="size-3.5 shrink-0 text-indigo-600 dark:text-indigo-400" />
+              )}
+              <span
+                className={`max-w-55 truncate text-xs ${
+                  att.type === "csv-analysis"
+                    ? "text-emerald-700 dark:text-emerald-300"
+                    : "text-indigo-700 dark:text-indigo-300"
+                }`}
+              >
                 {att.name}
+                {att.size ? ` · ${formatBytes(att.size)}` : ""}
+                {att.type === "csv-analysis"
+                  ? ` · ${getAnalysisLabel(language, att)}`
+                  : ""}
               </span>
               <button
                 type="button"
                 onClick={() => onRemoveFile(idx)}
-                className="flex size-4 shrink-0 items-center justify-center rounded-full text-indigo-400 hover:bg-indigo-200 hover:text-indigo-700 dark:hover:bg-indigo-800 dark:hover:text-indigo-200"
+                className={`flex size-4 shrink-0 items-center justify-center rounded-full ${
+                  att.type === "csv-analysis"
+                    ? "text-emerald-500 hover:bg-emerald-200 hover:text-emerald-700 dark:hover:bg-emerald-800 dark:hover:text-emerald-200"
+                    : "text-indigo-400 hover:bg-indigo-200 hover:text-indigo-700 dark:hover:bg-indigo-800 dark:hover:text-indigo-200"
+                }`}
               >
                 <svg
                   className="size-3"
@@ -132,6 +164,14 @@ export function ChatInput({
               onChange={onFileSelect}
               className="hidden"
             />
+            <input
+              ref={largeCsvInputRef}
+              type="file"
+              multiple
+              accept=".csv,text/csv"
+              onChange={onLargeCsvSelect}
+              className="hidden"
+            />
 
             {isLoading ? (
               <button
@@ -155,6 +195,15 @@ export function ChatInput({
                 </button>
                 <button
                   type="button"
+                  onClick={() => largeCsvInputRef.current?.click()}
+                  disabled={isLoading}
+                  className="flex size-6 items-center justify-center rounded-md text-gray-400 transition hover:bg-gray-100 hover:text-gray-600 disabled:opacity-40 dark:hover:bg-slate-700 dark:hover:text-slate-300"
+                  title={t(language, "upload_large_csv_title")}
+                >
+                  <Database className="size-3.5" />
+                </button>
+                <button
+                  type="button"
                   onClick={onSend}
                   disabled={!input.trim() && fileAttachments.length === 0}
                   className="flex size-6 items-center justify-center rounded-md bg-indigo-600 text-white transition hover:bg-indigo-500 disabled:opacity-40 disabled:hover:bg-indigo-600"
@@ -167,5 +216,26 @@ export function ChatInput({
         </div>
       </div>
     </div>
+  );
+}
+
+function getAnalysisLabel(language: Language, attachment: FileAttachment) {
+  const status = attachment.analysis?.status ?? "profiling";
+
+  return t(
+    language,
+    status === "profiling"
+      ? "csv_analysis_profiling"
+      : status === "profiled"
+        ? "csv_analysis_profiled"
+        : status === "planning"
+          ? "csv_analysis_planning"
+          : status === "executing"
+            ? "csv_analysis_executing"
+            : status === "summarizing"
+              ? "csv_analysis_summarizing"
+              : status === "completed"
+                ? "csv_analysis_completed"
+                : "csv_analysis_failed",
   );
 }

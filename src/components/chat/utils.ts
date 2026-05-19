@@ -1,4 +1,8 @@
 import type { FileAttachment } from "./types";
+import {
+  LARGE_CSV_MAX_BYTES,
+  SMALL_ATTACHMENT_MAX_BYTES,
+} from "@/lib/client-analysis/csv-types";
 
 /** 简易 CSV 解析：将 CSV 文本解析为格式化 markdown 表格 */
 export function parseCSVToMarkdown(raw: string): string {
@@ -68,13 +72,39 @@ export async function processFiles(files: FileList): Promise<FileAttachment[]> {
     }
 
     try {
+      if (isCSV && file.size > LARGE_CSV_MAX_BYTES) {
+        alert(
+          `CSV 文件过大：${file.name}。当前本地分析第一版最多支持 50MB。`,
+        );
+        continue;
+      }
+
+      if (isCSV && file.size > SMALL_ATTACHMENT_MAX_BYTES) {
+        alert(
+          `CSV 文件较大：${file.name}。请使用旁边的大 CSV 本地分析按钮添加。`,
+        );
+        continue;
+      }
+
       const raw = await readFileAsText(file);
 
       if (isCSV) {
         const markdown = parseCSVToMarkdown(raw);
-        attachments.push({ name: file.name, content: markdown, type: "csv" });
+        attachments.push({
+          id: crypto.randomUUID(),
+          name: file.name,
+          content: markdown,
+          type: "csv",
+          size: file.size,
+        });
       } else {
-        attachments.push({ name: file.name, content: raw, type: "text" });
+        attachments.push({
+          id: crypto.randomUUID(),
+          name: file.name,
+          content: raw,
+          type: "text",
+          size: file.size,
+        });
       }
     } catch {
       alert(`文件读取失败：${file.name}，已跳过`);

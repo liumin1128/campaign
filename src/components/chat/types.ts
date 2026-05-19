@@ -1,3 +1,5 @@
+import type { CsvAnalysisState } from "@/lib/client-analysis/csv-types";
+
 export interface Message {
   id: string;
   role: "system" | "user" | "assistant";
@@ -16,9 +18,12 @@ export interface AgentOption {
 }
 
 export interface FileAttachment {
+  id?: string;
   name: string;
   content: string;
-  type: "csv" | "text";
+  type: "csv" | "text" | "csv-analysis";
+  size?: number;
+  analysis?: CsvAnalysisState;
 }
 
 /** 被引用的消息 */

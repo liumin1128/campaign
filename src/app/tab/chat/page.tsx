@@ -33,6 +33,7 @@ export default function ChatPage() {
     messagesEndRef,
     inputRef,
     fileInputRef,
+    largeCsvInputRef,
     setInput,
     setLanguage,
     setSelectedAgent,
@@ -40,6 +41,7 @@ export default function ChatPage() {
     handleStop,
     handleKeyDown,
     handleFileSelect,
+    handleLargeCsvSelect,
     handleRemoveFile,
     toggleQuotedMessage,
     clearQuotedMessages,
@@ -120,11 +122,13 @@ export default function ChatPage() {
               quotedMessages={quotedMessages}
               inputRef={inputRef}
               fileInputRef={fileInputRef}
+              largeCsvInputRef={largeCsvInputRef}
               onInputChange={setInput}
               onSend={handleSend}
               onStop={handleStop}
               onKeyDown={handleKeyDown}
               onFileSelect={handleFileSelect}
+              onLargeCsvSelect={handleLargeCsvSelect}
               onRemoveFile={handleRemoveFile}
               onLanguageChange={setLanguage}
               onRemoveQuote={(id) => {

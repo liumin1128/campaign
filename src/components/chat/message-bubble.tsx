@@ -1,6 +1,6 @@
 "use client";
 
-import { FileCsv } from "flowbite-react-icons/outline";
+import { Database, FileCsv } from "flowbite-react-icons/outline";
 import { isMarkdownContent } from "@/utils/markdown";
 import MarkdownDisplay from "@/components/markdown-display";
 import { ReasoningBlock } from "./reasoning-block";
@@ -8,6 +8,7 @@ import { CopyButton } from "./copy-button";
 import { QuoteButton } from "./quote-button";
 import type { Message, Language, QuotedMessage } from "./types";
 import { t } from "./i18n";
+import { formatBytes } from "@/lib/client-analysis/csv-analysis-prompts";
 
 function LoadingDots() {
   return (
@@ -101,14 +102,23 @@ export function MessageBubble({
                     : "border-gray-200 bg-gray-50 text-gray-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400"
                 }`}
               >
-                <FileCsv className="size-4 shrink-0" />
+                {att.type === "csv-analysis" ? (
+                  <Database className="size-4 shrink-0" />
+                ) : (
+                  <FileCsv className="size-4 shrink-0" />
+                )}
                 <span className="min-w-0 flex-1 truncate font-medium">
                   {att.name}
+                  {att.size ? ` · ${formatBytes(att.size)}` : ""}
                 </span>
                 <span className="shrink-0 opacity-60">
                   {t(
                     language,
-                    att.type === "csv" ? "file_type_csv" : "file_type_text",
+                    att.type === "csv-analysis"
+                      ? "file_type_csv_analysis"
+                      : att.type === "csv"
+                        ? "file_type_csv"
+                        : "file_type_text",
                   )}
                 </span>
               </div>
