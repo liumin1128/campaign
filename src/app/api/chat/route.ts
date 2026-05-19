@@ -2,9 +2,12 @@ import { getDeepSeekApiKey } from "@/lib/env";
 import { searchWeb } from "@/lib/search";
 
 export const runtime = "nodejs";
-export const maxDuration = 120;
+export const maxDuration = 180;
 
 const DEEPSEEK_BASE = "https://api.deepseek.com";
+const SEARCH_MAX_RETRIES = 5;
+const SEARCH_MAX_RESULTS = 10;
+const SEARCH_RESULT_CONTENT_LIMIT = 2200;
 
 // ---------- Types ----------
 
@@ -34,7 +37,8 @@ const SEARCH_WEB_TOOL = {
     name: "search_web",
     description:
       "搜索互联网获取实时信息，包括新闻资讯、节假日安排、学期校历、活动赛事、突发事件、政策公告等。" +
-      "当用户询问需要最新数据、当前日期相关、或你不确定的事实性信息时，调用此工具。",
+      "当用户询问需要最新数据、当前日期相关、或你不确定的事实性信息时，调用此工具。" +
+      "回答前应优先参考多个独立来源，交叉核验官方、机构、媒体等不同数据。",
     parameters: {
       type: "object",
       properties: {
@@ -171,9 +175,7 @@ async function executeToolCall(
   const topic: "general" | "news" = args.topic ?? "general";
   const timeRange: string | undefined = args.time_range;
 
-  const MAX_RETRIES = 3;
-
-  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+  for (let attempt = 0; attempt < SEARCH_MAX_RETRIES; attempt++) {
     try {
       // 首次用原始参数；重试时逐步放宽：去掉时间范围 → 强制 general
       const retryTimeRange: "day" | "week" | "month" | "year" | undefined =
@@ -189,8 +191,10 @@ async function executeToolCall(
         topic: (attempt === 0 ? topic : attempt === 1 ? topic : "general") as
           | "general"
           | "news",
-        maxResults: 6,
+        searchDepth: "advanced" as const,
+        maxResults: SEARCH_MAX_RESULTS,
         includeAnswer: true,
+        includeRawContent: "markdown" as const,
         timeRange: retryTimeRange,
       };
 
@@ -204,7 +208,7 @@ async function executeToolCall(
       }
 
       // 无结果：等待后退避重试
-      if (attempt < MAX_RETRIES - 1) {
+      if (attempt < SEARCH_MAX_RETRIES - 1) {
         const delayMs = (attempt + 1) * 3000; // 3s → 6s
         console.warn(
           `[search_web] 第 ${attempt + 1} 次搜索无结果，${delayMs / 1000}s 后重试（query: ${query}）`,
@@ -214,17 +218,17 @@ async function executeToolCall(
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : String(err);
       console.error(`[search_web] 第 ${attempt + 1} 次搜索异常: ${errMsg}`);
-      if (attempt < MAX_RETRIES - 1) {
+      if (attempt < SEARCH_MAX_RETRIES - 1) {
         const delayMs = (attempt + 1) * 3000;
         await new Promise((r) => setTimeout(r, delayMs));
       } else {
-        return `搜索失败（已重试 ${MAX_RETRIES} 次）: ${errMsg}`;
+        return `搜索失败（已重试 ${SEARCH_MAX_RETRIES} 次）: ${errMsg}`;
       }
     }
   }
 
   // 全部重试后仍无结果
-  return `搜索"${query}"未找到相关结果（已尝试 ${MAX_RETRIES} 次）。建议更换搜索词或扩大搜索范围。`;
+  return `搜索"${query}"未找到相关结果（已尝试 ${SEARCH_MAX_RETRIES} 次）。建议更换搜索词或扩大搜索范围。`;
 }
 
 /** 将搜索结果格式化为文本 */
@@ -246,8 +250,14 @@ function formatSearchResult(
   lines.push(`## 搜索结果（搜索词: ${query}）\n`);
 
   for (const item of result.results) {
+    const detail = item.rawContent || item.content;
+    const clippedDetail =
+      detail.length > SEARCH_RESULT_CONTENT_LIMIT
+        ? `${detail.slice(0, SEARCH_RESULT_CONTENT_LIMIT)}...`
+        : detail;
+
     lines.push(
-      `### ${item.title}\n- 来源: ${item.url}\n- 时间: ${item.publishedDate ?? "未知"}\n- 可信度: ${item.credibility.level}（${item.credibility.reasons.join("；")}）\n- 内容: ${item.content}\n`,
+      `### ${item.title}\n- 来源: ${item.url}\n- 时间: ${item.publishedDate ?? "未知"}\n- 可信度: ${item.credibility.level}（${item.credibility.reasons.join("；")}）\n- 内容: ${clippedDetail}\n`,
     );
   }
 

@@ -13,6 +13,7 @@ export interface SearchResultItem {
   title: string;
   url: string;
   content: string;
+  rawContent?: string;
   score: number;
   publishedDate?: string;
   credibility: CredibilityAssessment;
@@ -148,8 +149,10 @@ export async function searchWeb(
   query: string,
   options?: {
     topic?: "general" | "news";
+    searchDepth?: "basic" | "advanced";
     maxResults?: number;
     includeAnswer?: boolean;
+    includeRawContent?: "markdown";
     timeRange?: "day" | "week" | "month" | "year";
     country?: string;
   },
@@ -159,9 +162,10 @@ export async function searchWeb(
 
   const resp = await client.search(query, {
     topic: options?.topic ?? "general",
-    searchDepth: "basic",
-    maxResults: options?.maxResults ?? 5,
+    searchDepth: options?.searchDepth ?? "advanced",
+    maxResults: options?.maxResults ?? 10,
     includeAnswer: options?.includeAnswer ?? true,
+    includeRawContent: options?.includeRawContent ?? "markdown",
     timeRange: options?.timeRange,
     country: options?.country,
     includeFavicon: true,
@@ -171,6 +175,7 @@ export async function searchWeb(
     title: r.title,
     url: r.url,
     content: r.content,
+    rawContent: r.rawContent,
     score: r.score,
     publishedDate: r.publishedDate,
     credibility: assessSearchResultCredibility({
