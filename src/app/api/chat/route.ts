@@ -233,6 +233,11 @@ function formatSearchResult(
 ): string {
   const lines: string[] = [];
 
+  lines.push(`## 事实核验说明\n${result.verificationSummary}\n`);
+  lines.push(
+    "请仅将搜索结果作为待核验上下文使用；低可信或缺少多来源交叉验证的信息，回答时必须使用保守表述并提示用户确认。\n",
+  );
+
   if (result.answer) {
     lines.push(`## 搜索摘要\n${result.answer}\n`);
   }
@@ -241,7 +246,7 @@ function formatSearchResult(
 
   for (const item of result.results) {
     lines.push(
-      `### ${item.title}\n- 来源: ${item.url}\n- 时间: ${item.publishedDate ?? "未知"}\n- 内容: ${item.content}\n`,
+      `### ${item.title}\n- 来源: ${item.url}\n- 时间: ${item.publishedDate ?? "未知"}\n- 可信度: ${item.credibility.level}（${item.credibility.reasons.join("；")}）\n- 内容: ${item.content}\n`,
     );
   }
 

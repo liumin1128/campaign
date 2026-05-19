@@ -1,6 +1,11 @@
 import { NextRequest } from "next/server";
 import { tavily } from "@tavily/core";
 import { getTavilyApiKey } from "@/lib/env";
+import {
+  assessSearchResultCredibility,
+  buildVerificationSummary,
+  type CredibilityAssessment,
+} from "@/lib/search";
 
 export const runtime = "nodejs";
 
@@ -47,7 +52,9 @@ type ContextSearchResult = {
     score: number;
     published_date?: string;
     favicon?: string;
+    credibility: CredibilityAssessment;
   }>;
+  verification_summary: string;
 };
 
 type ContextSearchResponse = {
@@ -222,18 +229,26 @@ export async function POST(req: NextRequest) {
 
           totalCredits += resp.usage?.credits ?? 0;
 
+          const results = resp.results.map((r) => ({
+            title: r.title,
+            url: r.url,
+            content: r.content,
+            score: r.score,
+            published_date: r.publishedDate,
+            favicon: r.favicon,
+            credibility: assessSearchResultCredibility({
+              url: r.url,
+              score: r.score,
+              publishedDate: r.publishedDate,
+            }),
+          }));
+
           return {
             context_type: sq.context_type,
             query: sq.query,
             answer: resp.answer,
-            results: resp.results.map((r) => ({
-              title: r.title,
-              url: r.url,
-              content: r.content,
-              score: r.score,
-              published_date: r.publishedDate,
-              favicon: r.favicon,
-            })),
+            results,
+            verification_summary: buildVerificationSummary(results),
           } satisfies ContextSearchResult;
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);

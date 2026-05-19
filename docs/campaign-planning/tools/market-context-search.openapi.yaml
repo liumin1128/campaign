@@ -154,6 +154,24 @@ paths:
                                 type: string
                               favicon:
                                 type: string
+                              credibility:
+                                type: object
+                                description: Heuristic credibility assessment for this source.
+                                additionalProperties: false
+                                properties:
+                                  level:
+                                    type: string
+                                    enum:
+                                      - high
+                                      - medium
+                                      - low
+                                  reasons:
+                                    type: array
+                                    items:
+                                      type: string
+                        verification_summary:
+                          type: string
+                          description: Summary of source count, credibility, and cross-check status.
                   search_credits_used:
                     type: integer
                     description: Total Tavily API credits consumed.

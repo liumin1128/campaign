@@ -34,9 +34,14 @@
             "content": "国务院办公厅发布2026年放假安排...",
             "score": 0.95,
             "published_date": "2025-10-25",
-            "favicon": "https://www.gov.cn/favicon.ico"
+            "favicon": "https://www.gov.cn/favicon.ico",
+            "credibility": {
+              "level": "high",
+              "reasons": ["官方/机构域名", "搜索相关性高", "发布时间较新"]
+            }
           }
-        ]
+        ],
+        "verification_summary": "事实核验置信度: 中；独立来源数: 1；高可信来源: 1；中可信来源: 0。缺少多来源交叉验证，回答需保守表述。"
       },
       {
         "context_type": "semester",
@@ -49,9 +54,14 @@
             "content": "各地中小学暑假安排陆续公布...",
             "score": 0.88,
             "published_date": "2026-03-15",
-            "favicon": "https://www.example.com/favicon.ico"
+            "favicon": "https://www.example.com/favicon.ico",
+            "credibility": {
+              "level": "medium",
+              "reasons": ["普通来源域名: www.example.com", "搜索相关性高", "发布时间较新"]
+            }
           }
-        ]
+        ],
+        "verification_summary": "事实核验置信度: 中；独立来源数: 1；高可信来源: 0；中可信来源: 1。缺少多来源交叉验证，回答需保守表述。"
       },
       {
         "context_type": "news",
@@ -64,9 +74,14 @@
             "content": "随着暑期临近，出境游市场持续升温...",
             "score": 0.92,
             "published_date": "2026-04-28",
-            "favicon": "https://www.example.com/favicon.ico"
+            "favicon": "https://www.example.com/favicon.ico",
+            "credibility": {
+              "level": "medium",
+              "reasons": ["普通来源域名: www.example.com", "搜索相关性高", "发布时间较新"]
+            }
           }
-        ]
+        ],
+        "verification_summary": "事实核验置信度: 中；独立来源数: 1；高可信来源: 0；中可信来源: 1。缺少多来源交叉验证，回答需保守表述。"
       },
       {
         "context_type": "event",
@@ -79,9 +94,14 @@
             "content": "北京国际旅游博览会将于7月举办...",
             "score": 0.85,
             "published_date": "2026-04-20",
-            "favicon": "https://www.example.com/favicon.ico"
+            "favicon": "https://www.example.com/favicon.ico",
+            "credibility": {
+              "level": "medium",
+              "reasons": ["普通来源域名: www.example.com", "搜索相关性高", "发布时间较新"]
+            }
           }
-        ]
+        ],
+        "verification_summary": "事实核验置信度: 中；独立来源数: 1；高可信来源: 0；中可信来源: 1。缺少多来源交叉验证，回答需保守表述。"
       }
     ],
     "search_credits_used": 6,
