@@ -36,21 +36,22 @@ export function executeAnalysisPlan(
   dataQuality: CsvDataQuality,
 ): AnalysisResult {
   const warnings: string[] = [];
+  const executablePlan = normalizeExecutablePlan(plan, rows);
   const groupMap = new Map<string, GroupState>();
   let matchedRowCount = 0;
 
   for (const row of rows) {
-    if (!matchesFilters(row, plan)) {
+    if (!matchesFilters(row, executablePlan)) {
       continue;
     }
 
     matchedRowCount += 1;
-    const groupValues = getGroupValues(row, plan.groupBy);
+    const groupValues = getGroupValues(row, executablePlan.groupBy);
     const groupKey = getGroupKey(groupValues);
     const state =
-      groupMap.get(groupKey) ?? createGroupState(groupValues, plan.metrics);
+      groupMap.get(groupKey) ?? createGroupState(groupValues, executablePlan.metrics);
 
-    for (const metric of plan.metrics) {
+    for (const metric of executablePlan.metrics) {
       updateMetricState(state.metrics[metric.name], row, metric);
     }
 
@@ -62,29 +63,34 @@ export function executeAnalysisPlan(
       ...state.groupValues,
     };
 
-    for (const metric of plan.metrics) {
+    for (const metric of executablePlan.metrics) {
       resultRow[metric.name] = finalizeMetric(state.metrics[metric.name], metric);
     }
 
     return resultRow;
   });
+  const totalGroupCount = resultRows.length;
 
-  sortRows(resultRows, plan);
-  const limit = Math.min(plan.ranking?.limit ?? MAX_RESULT_ROWS, MAX_RESULT_ROWS);
+  sortRows(resultRows, executablePlan);
+  const limit = Math.min(
+    executablePlan.ranking?.limit ?? MAX_RESULT_ROWS,
+    MAX_RESULT_ROWS,
+  );
   const limitedRows = resultRows.slice(0, limit);
 
   if (matchedRowCount === 0) {
     warnings.push("筛选后没有匹配行，请调整问题或筛选条件。");
   }
 
-  if (resultRows.length > limitedRows.length) {
+  if (totalGroupCount > limitedRows.length) {
     warnings.push(`结果已截断为前 ${limitedRows.length} 行。`);
   }
 
   return {
-    plan,
+    plan: executablePlan,
     rowCount: rows.length,
     matchedRowCount,
+    totalGroupCount,
     resultRows: limitedRows,
     dataQuality,
     warnings: [...dataQuality.warnings, ...warnings],
@@ -202,6 +208,27 @@ export function executeDataQuery(
     rowCount: rows.length,
     stats: buildColumnStats(rows, query.column),
     warnings,
+  };
+}
+
+function normalizeExecutablePlan(
+  plan: AnalysisPlan,
+  rows: CsvRow[],
+): AnalysisPlan {
+  const firstColumn = Object.keys(rows[0] ?? {})[0] ?? "";
+  const metrics = Array.isArray(plan.metrics) && plan.metrics.length > 0
+    ? plan.metrics
+    : [{ name: "row_count", field: firstColumn, agg: "count" as const }];
+
+  return {
+    goal: typeof plan.goal === "string" && plan.goal.trim()
+      ? plan.goal
+      : "analyze_csv",
+    requiredFields: Array.isArray(plan.requiredFields) ? plan.requiredFields : [],
+    filters: Array.isArray(plan.filters) ? plan.filters : [],
+    groupBy: Array.isArray(plan.groupBy) ? plan.groupBy : [],
+    metrics,
+    ranking: plan.ranking,
   };
 }
 

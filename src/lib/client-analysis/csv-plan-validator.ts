@@ -4,7 +4,6 @@ import {
   MAX_RESULT_ROWS,
   type AnalysisPlan,
   type CsvColumnProfile,
-  type CsvProfile,
   type FilterOperator,
   type MetricAggregator,
   type MetricRule,
@@ -24,9 +23,18 @@ export interface PlanValidationResult {
   warnings: string[];
 }
 
+type PlanValidationColumn = Pick<
+  CsvColumnProfile,
+  "name" | "type" | "semanticType"
+>;
+
+type PlanValidationProfile = {
+  columns: PlanValidationColumn[];
+};
+
 export function validateAnalysisPlan(
   candidate: unknown,
-  profile: CsvProfile,
+  profile: PlanValidationProfile,
 ): PlanValidationResult {
   const warnings: string[] = [];
   const fieldNames = new Set(profile.columns.map((column) => column.name));
@@ -78,7 +86,11 @@ export function validateAnalysisPlan(
 
   const metricNames = new Set(metrics.map((metric) => metric.name));
   const rankingRecord = toRecord(rawPlan.ranking);
-  let ranking = fallback.ranking;
+  let ranking: AnalysisPlan["ranking"] = {
+    sortBy: metrics[0]?.name ?? groupBy[0] ?? fallback.ranking?.sortBy ?? "row_count",
+    direction: "desc",
+    limit: DEFAULT_RESULT_LIMIT,
+  };
   if (rankingRecord) {
     const sortBy = asString(rankingRecord.sortBy);
     const direction = rankingRecord.direction === "asc" ? "asc" : "desc";
@@ -110,7 +122,7 @@ export function validateAnalysisPlan(
   return { plan, warnings };
 }
 
-export function createFallbackPlan(profile: CsvProfile): AnalysisPlan {
+export function createFallbackPlan(profile: PlanValidationProfile): AnalysisPlan {
   const origin = findColumn(profile.columns, ["origin"]);
   const destination = findColumn(profile.columns, ["destination"]);
   const route = findColumn(profile.columns, ["route"]);
@@ -173,7 +185,7 @@ export function createFallbackPlan(profile: CsvProfile): AnalysisPlan {
 
 function normalizeMetrics(
   rawMetrics: unknown,
-  profile: CsvProfile,
+  profile: PlanValidationProfile,
   warnings: string[],
 ): MetricRule[] {
   const fieldNames = new Set(profile.columns.map((column) => column.name));
@@ -212,9 +224,9 @@ function normalizeMetrics(
 }
 
 function findColumn(
-  columns: CsvColumnProfile[],
+  columns: PlanValidationColumn[],
   semantics: NonNullable<CsvColumnProfile["semanticType"]>[],
-): CsvColumnProfile | undefined {
+): PlanValidationColumn | undefined {
   return columns.find((column) => semantics.includes(column.semanticType ?? "unknown"));
 }
 

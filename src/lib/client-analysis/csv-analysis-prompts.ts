@@ -45,7 +45,7 @@ export function buildAnalysisAttachmentContent(args: {
 
   if (result) {
     lines.push(
-      `聚合结果：匹配 ${result.matchedRowCount}/${result.rowCount} 行，返回 ${result.resultRows.length} 行。`,
+      `聚合结果：匹配 ${result.matchedRowCount}/${result.rowCount} 行，共 ${result.totalGroupCount} 组，返回 ${result.resultRows.length} 行。`,
     );
     lines.push(`结果预览：${JSON.stringify(result.resultRows.slice(0, 10))}`);
   }

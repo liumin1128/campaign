@@ -5,13 +5,13 @@ import {
   type CsvQueryProfileContext,
   type CsvQueryResultContext,
 } from "@/lib/client-analysis/csv-query-payload";
+import { validateAnalysisPlan } from "@/lib/client-analysis/csv-plan-validator";
 import {
   MAX_QUERY_COLUMNS,
   MAX_QUERY_DISTINCT_VALUES,
   MAX_QUERY_RESULT_ROWS,
   type CsvDataQuery,
   type FilterRule,
-  type AnalysisPlan,
 } from "@/lib/client-analysis/csv-types";
 
 export const runtime = "nodejs";
@@ -72,7 +72,7 @@ export async function POST(request: Request) {
 async function requestQueryDecision(args: {
   apiKey: string;
   question: string;
-  profile: unknown;
+  profile: CsvQueryProfileContext;
   previousResults: unknown[];
   domain: "campaign" | "general";
 }): Promise<QueryAgentResponse> {
@@ -123,7 +123,7 @@ async function requestQueryDecision(args: {
   if (Array.isArray(record.queries)) {
     return {
       type: "queries",
-      queries: normalizeQueries(record.queries),
+      queries: normalizeQueries(record.queries, args.profile),
       rationale:
         typeof record.rationale === "string" ? record.rationale : undefined,
     };
@@ -169,13 +169,19 @@ Rules:
 - Domain is ${domain}; for campaign work prefer route/origin/destination, revenue, passengers/demand, yield, cabin, and date fields when relevant.`;
 }
 
-function normalizeQueries(rawQueries: unknown[]): CsvDataQuery[] {
+function normalizeQueries(
+  rawQueries: unknown[],
+  profile: CsvQueryProfileContext,
+): CsvDataQuery[] {
   return rawQueries
     .slice(0, 4)
-    .flatMap((query) => normalizeQuery(query));
+    .flatMap((query) => normalizeQuery(query, profile));
 }
 
-function normalizeQuery(query: unknown): CsvDataQuery[] {
+function normalizeQuery(
+  query: unknown,
+  profile: CsvQueryProfileContext,
+): CsvDataQuery[] {
   if (!query || typeof query !== "object" || Array.isArray(query)) {
     return [];
   }
@@ -233,7 +239,8 @@ function normalizeQuery(query: unknown): CsvDataQuery[] {
   }
 
   if (record.type === "aggregate" && typeof record.plan === "object") {
-    return [{ type: "aggregate", plan: record.plan as AnalysisPlan }];
+    const validation = validateAnalysisPlan(record.plan, profile);
+    return [{ type: "aggregate", plan: validation.plan }];
   }
 
   return [];

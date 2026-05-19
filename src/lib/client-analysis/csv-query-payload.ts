@@ -47,7 +47,7 @@ export interface CsvQueryResultContext {
   stats?: CsvDataQueryResult["stats"];
   aggregateResult?: Pick<
     AnalysisResult,
-    "rowCount" | "matchedRowCount" | "warnings"
+    "rowCount" | "matchedRowCount" | "totalGroupCount" | "warnings"
   > & {
     resultRows: AnalysisResult["resultRows"];
   };
@@ -105,6 +105,7 @@ export function compactPreviousResultsForQuery(
       ? {
           rowCount: result.aggregateResult.rowCount,
           matchedRowCount: result.aggregateResult.matchedRowCount,
+          totalGroupCount: result.aggregateResult.totalGroupCount,
           resultRows: result.aggregateResult.resultRows.slice(
             0,
             Math.min(MAX_PREVIOUS_RESULT_ROWS_FOR_QUERY, MAX_QUERY_RESULT_ROWS),

@@ -106,6 +106,7 @@ export interface AnalysisResult {
   plan: AnalysisPlan;
   rowCount: number;
   matchedRowCount: number;
+  totalGroupCount: number;
   resultRows: Array<Record<string, string | number | null>>;
   dataQuality: CsvDataQuality;
   warnings: string[];

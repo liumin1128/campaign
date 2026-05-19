@@ -2,7 +2,10 @@ import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { executeDataQuery } from "../src/lib/client-analysis/csv-plan-executor";
-import { createFallbackPlan } from "../src/lib/client-analysis/csv-plan-validator";
+import {
+  createFallbackPlan,
+  validateAnalysisPlan,
+} from "../src/lib/client-analysis/csv-plan-validator";
 import {
   createCsvProfile,
   decodeCsvText,
@@ -160,6 +163,57 @@ const testCases: TestCase[] = [
         "聚合输入行数不正确",
       );
       assert(result.aggregateResult.resultRows.length > 0, "聚合结果为空");
+    },
+  },
+  {
+    name: "聚合计划缺省 filters 时仍可执行",
+    run: ({ rows, profile }) => {
+      const groupColumn = profile.columns[0]?.name;
+      assert(groupColumn, "没有可分组字段");
+      const plan = {
+        goal: "test_missing_filters",
+        groupBy: [groupColumn],
+        metrics: [{ name: "row_count", field: groupColumn, agg: "count" }],
+        ranking: { sortBy: "row_count", direction: "desc", limit: 10 },
+      } as unknown as AnalysisPlan;
+
+      const result = executeDataQuery(
+        rows,
+        { type: "aggregate", plan },
+        profile.dataQuality,
+      );
+
+      assert(result.aggregateResult !== undefined, "未返回聚合分析结果");
+      assert(result.aggregateResult.resultRows.length > 0, "聚合结果为空");
+    },
+  },
+  {
+    name: "校验后的 count 聚合默认按 count 降序排序",
+    run: ({ rows, profile }) => {
+      const groupColumn =
+        profile.columns.find((column) => column.type === "string")?.name ??
+        profile.columns[0]?.name;
+      assert(groupColumn, "没有可分组字段");
+
+      const validation = validateAnalysisPlan(
+        {
+          goal: "test_count_popularity",
+          groupBy: [groupColumn],
+          metrics: [{ name: "row_count", field: groupColumn, agg: "count" }],
+        },
+        profile,
+      );
+      const result = executeDataQuery(
+        rows,
+        { type: "aggregate", plan: validation.plan },
+        profile.dataQuality,
+      );
+      const counts =
+        result.aggregateResult?.resultRows.map((row) => Number(row.row_count)) ??
+        [];
+
+      assert(counts.length > 0, "聚合结果为空");
+      assert(isSortedDesc(counts), "count 聚合未按 row_count 降序排序");
     },
   },
   {

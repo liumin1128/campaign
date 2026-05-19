@@ -126,6 +126,7 @@ function compactResult(result: AnalysisResult) {
     plan: result.plan,
     rowCount: result.rowCount,
     matchedRowCount: result.matchedRowCount,
+    totalGroupCount: result.totalGroupCount,
     resultRows: result.resultRows.slice(0, 100),
     dataQuality: result.dataQuality,
     warnings: result.warnings,
