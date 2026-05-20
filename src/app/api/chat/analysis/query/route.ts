@@ -141,7 +141,7 @@ async function requestQueryDecisionOnce(args: {
       return createFallbackFinalDecision(args, "Final answer was requested.");
     }
 
-    const queries = normalizeQueries(parsed, args.profile);
+    const queries = normalizeQueries(parsed, args.profile, args.question);
     return queries.length > 0
       ? { type: "queries", queries, rationale: "Parsed a query list directly." }
       : createFallbackQueryDecision(args);
@@ -155,6 +155,18 @@ async function requestQueryDecisionOnce(args: {
 
   const record = parsed as Record<string, unknown>;
   if (typeof record.finalAnswer === "string" && record.finalAnswer.trim()) {
+    if (!args.forceFinal) {
+      const guardQueries = buildCompletenessGuardQueries(args);
+      if (guardQueries.length > 0) {
+        return {
+          type: "queries",
+          queries: guardQueries,
+          rationale:
+            "Previous results are missing key non-empty metric coverage for the requested dimensions; requesting targeted follow-up queries before finalizing.",
+        };
+      }
+    }
+
     return { type: "final", finalAnswer: record.finalAnswer.trim() };
   }
 
@@ -163,7 +175,7 @@ async function requestQueryDecisionOnce(args: {
       return createFallbackFinalDecision(args, "Final answer was requested.");
     }
 
-    const queries = normalizeQueries(record.queries, args.profile);
+    const queries = normalizeQueries(record.queries, args.profile, args.question);
     if (queries.length === 0) {
       return createFallbackQueryDecision(args);
     }
@@ -255,7 +267,7 @@ Available response shapes:
     {"type":"rows","rowNumbers":[1,2,3],"columns":["field"],"limit":10},
     {"type":"rows","startRow":100,"limit":10,"columns":["field"]},
     {"type":"columns","columns":["fieldA","fieldB"],"startRow":1,"limit":20},
-    {"type":"filterRows","filters":[{"field":"field","op":"eq|contains|between|gte|lte","value":"value"}],"columns":["field"],"limit":20},
+    {"type":"filterRows","filters":[{"field":"field","op":"eq|contains|between|gte|lte|notEmpty","value":"value"}],"columns":["field"],"limit":20},
     {"type":"distinctValues","column":"field","limit":50},
     {"type":"columnStats","column":"field"},
     {"type":"aggregate","plan":{"goal":"goal","requiredFields":[],"filters":[],"groupBy":["field"],"metrics":[{"name":"metric","field":"field","agg":"sum|avg|min|max|count"}],"ranking":{"sortBy":"metric","direction":"desc","limit":20}}}
@@ -271,6 +283,7 @@ Rules:
 - Read profile.dataQuality.parseMetadata to understand the detected encoding, delimiter, and parser confidence.
 - If parser confidence is low or fields look like whole rows, mention the parsing uncertainty instead of forcing an analysis.
 - Never ask for all rows or all columns. Max rows per row-detail query is ${MAX_QUERY_RESULT_ROWS}; max columns is ${MAX_QUERY_COLUMNS}; max distinct values is ${MAX_QUERY_DISTINCT_VALUES}. Aggregate queries can summarize the full dataset and may return top-ranked groups.
+- Use {"op":"notEmpty"} filters to exclude missing dimension or metric fields before ranking by low availability or high load factor.
 - Prefer aggregate, columnStats, and distinctValues before row-level inspection.
 - In the first query round, request enough complementary queries to cover the user's main dimensions and metrics in one batch whenever possible. You may request up to ${MAX_QUERIES_PER_ROUND} queries per round.
 - For analytical questions, combine columnStats for key metrics, distinctValues for key dimensions, and several aggregate queries with different groupBy/ranking/filter views instead of asking for one narrow query at a time.
@@ -278,7 +291,12 @@ Rules:
 - rowNumber is 1-based data-row numbering after the header row. If the user asks for "row N" or "第 N 行数据", request {"type":"rows","rowNumbers":[N]}.
 - If previousResults already contain aggregateResult, stats, values, or rows that fully address the question, return finalAnswer instead of asking for more data.
 - Do not repeat a query shape that is already present in previousResults.
-- If previousResults are truncated, missing important dimensions, missing important metrics, or only cover part of the user's question, ask for additional targeted queries instead of drawing a broad conclusion from partial evidence.
+- Top-ranked aggregates can be truncated by limit while still covering the full dataset through totalGroupCount and matchedRowCount. Do not ask for more data solely because an aggregate is truncated; ask only when the returned rows miss important dimensions, important metrics, or part of the user's question.
+- Aggregate numeric metrics include companion fields named metric__non_null_count. Treat low or zero non-null counts as weak evidence and request filtered follow-up queries when needed.
+- If low-availability rankings are dominated by null metric values or "(empty)" dimension groups, request a notEmpty-filtered aggregate before finalAnswer.
+- If load factor and booking-class availability appear at different row granularities and joint notEmpty queries return zero rows, do not keep forcing the join. Use separate aggregates, state the granularity limitation, and make cautious recommendations.
+- If a previous aggregate with notEmpty filters for both load factor and availability returned matchedRowCount = 0, treat the joint row-level intersection as disproven. Do not request another query that requires both fields to be non-empty unless the grouping/filter scope is genuinely different and necessary.
+- Interpret compact labels like Sep26, Aug26, or Dec26 in file names as departure month/year labels, not day-of-month filters. Only filter Day of departure_date when the user explicitly says day 26, 26日, or similar.
 - Do not claim comprehensive coverage until previousResults cover each key dimension, metric, and filter implied by the question, or until you explicitly state the remaining gap.
 - When force_final is true, you must return {"finalAnswer":"..."} and must not return queries.
 - State limitations if previousResults are insufficient.
@@ -290,15 +308,17 @@ Rules:
 function normalizeQueries(
   rawQueries: unknown[],
   profile: CsvQueryProfileContext,
+  question: string,
 ): CsvDataQuery[] {
   return rawQueries
     .slice(0, MAX_QUERIES_PER_ROUND)
-    .flatMap((query) => normalizeQuery(query, profile));
+    .flatMap((query) => normalizeQuery(query, profile, question));
 }
 
 function normalizeQuery(
   query: unknown,
   profile: CsvQueryProfileContext,
+  question: string,
 ): CsvDataQuery[] {
   if (!query || typeof query !== "object" || Array.isArray(query)) {
     return [];
@@ -358,7 +378,12 @@ function normalizeQuery(
 
   if (record.type === "aggregate" && typeof record.plan === "object") {
     const validation = validateAnalysisPlan(record.plan, profile);
-    return [{ type: "aggregate", plan: validation.plan }];
+    return [
+      {
+        type: "aggregate",
+        plan: applyInferredContextFilters(validation.plan, profile, question),
+      },
+    ];
   }
 
   return [];
@@ -565,7 +590,8 @@ function normalizeFilters(value: unknown): FilterRule[] {
         op !== "contains" &&
         op !== "between" &&
         op !== "gte" &&
-        op !== "lte")
+        op !== "lte" &&
+        op !== "notEmpty")
     ) {
       return [];
     }
@@ -596,6 +622,53 @@ function normalizeSingleValue(value: unknown): string | number {
   }
 
   return String(value ?? "");
+}
+
+function applyInferredContextFilters(
+  plan: ReturnType<typeof validateAnalysisPlan>["plan"],
+  profile: CsvQueryProfileContext,
+  question: string,
+) {
+  const month = inferDepartureMonth(question, profile.fileName);
+  if (!month) {
+    return plan;
+  }
+
+  const monthColumn = findColumnByName(profile, ["Month of departure_date"]);
+  if (!monthColumn || plan.filters.some((filter) => filter.field === monthColumn.name)) {
+    return plan;
+  }
+
+  return {
+    ...plan,
+    requiredFields: Array.from(
+      new Set([...plan.requiredFields, monthColumn.name]),
+    ),
+    filters: [
+      ...plan.filters,
+      { field: monthColumn.name, op: "eq" as const, value: month },
+    ],
+  };
+}
+
+function inferDepartureMonth(question: string, fileName: string) {
+  const text = `${question} ${fileName}`.toLowerCase();
+  const entries: Array<[RegExp, string]> = [
+    [/\b(?:jan|january)\s*'?2\d\b/, "January"],
+    [/\b(?:feb|february)\s*'?2\d\b/, "February"],
+    [/\b(?:mar|march)\s*'?2\d\b/, "March"],
+    [/\b(?:apr|april)\s*'?2\d\b/, "April"],
+    [/\bmay\s*'?2\d\b/, "May"],
+    [/\b(?:jun|june)\s*'?2\d\b/, "June"],
+    [/\b(?:jul|july)\s*'?2\d\b/, "July"],
+    [/\b(?:aug|august)\s*'?2\d\b/, "August"],
+    [/\b(?:sep|sept|september)\s*'?2\d\b/, "September"],
+    [/\b(?:oct|october)\s*'?2\d\b/, "October"],
+    [/\b(?:nov|november)\s*'?2\d\b/, "November"],
+    [/\b(?:dec|december)\s*'?2\d\b/, "December"],
+  ];
+
+  return entries.find(([pattern]) => pattern.test(text))?.[1];
 }
 
 function normalizeStringArray(value: unknown) {
@@ -646,6 +719,359 @@ function extractJsonObject(content: unknown): unknown | null {
   }
 
   return null;
+}
+
+function buildCompletenessGuardQueries(args: {
+  question: string;
+  profile: CsvQueryProfileContext;
+  previousResults: unknown[];
+}): CsvDataQuery[] {
+  const question = args.question.toLowerCase();
+  const previousResults = args.previousResults.flatMap((result) => {
+    const record = toRecord(result);
+    return record ? [record] : [];
+  });
+  const wantsAvailability =
+    question.includes("availability") ||
+    question.includes("available") ||
+    question.includes("可用") ||
+    question.includes("舱位");
+  const wantsLoadFactor =
+    question.includes("load factor") ||
+    question.includes("lf") ||
+    question.includes("载运") ||
+    question.includes("客座率");
+  const wantsRoute =
+    question.includes("origin") ||
+    question.includes("destination") ||
+    question.includes("route") ||
+    question.includes("path") ||
+    question.includes("航线");
+  const wantsBookingClass =
+    question.includes("booking_class") ||
+    question.includes("booking class") ||
+    question.includes("舱位");
+
+  const routeColumn = findColumnByName(args.profile, [
+    "origin destination",
+    "route",
+    "od",
+  ]);
+  const pathColumn = findColumnByName(args.profile, ["travel_solution_path"]);
+  const bookingClassColumn = findColumnByName(args.profile, ["booking_class"]);
+  const availabilityColumn = findColumnByName(args.profile, [
+    "Booking class availability",
+    "Avg. Booking class availability",
+  ]);
+  const loadFactorColumn = findColumnByName(args.profile, [
+    "O&D max load factor",
+    "load factor",
+    "lf",
+  ]);
+  const monthColumn = findColumnByName(args.profile, ["Month of departure_date"]);
+  const dayColumn = findColumnByName(args.profile, ["Day of departure_date"]);
+  const requestedSpecificDay = extractRequestedDay(args.question);
+  const hasAvailabilityEvidence =
+    Boolean(availabilityColumn) &&
+    hasEvidenceForMetric(previousResults, availabilityColumn?.name ?? "", {
+      dimensionNames: [
+        routeColumn?.name,
+        pathColumn?.name,
+        wantsBookingClass ? bookingClassColumn?.name : undefined,
+      ],
+      requiresNonEmptyDimensionNames: wantsBookingClass
+        ? [bookingClassColumn?.name]
+        : undefined,
+      dayColumnName: requestedSpecificDay ? dayColumn?.name : undefined,
+    });
+  const hasLoadFactorEvidence =
+    Boolean(loadFactorColumn) &&
+    hasEvidenceForMetric(previousResults, loadFactorColumn?.name ?? "", {
+      dimensionNames: [
+        wantsRoute ? routeColumn?.name : undefined,
+        wantsRoute ? pathColumn?.name : undefined,
+      ],
+      dayColumnName: requestedSpecificDay ? dayColumn?.name : undefined,
+    });
+  const needsAvailabilityGuard =
+    wantsAvailability &&
+    Boolean(availabilityColumn) &&
+    !hasAvailabilityEvidence;
+  const needsLoadFactorGuard =
+    wantsLoadFactor &&
+    Boolean(loadFactorColumn) &&
+    !hasLoadFactorEvidence;
+
+  if (!needsAvailabilityGuard && !needsLoadFactorGuard) {
+    return [];
+  }
+
+  const filters: FilterRule[] = [];
+
+  if (monthColumn) {
+    filters.push({ field: monthColumn.name, op: "eq", value: "September" });
+  }
+  if (dayColumn && requestedSpecificDay) {
+    filters.push({ field: dayColumn.name, op: "eq", value: requestedSpecificDay });
+  }
+  if (bookingClassColumn && wantsBookingClass) {
+    filters.push({ field: bookingClassColumn.name, op: "notEmpty" });
+  }
+  if (availabilityColumn && wantsAvailability) {
+    filters.push({ field: availabilityColumn.name, op: "notEmpty" });
+  }
+
+  const groupBy = [routeColumn?.name, pathColumn?.name, bookingClassColumn?.name]
+    .flatMap((field) => (field ? [field] : []))
+    .slice(0, 3);
+  const queries: CsvDataQuery[] = [];
+
+  if (groupBy.length > 0 && availabilityColumn && needsAvailabilityGuard) {
+    queries.push({
+      type: "aggregate",
+      plan: {
+        goal: "guard_low_availability_non_empty_metrics",
+        requiredFields: [...groupBy, availabilityColumn.name],
+        filters,
+        groupBy,
+        metrics: [
+          {
+            name: "avg_availability",
+            field: availabilityColumn.name,
+            agg: "avg",
+          },
+          {
+            name: "min_availability",
+            field: availabilityColumn.name,
+            agg: "min",
+          },
+          {
+            name: "row_count",
+            field: groupBy[0],
+            agg: "count",
+          },
+        ],
+        ranking: {
+          sortBy: "avg_availability",
+          direction: "asc",
+          limit: 100,
+        },
+      },
+    });
+  }
+
+  if (
+    wantsRoute &&
+    needsLoadFactorGuard &&
+    routeColumn &&
+    pathColumn &&
+    loadFactorColumn
+  ) {
+    queries.push({
+      type: "aggregate",
+      plan: {
+        goal: "guard_high_load_factor_non_empty_metrics",
+        requiredFields: [routeColumn.name, pathColumn.name, loadFactorColumn.name],
+        filters: [
+          ...(monthColumn
+            ? [{ field: monthColumn.name, op: "eq" as const, value: "September" }]
+            : []),
+          ...(dayColumn && requestedSpecificDay
+            ? [{ field: dayColumn.name, op: "eq" as const, value: requestedSpecificDay }]
+            : []),
+          { field: loadFactorColumn.name, op: "notEmpty" },
+        ],
+        groupBy: [routeColumn.name, pathColumn.name],
+        metrics: [
+          {
+            name: "avg_max_lf",
+            field: loadFactorColumn.name,
+            agg: "avg",
+          },
+          {
+            name: "max_max_lf",
+            field: loadFactorColumn.name,
+            agg: "max",
+          },
+          {
+            name: "row_count",
+            field: routeColumn.name,
+            agg: "count",
+          },
+        ],
+        ranking: {
+          sortBy: "avg_max_lf",
+          direction: "desc",
+          limit: 100,
+        },
+      },
+    });
+  }
+
+  return queries.filter((query) => !hasPreviousQuery(previousResults, query));
+}
+
+function hasEvidenceForMetric(
+  previousResults: Record<string, unknown>[],
+  metricFieldName: string,
+  options: {
+    dimensionNames?: Array<string | undefined>;
+    requiresNonEmptyDimensionNames?: Array<string | undefined>;
+    dayColumnName?: string;
+  } = {},
+) {
+  return previousResults.some((result) => {
+    const aggregate = toRecord(result.aggregateResult);
+    if (!aggregate) {
+      return false;
+    }
+
+    const rows = getAggregateRows(aggregate);
+    if (rows.length === 0) {
+      return false;
+    }
+
+    const plan = getResultPlan(result, aggregate);
+    const metricNames = getPlanMetricNamesForField(plan, metricFieldName);
+    if (metricNames.length === 0) {
+      return false;
+    }
+
+    const groupBy = toStringArray(plan?.groupBy);
+    const filters = toRecordArray(plan?.filters);
+    const dimensionNames = (options.dimensionNames ?? []).flatMap((field) =>
+      field ? [field] : [],
+    );
+    const requiredDimensionNames = (
+      options.requiresNonEmptyDimensionNames ?? []
+    ).flatMap((field) => (field ? [field] : []));
+
+    if (dimensionNames.some((dimension) => !groupBy.includes(dimension))) {
+      return false;
+    }
+
+    if (
+      options.dayColumnName &&
+      !filters.some((filter) => filter.field === options.dayColumnName)
+    ) {
+      return false;
+    }
+
+    if (
+      requiredDimensionNames.some(
+        (dimension) => !hasNotEmptyFilter(filters, dimension),
+      )
+    ) {
+      return false;
+    }
+
+    return rows.some((row) =>
+      metricNames.some((metricName) => {
+        const count = row[`${metricName}__non_null_count`];
+        if (typeof count === "number") {
+          return count > 0;
+        }
+
+        return row[metricName] !== null && row[metricName] !== undefined;
+      }),
+    );
+  });
+}
+
+function getResultPlan(
+  result: Record<string, unknown>,
+  aggregate: Record<string, unknown> | null,
+) {
+  const query = toRecord(result.query);
+  return toRecord(aggregate?.plan) ?? toRecord(query?.plan);
+}
+
+function getPlanMetricNamesForField(
+  plan: Record<string, unknown> | null,
+  fieldName: string,
+) {
+  const metrics = toRecordArray(plan?.metrics);
+  return metrics.flatMap((metric) =>
+    metric.field === fieldName && typeof metric.name === "string"
+      ? [metric.name]
+      : [],
+  );
+}
+
+function getAggregateRows(aggregate: Record<string, unknown> | null) {
+  return Array.isArray(aggregate?.resultRows)
+    ? aggregate.resultRows.flatMap((row) => {
+        const record = toRecord(row);
+        return record ? [record] : [];
+      })
+    : [];
+}
+
+function hasNotEmptyFilter(filters: Record<string, unknown>[], fieldName: string) {
+  return filters.some(
+    (filter) => filter.field === fieldName && filter.op === "notEmpty",
+  );
+}
+
+function hasPreviousQuery(
+  previousResults: Record<string, unknown>[],
+  query: CsvDataQuery,
+) {
+  const signature = getQuerySignature(query);
+  return previousResults.some((result) => {
+    const previousQuery = toRecord(result.query);
+    return previousQuery && getQuerySignature(previousQuery) === signature;
+  });
+}
+
+function getQuerySignature(query: unknown) {
+  return JSON.stringify(query);
+}
+
+function toStringArray(value: unknown) {
+  return Array.isArray(value)
+    ? value.flatMap((item) => (typeof item === "string" ? [item] : []))
+    : [];
+}
+
+function toRecordArray(value: unknown) {
+  return Array.isArray(value)
+    ? value.flatMap((item) => {
+        const record = toRecord(item);
+        return record ? [record] : [];
+      })
+    : [];
+}
+
+function extractRequestedDay(question: string) {
+  const lowerQuestion = question.toLowerCase();
+  const dayMatch = lowerQuestion.match(/\b(?:day|date)\s*(?:of\s*)?(?:=|is|:)?\s*0?([1-9]|[12]\d|30)\b/);
+  if (dayMatch?.[1]) {
+    return Number(dayMatch[1]);
+  }
+
+  const chineseDayMatch = question.match(/([1-9]|[12]\d|30)\s*(?:日|号)/);
+  if (chineseDayMatch?.[1]) {
+    return Number(chineseDayMatch[1]);
+  }
+
+  return undefined;
+}
+
+function findColumnByName(
+  profile: CsvQueryProfileContext,
+  candidates: string[],
+) {
+  const lowerCandidates = candidates.map((candidate) => candidate.toLowerCase());
+  return profile.columns.find((column) => {
+    const lowerName = column.name.toLowerCase();
+    return lowerCandidates.some(
+      (candidate) =>
+        lowerName === candidate ||
+        lowerName.includes(candidate) ||
+        candidate.includes(lowerName),
+    );
+  });
 }
 
 function tryParseJson(value: string): unknown | null {

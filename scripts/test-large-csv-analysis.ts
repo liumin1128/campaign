@@ -247,6 +247,110 @@ const testCases: TestCase[] = [
       );
     },
   },
+  {
+    name: "聚合排序会将空指标排在末尾并返回非空计数",
+    run: ({ rows, profile }) => {
+      const groupColumn =
+        findColumnByType(profile, "string") ?? profile.columns[0]?.name;
+      const metricColumn = findColumnByType(profile, "number");
+      assert(groupColumn, "没有可分组字段");
+      assert(metricColumn, "没有数值字段可聚合");
+
+      const result = executeDataQuery(
+        rows,
+        {
+          type: "aggregate",
+          plan: {
+            goal: "test_null_sort_and_non_null_count",
+            requiredFields: [groupColumn, metricColumn],
+            filters: [],
+            groupBy: [groupColumn],
+            metrics: [
+              { name: "avg_metric", field: metricColumn, agg: "avg" },
+            ],
+            ranking: { sortBy: "avg_metric", direction: "asc", limit: 20 },
+          },
+        },
+        profile.dataQuality,
+      );
+      const resultRows = result.aggregateResult?.resultRows ?? [];
+
+      assert(resultRows.length > 0, "聚合结果为空");
+      assert(
+        resultRows[0]?.avg_metric !== null,
+        "空指标不应排在升序结果首位",
+      );
+      assert(
+        "avg_metric__non_null_count" in resultRows[0],
+        "聚合结果缺少非空计数字段",
+      );
+    },
+  },
+  {
+    name: "count 聚合会返回字段非空计数",
+    run: ({ rows, profile }) => {
+      const columnWithMissing = profile.columns.find(
+        (column) => column.missingCount > 0,
+      );
+      if (!columnWithMissing) {
+        return;
+      }
+
+      const result = executeDataQuery(
+        rows,
+        {
+          type: "aggregate",
+          plan: {
+            goal: "test_count_non_null_count",
+            requiredFields: [columnWithMissing.name],
+            filters: [],
+            groupBy: [],
+            metrics: [
+              { name: "row_count", field: columnWithMissing.name, agg: "count" },
+            ],
+            ranking: { sortBy: "row_count", direction: "desc", limit: 1 },
+          },
+        },
+        profile.dataQuality,
+      );
+      const row = result.aggregateResult?.resultRows[0];
+
+      assert(row, "聚合结果为空");
+      assert(row.row_count === rows.length, "count 聚合行数不正确");
+      assert(
+        row.row_count__non_null_count === rows.length - columnWithMissing.missingCount,
+        "count 聚合的非空计数不正确",
+      );
+    },
+  },
+  {
+    name: "支持 notEmpty 筛选",
+    run: ({ rows, profile }) => {
+      const columnWithMissing = profile.columns.find(
+        (column) => column.missingCount > 0,
+      );
+      if (!columnWithMissing) {
+        return;
+      }
+
+      const result = executeDataQuery(
+        rows,
+        {
+          type: "filterRows",
+          filters: [{ field: columnWithMissing.name, op: "notEmpty" }],
+          columns: [columnWithMissing.name],
+          limit: 20,
+        },
+        profile.dataQuality,
+      );
+
+      assert(result.rows !== undefined, "未返回筛选明细");
+      assert(
+        result.rows.every((row) => String(row[columnWithMissing.name] ?? "").trim()),
+        "notEmpty 筛选返回了空值",
+      );
+    },
+  },
 ];
 
 async function main() {

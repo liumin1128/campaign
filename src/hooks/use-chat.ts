@@ -1032,8 +1032,6 @@ async function runFreeCsvQueryAnalysis(args: {
 
     const queryCandidates = buildExecutableQueryCandidates(
       decision.queries,
-      args.question,
-      args.profile,
       executedQueryKeys,
     );
     if (queryCandidates.length === 0) {
@@ -1291,8 +1289,6 @@ async function requestDataQueriesFinalAnswer(args: {
 
 function buildExecutableQueryCandidates(
   queries: CsvDataQuery[],
-  question: string,
-  profile: CsvProfile,
   executedQueryKeys?: Set<string>,
 ) {
   const seen = new Set<string>();
@@ -1309,9 +1305,7 @@ function buildExecutableQueryCandidates(
     return uniqueQueries;
   }
 
-  const fallback = createLocalFallbackAggregateQuery(question, profile);
-  const fallbackKey = getCsvDataQueryKey(fallback);
-  return executedQueryKeys?.has(fallbackKey) ? [] : [fallback];
+  return [];
 }
 
 function getCsvDataQueryKey(query: CsvDataQuery) {

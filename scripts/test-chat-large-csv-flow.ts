@@ -173,8 +173,6 @@ async function main() {
 
     const candidates = buildExecutableQueryCandidates(
       decision.queries,
-      question,
-      loadedCsv.profile,
       executedQueryKeys,
     );
 
@@ -476,8 +474,6 @@ function unquoteEnvValue(value: string) {
 
 function buildExecutableQueryCandidates(
   queries: CsvDataQuery[],
-  question: string,
-  profile: CsvProfile,
   executedQueryKeys: Set<string>,
 ) {
   const seen = new Set<string>();
@@ -494,75 +490,11 @@ function buildExecutableQueryCandidates(
     return uniqueQueries;
   }
 
-  const fallback = createLocalFallbackAggregateQuery(question, profile);
-  const fallbackKey = getCsvDataQueryKey(fallback);
-  return executedQueryKeys.has(fallbackKey) ? [] : [fallback];
+  return [];
 }
 
 function getCsvDataQueryKey(query: CsvDataQuery) {
   return JSON.stringify(query);
-}
-
-function createLocalFallbackAggregateQuery(
-  question: string,
-  profile: CsvProfile,
-): CsvDataQuery {
-  const groupBy = inferLocalFallbackGroupBy(question, profile);
-  const countField = groupBy[0] ?? profile.columns[0]?.name ?? "";
-
-  return {
-    type: "aggregate",
-    plan: {
-      goal: "local_fallback_count_by_group",
-      requiredFields: groupBy,
-      filters: [],
-      groupBy,
-      metrics: [{ name: "row_count", field: countField, agg: "count" }],
-      ranking: { sortBy: "row_count", direction: "desc", limit: 50 },
-    },
-  };
-}
-
-function inferLocalFallbackGroupBy(question: string, profile: CsvProfile) {
-  const lowerQuestion = question.toLowerCase();
-  const origin = findProfileColumnBySemantic(profile, "origin");
-  const destination = findProfileColumnBySemantic(profile, "destination");
-  const route = findProfileColumnBySemantic(profile, "route");
-
-  if (
-    origin &&
-    destination &&
-    (lowerQuestion.includes("origin") ||
-      lowerQuestion.includes("destination") ||
-      lowerQuestion.includes("od") ||
-      lowerQuestion.includes("o&d") ||
-      question.includes("组合") ||
-      question.includes("航线"))
-  ) {
-    return [origin.name, destination.name];
-  }
-
-  if (route) {
-    return [route.name];
-  }
-
-  if (origin && destination) {
-    return [origin.name, destination.name];
-  }
-
-  const dimension = profile.columns.find(
-    (column) => column.type === "string" || column.type === "date",
-  );
-  return dimension
-    ? [dimension.name]
-    : profile.columns.slice(0, 1).map((column) => column.name);
-}
-
-function findProfileColumnBySemantic(
-  profile: CsvProfile,
-  semanticType: NonNullable<CsvProfile["columns"][number]["semanticType"]>,
-) {
-  return profile.columns.find((column) => column.semanticType === semanticType);
 }
 
 function buildFinalAttachmentContent(args: {

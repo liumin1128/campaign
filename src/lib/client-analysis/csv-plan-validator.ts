@@ -16,6 +16,7 @@ const ALLOWED_OPS: FilterOperator[] = [
   "between",
   "gte",
   "lte",
+  "notEmpty",
 ];
 
 export interface PlanValidationResult {

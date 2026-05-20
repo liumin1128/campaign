@@ -16,6 +16,7 @@ import { parseDate, parseNumber } from "./csv-profiler";
 type MetricState = {
   sum: number;
   count: number;
+  nonNullCount: number;
   min: number | null;
   max: number | null;
 };
@@ -64,7 +65,9 @@ export function executeAnalysisPlan(
     };
 
     for (const metric of executablePlan.metrics) {
-      resultRow[metric.name] = finalizeMetric(state.metrics[metric.name], metric);
+      const metricState = state.metrics[metric.name];
+      resultRow[metric.name] = finalizeMetric(metricState, metric);
+      resultRow[`${metric.name}__non_null_count`] = metricState.nonNullCount;
     }
 
     return resultRow;
@@ -236,6 +239,10 @@ function matchesFilters(row: CsvRow, plan: AnalysisPlan): boolean {
   return plan.filters.every((filter) => {
     const rawValue = row[filter.field] ?? "";
     const compareValue = filter.value;
+
+    if (filter.op === "notEmpty") {
+      return rawValue.trim() !== "";
+    }
 
     if (filter.op === "contains") {
       return rawValue
@@ -411,19 +418,30 @@ function createGroupState(
     metrics: Object.fromEntries(
       metrics.map((metric) => [
         metric.name,
-        { sum: 0, count: 0, min: null, max: null } satisfies MetricState,
+        {
+          sum: 0,
+          count: 0,
+          nonNullCount: 0,
+          min: null,
+          max: null,
+        } satisfies MetricState,
       ]),
     ),
   };
 }
 
 function updateMetricState(state: MetricState, row: CsvRow, metric: MetricRule) {
+  const rawValue = row[metric.field] ?? "";
+  if (rawValue.trim() !== "") {
+    state.nonNullCount += 1;
+  }
+
   if (metric.agg === "count") {
     state.count += 1;
     return;
   }
 
-  const value = parseNumber(row[metric.field]);
+  const value = parseNumber(rawValue);
   if (value === null) {
     return;
   }
@@ -471,6 +489,14 @@ function sortRows(
   rows.sort((left, right) => {
     const leftValue = left[ranking.sortBy];
     const rightValue = right[ranking.sortBy];
+    const leftMissing = leftValue === null || leftValue === undefined || leftValue === "";
+    const rightMissing =
+      rightValue === null || rightValue === undefined || rightValue === "";
+
+    if (leftMissing || rightMissing) {
+      if (leftMissing && rightMissing) return 0;
+      return leftMissing ? 1 : -1;
+    }
 
     if (typeof leftValue === "number" && typeof rightValue === "number") {
       return (leftValue - rightValue) * directionMultiplier;

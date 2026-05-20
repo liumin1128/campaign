@@ -71,14 +71,20 @@ export interface CsvProfileSummary {
   dataQuality: CsvDataQuality;
 }
 
-export type FilterOperator = "eq" | "contains" | "between" | "gte" | "lte";
+export type FilterOperator =
+  | "eq"
+  | "contains"
+  | "between"
+  | "gte"
+  | "lte"
+  | "notEmpty";
 
 export type MetricAggregator = "sum" | "avg" | "min" | "max" | "count";
 
 export interface FilterRule {
   field: string;
   op: FilterOperator;
-  value: string | number | [string | number, string | number];
+  value?: string | number | [string | number, string | number];
 }
 
 export interface MetricRule {
