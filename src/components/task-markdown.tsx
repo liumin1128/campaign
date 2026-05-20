@@ -1,13 +1,24 @@
 "use client";
 
-import type { ReactNode } from "react";
-import { useEffect } from "react";
-import { EditorContent, useEditor } from "@tiptap/react";
+import type { ChangeEvent, ReactNode } from "react";
+import { useEffect, useRef, useState } from "react";
+import Image from "@tiptap/extension-image";
+import FileHandler from "@tiptap/extension-file-handler";
+import { EditorContent, useEditor, type Editor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import { hasRichTextContent } from "@/utils/rich-text";
 
+const allowedImageTypes = ["image/jpeg", "image/png", "image/webp", "image/gif"];
+
+type UploadedImage = {
+  url: string;
+  key?: string;
+};
+
 type TaskMarkdownEditorProps = {
   value: string;
+  campaignID: string;
+  taskID?: number;
   disabled?: boolean;
   onChange: (value: string) => void;
 };
@@ -138,12 +149,71 @@ function CodeIcon() {
   );
 }
 
+function ImageIcon() {
+  return (
+    <svg
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+    >
+      <path
+        d="M2.5 4A1.5 1.5 0 0 1 4 2.5h8A1.5 1.5 0 0 1 13.5 4v8A1.5 1.5 0 0 1 12 13.5H4A1.5 1.5 0 0 1 2.5 12V4Z"
+        strokeLinejoin="round"
+      />
+      <path d="m3.3 11 3-3 2.2 2.1 1.2-1.2 3 3" strokeLinecap="round" />
+      <circle cx="10.7" cy="5.4" r="1" />
+    </svg>
+  );
+}
+
+async function uploadTaskImage({
+  file,
+  campaignID,
+  taskID,
+}: {
+  file: File;
+  campaignID: string;
+  taskID?: number;
+}) {
+  const formData = new FormData();
+  formData.append("file", file);
+  formData.append("campaignID", campaignID);
+
+  if (taskID !== undefined) {
+    formData.append("taskID", String(taskID));
+  }
+
+  const response = await fetch("/api/uploads/r2", {
+    method: "POST",
+    body: formData,
+  });
+
+  const payload = (await response.json()) as {
+    ok: boolean;
+    error?: string;
+    image?: UploadedImage;
+  };
+
+  if (!response.ok || !payload.ok || !payload.image?.url) {
+    throw new Error(payload.error ?? "图片上传失败");
+  }
+
+  return payload.image;
+}
+
 function EditorToolbar({
   editor,
   disabled,
+  uploadState,
+  uploadError,
+  onImageButtonClick,
 }: {
-  editor: NonNullable<ReturnType<typeof useEditor>>;
+  editor: Editor;
   disabled?: boolean;
+  uploadState: "idle" | "uploading";
+  uploadError: string | null;
+  onImageButtonClick: () => void;
 }) {
   const actions = [
     {
@@ -194,40 +264,127 @@ function EditorToolbar({
       isActive: editor.isActive("blockquote"),
       onClick: () => editor.chain().focus().toggleBlockquote().run(),
     },
+    {
+      icon: <ImageIcon />,
+      title: uploadState === "uploading" ? "图片上传中" : "上传图片",
+      isActive: editor.isActive("image"),
+      onClick: onImageButtonClick,
+    },
   ];
 
   return (
-    <div className="task-rich-text-toolbar flex flex-wrap items-center gap-1.5 border-b border-slate-200 bg-[linear-gradient(180deg,#fbfcfe_0%,#f3f6fb_100%)] px-2.5 py-2 dark:border-slate-700 dark:bg-[linear-gradient(180deg,#111827_0%,#0f172a_100%)]">
-      {actions.map((action) => (
-        <button
-          key={action.title}
-          type="button"
-          aria-label={action.title}
-          title={action.title}
-          className={
-            action.isActive
-              ? "flex h-9 w-9 items-center justify-center rounded-md bg-slate-900 text-white shadow-sm transition dark:bg-slate-100 dark:text-slate-900"
-              : "flex h-9 w-9 items-center justify-center rounded-md text-slate-500 transition hover:bg-white hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100"
-          }
-          disabled={disabled}
-          onClick={action.onClick}
-        >
-          <ToolbarIcon>{action.icon}</ToolbarIcon>
-        </button>
-      ))}
+    <div className="task-rich-text-toolbar flex flex-wrap items-center gap-2 border-b border-slate-200 bg-[linear-gradient(180deg,#fbfcfe_0%,#f3f6fb_100%)] px-2.5 py-2 dark:border-slate-700 dark:bg-[linear-gradient(180deg,#111827_0%,#0f172a_100%)]">
+      <div className="flex flex-wrap items-center gap-1.5">
+        {actions.map((action) => (
+          <button
+            key={action.title}
+            type="button"
+            aria-label={action.title}
+            title={action.title}
+            className={
+              action.isActive
+                ? "flex h-9 w-9 items-center justify-center rounded-md bg-slate-900 text-white shadow-sm transition dark:bg-slate-100 dark:text-slate-900"
+                : "flex h-9 w-9 items-center justify-center rounded-md text-slate-500 transition hover:bg-white hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100"
+            }
+            disabled={disabled || uploadState === "uploading"}
+            onClick={action.onClick}
+          >
+            <ToolbarIcon>{action.icon}</ToolbarIcon>
+          </button>
+        ))}
+      </div>
+
+      {uploadState === "uploading" ? (
+        <span className="rounded-full bg-indigo-50 px-2.5 py-1 text-xs font-medium text-indigo-700 dark:bg-indigo-500/15 dark:text-indigo-200">
+          图片上传中...
+        </span>
+      ) : null}
+
+      {uploadError ? (
+        <span className="text-xs font-medium text-red-600 dark:text-red-400">
+          {uploadError}
+        </span>
+      ) : null}
     </div>
   );
 }
 
 export function TaskMarkdownEditor({
   value,
+  campaignID,
+  taskID,
   disabled,
   onChange,
 }: TaskMarkdownEditorProps) {
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [uploadState, setUploadState] = useState<"idle" | "uploading">("idle");
+  const [uploadError, setUploadError] = useState<string | null>(null);
+
+  async function insertImages(
+    activeEditor: Editor,
+    files: File[],
+    position?: number,
+  ) {
+    const imageFiles = files.filter((file) => allowedImageTypes.includes(file.type));
+
+    if (imageFiles.length === 0) {
+      setUploadError("仅支持 JPG、PNG、WebP 或 GIF 图片");
+      return;
+    }
+
+    setUploadState("uploading");
+    setUploadError(null);
+
+    try {
+      if (typeof position === "number") {
+        activeEditor.chain().focus().setTextSelection(position).run();
+      } else {
+        activeEditor.chain().focus().run();
+      }
+
+      for (const file of imageFiles) {
+        const image = await uploadTaskImage({ file, campaignID, taskID });
+
+        activeEditor
+          .chain()
+          .focus()
+          .setImage({
+            src: image.url,
+            alt: file.name,
+            title: file.name,
+          })
+          .run();
+      }
+    } catch (error) {
+      setUploadError(error instanceof Error ? error.message : "图片上传失败");
+    } finally {
+      setUploadState("idle");
+    }
+  }
+
   const editor = useEditor({
     immediatelyRender: false,
     editable: !disabled,
-    extensions: [StarterKit],
+    extensions: [
+      StarterKit,
+      Image.configure({
+        allowBase64: false,
+        resize: {
+          enabled: true,
+          minWidth: 120,
+          alwaysPreserveAspectRatio: true,
+        },
+      }),
+      FileHandler.configure({
+        allowedMimeTypes: allowedImageTypes,
+        onPaste: (activeEditor, files) => {
+          void insertImages(activeEditor, files);
+        },
+        onDrop: (activeEditor, files, pos) => {
+          void insertImages(activeEditor, files, pos);
+        },
+      }),
+    ],
     content: hasRichTextContent(value) ? value : "<p></p>",
     editorProps: {
       attributes: {
@@ -239,6 +396,21 @@ export function TaskMarkdownEditor({
       onChange(activeEditor.isEmpty ? "" : activeEditor.getHTML());
     },
   });
+
+  function handleImageButtonClick() {
+    fileInputRef.current?.click();
+  }
+
+  function handleFileInputChange(event: ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(event.target.files ?? []);
+    event.target.value = "";
+
+    if (!editor || files.length === 0) {
+      return;
+    }
+
+    void insertImages(editor, files);
+  }
 
   useEffect(() => {
     if (!editor) {
@@ -270,7 +442,20 @@ export function TaskMarkdownEditor({
 
   return (
     <div className="task-rich-text-wrapper overflow-hidden rounded-lg border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-950/60">
-      <EditorToolbar editor={editor} disabled={disabled} />
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept={allowedImageTypes.join(",")}
+        className="hidden"
+        onChange={handleFileInputChange}
+      />
+      <EditorToolbar
+        editor={editor}
+        disabled={disabled}
+        uploadState={uploadState}
+        uploadError={uploadError}
+        onImageButtonClick={handleImageButtonClick}
+      />
       <EditorContent editor={editor} />
     </div>
   );
@@ -280,7 +465,12 @@ export function TaskMarkdownPreview({ source }: TaskMarkdownPreviewProps) {
   const editor = useEditor({
     immediatelyRender: false,
     editable: false,
-    extensions: [StarterKit],
+    extensions: [
+      StarterKit,
+      Image.configure({
+        allowBase64: false,
+      }),
+    ],
     content: hasRichTextContent(source) ? source : "<p></p>",
     editorProps: {
       attributes: {

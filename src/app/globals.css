@@ -129,6 +129,40 @@ pre {
   font-style: italic;
 }
 
+.task-rich-text-editor img,
+.task-rich-text-preview img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 0.75rem 0;
+  border-radius: 0.5rem;
+  border: 1px solid #e2e8f0;
+  background: #f8fafc;
+}
+
+.task-rich-text-editor img.ProseMirror-selectednode {
+  outline: 2px solid #4f46e5;
+  outline-offset: 2px;
+}
+
+.task-rich-text-editor .ProseMirror-selectednode img {
+  outline: 2px solid #4f46e5;
+  outline-offset: 2px;
+}
+
+.task-rich-text-editor [data-node-view-wrapper] {
+  max-width: 100%;
+}
+
+.task-rich-text-editor [data-node-view-wrapper] img {
+  margin: 0;
+}
+
+.task-rich-text-editor .resize-handle {
+  border: 1px solid #4f46e5;
+  background: #ffffff;
+}
+
 html.dark .task-rich-text-editor p.is-editor-empty:first-child::before {
   color: #64748b;
 }
@@ -137,6 +171,12 @@ html.dark .task-rich-text-editor blockquote,
 html.dark .task-rich-text-preview blockquote {
   border-left-color: #475569;
   color: #cbd5e1;
+}
+
+html.dark .task-rich-text-editor img,
+html.dark .task-rich-text-preview img {
+  border-color: #334155;
+  background: #0f172a;
 }
 
 /* ===== 骨架屏和动画工具 ===== */

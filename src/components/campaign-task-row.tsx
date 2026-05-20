@@ -388,6 +388,8 @@ export default function CampaignTaskRow({
                 </label>
                 <TaskMarkdownEditor
                   value={draftText}
+                  campaignID={campaignID}
+                  taskID={task.id}
                   disabled={isUpdating}
                   onChange={setDraftText}
                 />

@@ -12,7 +12,11 @@ export function getRichTextPlainText(value: string | null | undefined) {
 }
 
 export function hasRichTextContent(value: string | null | undefined) {
-  return getRichTextPlainText(value).length > 0;
+  if (typeof value !== "string") {
+    return false;
+  }
+
+  return getRichTextPlainText(value).length > 0 || /<img\b[^>]*src=/i.test(value);
 }
 
 export function normalizeRichTextValue(value: string | null | undefined) {

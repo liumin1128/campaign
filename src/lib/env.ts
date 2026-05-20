@@ -66,3 +66,31 @@ export function getOptionalTeamsWebhookUrl(): string | null {
     null
   );
 }
+
+export function getR2AccessKeyID(): string {
+  return requireEnv("R2_ACCESS_KEY_ID");
+}
+
+export function getR2SecretAccessKey(): string {
+  return requireEnv("R2_SECRET_ACCESS_KEY");
+}
+
+export function getR2Bucket(): string {
+  return requireEnv("R2_BUCKET");
+}
+
+export function getR2Endpoint(): string {
+  return requireEnv("R2_ENDPOINT");
+}
+
+export function getR2Region(): string {
+  return process.env.R2_REGION || "auto";
+}
+
+export function getR2Prefix(): string {
+  return (process.env.R2_PREFIX ?? "").replace(/^\/+|\/+$/g, "");
+}
+
+export function getR2PublicBaseUrl(): string {
+  return requireEnv("R2_PUBLIC_BASE_URL").replace(/\/+$/g, "");
+}

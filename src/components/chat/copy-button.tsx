@@ -5,7 +5,7 @@ import { FileCopy, Check } from "flowbite-react-icons/outline";
 
 /** 将 markdown 文本转换为简易 HTML（用于富文本粘贴） */
 function mdToHtml(md: string): string {
-  let html = md
+  const html = md
     // 代码块 ```lang\n...```
     .replace(/```(\w*)\n([\s\S]*?)```/g, (_, lang, code) => {
       const langLabel = lang
