@@ -572,6 +572,16 @@ export function useChat() {
       return;
     }
 
+    const missingIdAttachment = csvAnalysisAttachments.find(
+      (attachment) => !attachment.id,
+    );
+    if (missingIdAttachment) {
+      alert(
+        `CSV「${missingIdAttachment.name}」缺少本地分析标识，请重新添加文件。`,
+      );
+      return;
+    }
+
     const sid = sessionId;
     const assistantId = crypto.randomUUID();
     const userId = crypto.randomUUID();
@@ -606,6 +616,12 @@ export function useChat() {
 
     try {
       const domain = getCsvAnalysisDomain(selectedAgent?.id);
+      const reportStatus = createCsvBatchStatusReporter({
+        sessionId: sid,
+        baseMessages: updatedMessages,
+        assistantId,
+        fileNames: csvAnalysisAttachments.map((attachment) => attachment.name),
+      });
       const baseRelatedFiles = compactRelatedFilesForQuery(
         csvAnalysisAttachments.map((attachment) => ({
           name: attachment.name,
@@ -616,24 +632,20 @@ export function useChat() {
       const analysisResults = await Promise.all(
         csvAnalysisAttachments.map(async (analysisAttachment, index) => {
           const attachmentId = analysisAttachment.id;
+          if (!attachmentId) {
+            throw new Error(
+              `CSV「${analysisAttachment.name}」缺少本地分析标识，请重新添加文件。`,
+            );
+          }
+
           const profile = analysisAttachment.analysis!.profile!;
           const profileSummary = analysisAttachment.analysis!.profileSummary!;
-          const statusPrefix = buildCsvBatchStatusPrefix(
-            index,
-            csvAnalysisAttachments.length,
-            analysisAttachment.name,
-          );
 
           updateAnalysisAttachment(attachmentId, { status: "planning" });
-          updateAssistantMessage(
-            sid,
-            updatedMessages,
-            assistantId,
-            `${statusPrefix}模型正在决定要查询哪些数据…`,
-          );
+          reportStatus(index, "模型正在决定要查询哪些数据…");
 
           const queryAnalysis = await runFreeCsvQueryAnalysis({
-            workerKey: attachmentId!,
+            workerKey: attachmentId,
             question: userContent,
             profile,
             profileSummary,
@@ -644,12 +656,7 @@ export function useChat() {
               (file) => file.name !== analysisAttachment.name,
             ),
             onStatus: (message) => {
-              updateAssistantMessage(
-                sid,
-                updatedMessages,
-                assistantId,
-                `${statusPrefix}${message}`,
-              );
+              reportStatus(index, message);
             },
             onAttachmentPatch: (patch) => {
               updateAnalysisAttachment(attachmentId, patch);
@@ -661,19 +668,17 @@ export function useChat() {
             ...toStoredAttachment(analysisAttachment),
             content,
           };
-          const context: ActiveCsvContext | null = attachmentId
-            ? {
-                id: attachmentId,
-                name: analysisAttachment.name,
-                size: analysisAttachment.size,
-                profile,
-                profileSummary,
-                queryResults,
-                stageSummaries,
-                summary,
-                content,
-              }
-            : null;
+          const context: ActiveCsvContext = {
+            id: attachmentId,
+            name: analysisAttachment.name,
+            size: analysisAttachment.size,
+            profile,
+            profileSummary,
+            queryResults,
+            stageSummaries,
+            summary,
+            content,
+          };
 
           updateAnalysisAttachment(attachmentId, {
             status: "completed",
@@ -682,6 +687,7 @@ export function useChat() {
             summary,
             content,
           });
+          reportStatus(index, "已完成单文件分析，等待综合总结…");
 
           return { finalAttachment, context };
         }),
@@ -690,9 +696,7 @@ export function useChat() {
       const finalAttachments = analysisResults.map(
         (result) => result.finalAttachment,
       );
-      const finalContexts = analysisResults.flatMap((result) =>
-        result.context ? [result.context] : [],
-      );
+      const finalContexts = analysisResults.map((result) => result.context);
       const summary =
         finalContexts.length > 1
           ? await requestCombinedCsvSummary({
@@ -788,6 +792,12 @@ export function useChat() {
 
     try {
       const domain = getCsvAnalysisDomain(selectedAgent?.id);
+      const reportStatus = createCsvBatchStatusReporter({
+        sessionId: sid,
+        baseMessages: updatedMessages,
+        assistantId,
+        fileNames: csvContexts.map((context) => context.name),
+      });
       const baseRelatedFiles = compactRelatedFilesForQuery(
         csvContexts.map((context) => ({
           name: context.name,
@@ -799,18 +809,7 @@ export function useChat() {
 
       const nextContexts = await Promise.all(
         csvContexts.map(async (context, index) => {
-          const statusPrefix = buildCsvBatchStatusPrefix(
-            index,
-            csvContexts.length,
-            context.name,
-          );
-
-          updateAssistantMessage(
-            sid,
-            updatedMessages,
-            assistantId,
-            `${statusPrefix}模型正在决定要继续读取哪些数据…`,
-          );
+          reportStatus(index, "模型正在决定要继续读取哪些数据…");
 
           const queryAnalysis = await runFreeCsvQueryAnalysis({
             workerKey: context.id,
@@ -826,15 +825,12 @@ export function useChat() {
             enableThinking,
             signal: controller.signal,
             onStatus: (message) => {
-              updateAssistantMessage(
-                sid,
-                updatedMessages,
-                assistantId,
-                `${statusPrefix}${message}`,
-              );
+              reportStatus(index, message);
             },
             onAttachmentPatch: () => {},
           });
+
+          reportStatus(index, "已完成单文件追问分析，等待综合总结…");
 
           return {
             ...context,
@@ -981,6 +977,49 @@ function buildCsvBatchStatusPrefix(
   name: string,
 ): string {
   return total > 1 ? `(${index + 1}/${total}) ${name}：` : "";
+}
+
+function createCsvBatchStatusReporter(args: {
+  sessionId: string;
+  baseMessages: Message[];
+  assistantId: string;
+  fileNames: string[];
+}) {
+  const statuses = args.fileNames.map(() => "等待开始…");
+
+  return (index: number, status: string) => {
+    statuses[index] = status;
+    const content =
+      args.fileNames.length > 1
+        ? statuses
+            .map((item, itemIndex) =>
+              formatCsvBatchStatusLine(
+                itemIndex,
+                args.fileNames.length,
+                args.fileNames[itemIndex],
+                item,
+              ),
+            )
+            .join("\n\n")
+        : status;
+
+    updateAssistantMessage(
+      args.sessionId,
+      args.baseMessages,
+      args.assistantId,
+      content,
+    );
+  };
+}
+
+function formatCsvBatchStatusLine(
+  index: number,
+  total: number,
+  fileName: string,
+  status: string,
+) {
+  const normalizedStatus = status.trim() || "等待开始…";
+  return `${buildCsvBatchStatusPrefix(index, total, fileName)}${normalizedStatus}`;
 }
 
 function updateAssistantMessage(
