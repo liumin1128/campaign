@@ -181,6 +181,7 @@ export interface CsvAnalysisState {
   plan?: AnalysisPlan;
   result?: AnalysisResult;
   queryResults?: CsvDataQueryResult[];
+  stageSummaries?: string[];
   summary?: string;
   error?: string;
   notes?: string[];

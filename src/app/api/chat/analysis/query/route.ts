@@ -25,6 +25,7 @@ interface QueryRequest {
   question?: string;
   profile?: CsvQueryProfileContext;
   previousResults?: CsvQueryResultContext[];
+  stageSummaries?: string[];
   domain?: "campaign" | "general";
   enable_thinking?: boolean;
   force_final?: boolean;
@@ -62,6 +63,7 @@ export async function POST(request: Request) {
       previousResults: compactPreviousResultsForQuery(
         body.previousResults ?? [],
       ),
+      stageSummaries: compactStageSummariesForPrompt(body.stageSummaries ?? []),
       domain: body.domain ?? "campaign",
       enableThinking: body.enable_thinking ?? false,
       forceFinal: body.force_final ?? false,
@@ -101,6 +103,7 @@ async function requestQueryDecision(args: {
   question: string;
   profile: CsvQueryProfileContext;
   previousResults: unknown[];
+  stageSummaries: string[];
   domain: "campaign" | "general";
   enableThinking: boolean;
   forceFinal: boolean;
@@ -131,6 +134,7 @@ async function requestQueryDecisionOnce(args: {
   question: string;
   profile: CsvQueryProfileContext;
   previousResults: unknown[];
+  stageSummaries: string[];
   domain: "campaign" | "general";
   enableThinking: boolean;
   forceFinal: boolean;
@@ -204,6 +208,7 @@ async function requestQueryModelContent(args: {
   question: string;
   profile: CsvQueryProfileContext;
   previousResults: unknown[];
+  stageSummaries: string[];
   domain: "campaign" | "general";
   enableThinking: boolean;
   forceFinal: boolean;
@@ -229,6 +234,7 @@ async function requestQueryModelContent(args: {
             question: args.question,
             profile: args.profile,
             previousResults: args.previousResults,
+            stageSummaries: args.stageSummaries,
             force_final: args.forceFinal,
           }),
         },
@@ -254,6 +260,19 @@ function buildThinkingConfig(enableThinking: boolean): DeepSeekThinking {
   return enableThinking
     ? { type: "enabled", reasoning_effort: "medium" }
     : { type: "disabled" };
+}
+
+function compactStageSummariesForPrompt(summaries: unknown[]) {
+  return summaries
+    .flatMap((summary) => {
+      if (typeof summary !== "string") {
+        return [];
+      }
+
+      const normalized = summary.replace(/\s+/g, " ").trim();
+      return normalized ? [normalized.slice(0, 800)] : [];
+    })
+    .slice(-12);
 }
 
 function buildQuerySystemPrompt(
@@ -282,11 +301,12 @@ Available response shapes:
 }
 
 2. Final answer:
-{"finalAnswer":"answer based only on profile and previousResults"}
+{"finalAnswer":"answer based only on profile, stageSummaries, and previousResults"}
 
 Rules:
 - Use only fields that exist in profile.
 - Read profile.dataQuality.parseMetadata to understand the detected encoding, delimiter, and parser confidence.
+- Treat stageSummaries as the working memory of prior rounds. Use them before scanning previousResults, preserve already established interim conclusions, and choose follow-up queries that close gaps instead of restarting the analysis.
 - If parser confidence is low or fields look like whole rows, mention the parsing uncertainty instead of forcing an analysis.
 - Never ask for all rows or all columns. Max rows per row-detail query is ${MAX_QUERY_RESULT_ROWS}; max columns is ${MAX_QUERY_COLUMNS}; max distinct values is ${MAX_QUERY_DISTINCT_VALUES}. Aggregate queries can summarize the full dataset and may return top-ranked groups.
 - Use {"op":"notEmpty"} filters to exclude missing dimension or metric fields before ranking by low availability or high load factor.
@@ -295,7 +315,7 @@ Rules:
 - For analytical questions, combine columnStats for key metrics, distinctValues for key dimensions, and several aggregate queries with different groupBy/ranking/filter views instead of asking for one narrow query at a time.
 - Use row-level queries when the user explicitly asks for specific rows or when examples are needed.
 - rowNumber is 1-based data-row numbering after the header row. If the user asks for "row N" or "第 N 行数据", request {"type":"rows","rowNumbers":[N]}.
-- If previousResults already contain aggregateResult, stats, values, or rows that fully address the question, return finalAnswer instead of asking for more data.
+- If stageSummaries and previousResults already contain aggregateResult, stats, values, or rows that fully address the question, return finalAnswer instead of asking for more data.
 - Do not repeat a query shape that is already present in previousResults.
 - Top-ranked aggregates can be truncated by limit while still covering the full dataset through totalGroupCount and matchedRowCount. Do not ask for more data solely because an aggregate is truncated; ask only when the returned rows miss important dimensions, important metrics, or part of the user's question.
 - Aggregate numeric metrics include companion fields named metric__non_null_count. Treat low or zero non-null counts as weak evidence and request filtered follow-up queries when needed.
@@ -304,6 +324,9 @@ Rules:
 - If a previous aggregate with notEmpty filters for both load factor and availability returned matchedRowCount = 0, treat the joint row-level intersection as disproven. Do not request another query that requires both fields to be non-empty unless the grouping/filter scope is genuinely different and necessary.
 - Interpret compact labels like Sep26, Aug26, or Dec26 in file names as departure month/year labels, not day-of-month filters. Only filter Day of departure_date when the user explicitly says day 26, 26日, or similar.
 - Do not claim comprehensive coverage until previousResults cover each key dimension, metric, and filter implied by the question, or until you explicitly state the remaining gap.
+- If the user asks what angles can be analyzed, return finalAnswer with a concise menu of analysis angles based on available fields and do not request data queries yet.
+- If the user gave a concrete analysis angle, drive toward a useful partial conclusion for that angle. Do not stop with only "insufficient information"; if evidence is limited, explain the limitation and still state the best supported inference.
+- If the user has not given a clear angle, use finalAnswer to list several suitable angles and ask the user to choose before querying detailed data.
 - When force_final is true, you must return {"finalAnswer":"..."} and must not return queries.
 - State limitations if previousResults are insufficient.
 - Reply finalAnswer in the user's language.
@@ -400,12 +423,14 @@ function createFallbackQueryDecision(
     question: string;
     profile: CsvQueryProfileContext;
     previousResults: unknown[];
+    stageSummaries: string[];
   },
   reason?: unknown,
 ): QueryAgentResponse {
   const finalAnswer = buildFallbackFinalAnswer(
     args.question,
     args.previousResults,
+    args.stageSummaries,
   );
   if (finalAnswer) {
     return { type: "final", finalAnswer };
@@ -435,12 +460,14 @@ function createFallbackFinalDecision(
   args: {
     question: string;
     previousResults: unknown[];
+    stageSummaries: string[];
   },
   reason?: unknown,
 ): QueryAgentResponse {
   const finalAnswer = buildFallbackFinalAnswer(
     args.question,
     args.previousResults,
+    args.stageSummaries,
   );
   if (finalAnswer) {
     return { type: "final", finalAnswer };
@@ -537,6 +564,7 @@ function findColumnBySemantic(
 function buildFallbackFinalAnswer(
   question: string,
   previousResults: unknown[],
+  stageSummaries: string[] = [],
 ): string | null {
   const contexts = previousResults.flatMap((result) => {
     const record = toRecord(result);
@@ -547,7 +575,11 @@ function buildFallbackFinalAnswer(
     return getAggregateRows(aggregate).length > 0;
   });
 
-  if (aggregateContexts.length === 0) {
+  const stageSummaryLines = compactStageSummariesForPrompt(stageSummaries)
+    .map((summary) => `- ${summary}`)
+    .slice(-6);
+
+  if (aggregateContexts.length === 0 && stageSummaryLines.length === 0) {
     return null;
   }
 
@@ -570,6 +602,9 @@ function buildFallbackFinalAnswer(
     return [
       "基于已完成的本地 CSV 聚合结果，当前可以形成以下结论：",
       "",
+      ...(stageSummaryLines.length
+        ? ["## 阶段性结论", ...stageSummaryLines, ""]
+        : []),
       "## 数据识别与覆盖",
       ...distinctSummaries.map((summary) => `- ${summary}`),
       ...statsSummaries.map((summary) => `- ${summary}`),
@@ -589,6 +624,9 @@ function buildFallbackFinalAnswer(
   return [
     "Based on the completed local CSV aggregations:",
     "",
+    ...(stageSummaryLines.length
+      ? ["Interim conclusions:", ...stageSummaryLines, ""]
+      : []),
     "Key evidence:",
     ...aggregateSummaries.map((summary) => `- ${summary}`),
     "",

@@ -43,6 +43,7 @@ type ActiveCsvContext = {
   profile: CsvProfile;
   profileSummary: CsvProfileSummary;
   queryResults?: CsvDataQueryResult[];
+  stageSummaries?: string[];
   summary?: string;
   content?: string;
 };
@@ -648,7 +649,8 @@ export function useChat() {
             updateAnalysisAttachment(attachmentId, patch);
           },
         });
-        const { summary, queryResults, content } = queryAnalysis;
+        const { summary, queryResults, stageSummaries, content } =
+          queryAnalysis;
         const finalAttachment: FileAttachment = {
           ...toStoredAttachment(analysisAttachment),
           content,
@@ -663,6 +665,7 @@ export function useChat() {
             profile,
             profileSummary,
             queryResults,
+            stageSummaries,
             summary,
             content,
           });
@@ -675,6 +678,7 @@ export function useChat() {
         updateAnalysisAttachment(attachmentId, {
           status: "completed",
           queryResults,
+          stageSummaries,
           summary,
           content,
         });
@@ -788,6 +792,7 @@ export function useChat() {
           profile: context.profile,
           profileSummary: context.profileSummary,
           previousResults: context.queryResults,
+          previousStageSummaries: context.stageSummaries,
           domain:
             selectedAgent?.id === "campaign_planning" ? "campaign" : "general",
           enableThinking,
@@ -806,6 +811,7 @@ export function useChat() {
         nextContexts.push({
           ...context,
           queryResults: queryAnalysis.queryResults,
+          stageSummaries: queryAnalysis.stageSummaries,
           summary: queryAnalysis.summary,
           content: queryAnalysis.content,
         });
@@ -962,6 +968,7 @@ async function runFreeCsvQueryAnalysis(args: {
   profile: CsvProfile;
   profileSummary: CsvProfileSummary;
   previousResults?: CsvDataQueryResult[];
+  previousStageSummaries?: string[];
   domain: "campaign" | "general";
   enableThinking: boolean;
   signal: AbortSignal;
@@ -972,9 +979,13 @@ async function runFreeCsvQueryAnalysis(args: {
 }): Promise<{
   summary: string;
   queryResults: CsvDataQueryResult[];
+  stageSummaries: string[];
   content: string;
 }> {
   const queryResults: CsvDataQueryResult[] = [...(args.previousResults ?? [])];
+  const stageSummaries: string[] = compactStageSummariesForPrompt(
+    args.previousStageSummaries ?? [],
+  );
   const recoveryNotes: string[] = [];
   const progressLog: string[] = [];
   const executedQueryKeys = new Set(
@@ -990,6 +1001,7 @@ async function runFreeCsvQueryAnalysis(args: {
       status: "planning",
       progress: getQueryRoundProgress(iteration, 0),
       queryResults,
+      stageSummaries,
     });
     updateProgressStatus(
       iteration === 0
@@ -1001,6 +1013,7 @@ async function runFreeCsvQueryAnalysis(args: {
       question: args.question,
       profile: args.profile,
       previousResults: queryResults,
+      stageSummaries,
       domain: args.domain,
       enableThinking: args.enableThinking,
       signal: args.signal,
@@ -1011,12 +1024,14 @@ async function runFreeCsvQueryAnalysis(args: {
       const content = buildQueryAttachmentContent({
         profileSummary: args.profileSummary,
         queryResults,
+        stageSummaries,
         summary: decision.finalAnswer,
       });
 
       return {
         summary: decision.finalAnswer,
         queryResults,
+        stageSummaries,
         content,
       };
     }
@@ -1043,6 +1058,7 @@ async function runFreeCsvQueryAnalysis(args: {
       status: "executing",
       progress: getQueryRoundProgress(iteration, 0.35),
       queryResults,
+      stageSummaries,
     });
     updateProgressStatus(
       `第 ${roundNumber} 轮：准备在浏览器本地执行 ${queryCandidates.length} 个数据查询…`,
@@ -1058,6 +1074,7 @@ async function runFreeCsvQueryAnalysis(args: {
           0.35 + (queryIndex / queryCandidates.length) * 0.45,
         ),
         queryResults,
+        stageSummaries,
       });
       updateProgressStatus(
         `第 ${roundNumber} 轮：正在执行第 ${queryNumber}/${queryCandidates.length} 个本地查询（${describeCsvDataQuery(query)}）…`,
@@ -1075,6 +1092,7 @@ async function runFreeCsvQueryAnalysis(args: {
             0.35 + (queryNumber / queryCandidates.length) * 0.45,
           ),
           queryResults,
+          stageSummaries,
         });
         updateProgressStatus(
           `第 ${roundNumber} 轮：已完成第 ${queryNumber}/${queryCandidates.length} 个本地查询（${describeCsvDataQuery(query)}）。`,
@@ -1093,12 +1111,34 @@ async function runFreeCsvQueryAnalysis(args: {
       recoveryNotes.push("本轮没有可执行成功的查询，已进入总结阶段。");
       break;
     }
+
+    const currentRoundResults = queryResults.slice(
+      queryResults.length - successfulQueries,
+    );
+    const roundSummary = buildStageSummary({
+      roundNumber,
+      question: args.question,
+      results: currentRoundResults,
+    });
+    if (roundSummary) {
+      stageSummaries.push(roundSummary);
+      const latestStageSummary = `第 ${roundNumber} 轮阶段性结论：${roundSummary}`;
+      progressLog.push(latestStageSummary);
+      updateProgressStatus(latestStageSummary);
+      args.onAttachmentPatch({
+        status: "executing",
+        progress: getQueryRoundProgress(iteration, 0.9),
+        queryResults,
+        stageSummaries,
+      });
+    }
   }
 
   args.onAttachmentPatch({
     status: "summarizing",
     progress: 0.92,
     queryResults,
+    stageSummaries,
   });
   updateProgressStatus("正在根据已查询的数据生成结论…");
 
@@ -1106,6 +1146,7 @@ async function runFreeCsvQueryAnalysis(args: {
     question: args.question,
     profile: args.profile,
     previousResults: queryResults,
+    stageSummaries,
     domain: args.domain,
     enableThinking: args.enableThinking,
     signal: args.signal,
@@ -1114,10 +1155,11 @@ async function runFreeCsvQueryAnalysis(args: {
   const content = buildQueryAttachmentContent({
     profileSummary: args.profileSummary,
     queryResults,
+    stageSummaries,
     summary,
   });
 
-  return { summary, queryResults, content };
+  return { summary, queryResults, stageSummaries, content };
 }
 
 function getQueryRoundProgress(iteration: number, roundProgress: number) {
@@ -1138,9 +1180,98 @@ function formatRationaleForStatus(rationale: string | undefined) {
     : singleLine;
 }
 
+function compactStageSummariesForPrompt(summaries: string[]) {
+  return summaries
+    .flatMap((summary) => {
+      const normalized = summary.replace(/\s+/g, " ").trim();
+      return normalized ? [normalized.slice(0, 800)] : [];
+    })
+    .slice(-12);
+}
+
+function buildStageSummary(args: {
+  roundNumber: number;
+  question: string;
+  results: CsvDataQueryResult[];
+}) {
+  const summaries = args.results
+    .map((result) => summarizeQueryResultForStage(result))
+    .filter(Boolean);
+
+  if (summaries.length === 0) {
+    return "";
+  }
+
+  return `第 ${args.roundNumber} 轮围绕“${args.question.slice(0, 80)}”完成 ${args.results.length} 个查询；${summaries.join("；")}`;
+}
+
+function summarizeQueryResultForStage(result: CsvDataQueryResult) {
+  if (result.aggregateResult) {
+    return summarizeAggregateResultForStage(result);
+  }
+
+  if (result.stats) {
+    const column =
+      result.query.type === "columnStats" ? result.query.column : "字段";
+    const nonEmpty = result.stats.nonEmptyCount ?? result.matchedRowCount;
+    const rowCount = result.stats.rowCount ?? result.rowCount;
+    const metricParts = [
+      result.stats.min !== undefined ? `最小 ${formatStageValue(result.stats.min)}` : "",
+      result.stats.max !== undefined ? `最大 ${formatStageValue(result.stats.max)}` : "",
+      result.stats.avg !== undefined ? `均值 ${formatStageValue(result.stats.avg)}` : "",
+    ].filter(Boolean);
+
+    return `${column} 统计非空 ${String(nonEmpty ?? "未知")}/${String(rowCount ?? "未知")}${metricParts.length ? `，${metricParts.join("，")}` : ""}`;
+  }
+
+  if (result.values) {
+    const column =
+      result.query.type === "distinctValues" ? result.query.column : "字段";
+    return `${column} 有 ${String(result.matchedRowCount ?? result.values.length)} 个候选值，示例 ${result.values.slice(0, 6).map(String).join("、")}`;
+  }
+
+  if (result.rows) {
+    return `读取到 ${result.rows.length} 行明细样本${result.matchedRowCount !== undefined ? `，匹配 ${result.matchedRowCount}/${result.rowCount} 行` : ""}`;
+  }
+
+  return "";
+}
+
+function summarizeAggregateResultForStage(result: CsvDataQueryResult) {
+  const aggregate = result.aggregateResult;
+  if (!aggregate) {
+    return "";
+  }
+
+  const plan =
+    result.query.type === "aggregate" ? result.query.plan : aggregate.plan;
+  const groupText = plan.groupBy.length > 0 ? plan.groupBy.join(" + ") : "全表";
+  const metricNames = plan.metrics.map((metric) => metric.name);
+  const topRows = aggregate.resultRows.slice(0, 3).map((row, index) => {
+    const dimensions = plan.groupBy
+      .map((field) => `${field}=${formatStageValue(row[field])}`)
+      .join(" / ");
+    const metrics = metricNames
+      .map((metric) => `${metric}=${formatStageValue(row[metric])}`)
+      .join("，");
+    return `${index + 1}) ${dimensions || "全表"}${metrics ? `，${metrics}` : ""}`;
+  });
+
+  return `按 ${groupText} 聚合，匹配 ${aggregate.matchedRowCount}/${aggregate.rowCount} 行、共 ${aggregate.totalGroupCount} 组，Top ${topRows.join("；") || "暂无结果"}`;
+}
+
+function formatStageValue(value: unknown) {
+  if (typeof value === "number") {
+    return Number(value.toFixed(4)).toString();
+  }
+
+  return String(value ?? "");
+}
+
 function buildQueryAttachmentContent(args: {
   profileSummary: CsvProfileSummary;
   queryResults: CsvDataQueryResult[];
+  stageSummaries: string[];
   summary: string;
 }) {
   const lastAggregate = args.queryResults
@@ -1162,8 +1293,11 @@ function buildQueryAttachmentContent(args: {
       return `${index + 1}. ${result.query.type}，返回 ${resultSize} 条/项`;
     })
     .join("\n");
+  const stageSummaryText = args.stageSummaries
+    .map((summary, index) => `${index + 1}. ${summary}`)
+    .join("\n");
 
-  return `${baseContent}\n\n模型本地查询记录：\n${querySummary || "未执行额外查询"}`;
+  return `${baseContent}\n\n阶段性结论：\n${stageSummaryText || "暂无"}\n\n模型本地查询记录：\n${querySummary || "未执行额外查询"}`;
 }
 
 type DataQueryDecision =
@@ -1174,6 +1308,7 @@ async function requestDataQueriesWithFallback(args: {
   question: string;
   profile: CsvProfile;
   previousResults: CsvDataQueryResult[];
+  stageSummaries: string[];
   domain: "campaign" | "general";
   enableThinking: boolean;
   signal: AbortSignal;
@@ -1211,6 +1346,7 @@ async function requestDataQueries(args: {
   question: string;
   profile: CsvProfile;
   previousResults: CsvDataQueryResult[];
+  stageSummaries: string[];
   domain: "campaign" | "general";
   enableThinking: boolean;
   signal: AbortSignal;
@@ -1223,6 +1359,7 @@ async function requestDataQueries(args: {
       question: args.question,
       profile: compactProfileForQuery(args.profile),
       previousResults: compactPreviousResultsForQuery(args.previousResults),
+      stageSummaries: compactStageSummariesForPrompt(args.stageSummaries),
       domain: args.domain,
       enable_thinking: args.enableThinking,
       force_final: args.forceFinal ?? false,
@@ -1250,6 +1387,7 @@ async function requestDataQueriesFinalAnswer(args: {
   question: string;
   profile: CsvProfile;
   previousResults: CsvDataQueryResult[];
+  stageSummaries: string[];
   domain: "campaign" | "general";
   enableThinking: boolean;
   signal: AbortSignal;
@@ -1266,6 +1404,7 @@ async function requestDataQueriesFinalAnswer(args: {
     return buildLocalFallbackSummary({
       question: args.question,
       queryResults: args.previousResults,
+      stageSummaries: args.stageSummaries,
       recoveryNotes: [
         ...(args.recoveryNotes ?? []),
         `总结请求失败，已使用本地结果生成简要结论：${formatErrorMessage(error)}`,
@@ -1280,6 +1419,7 @@ async function requestDataQueriesFinalAnswer(args: {
   return buildLocalFallbackSummary({
     question: args.question,
     queryResults: args.previousResults,
+    stageSummaries: args.stageSummaries,
     recoveryNotes: [
       ...(args.recoveryNotes ?? []),
       "已达到本地查询轮次上限，模型仍请求更多查询。",
@@ -1409,6 +1549,7 @@ function findProfileColumnBySemantic(
 function buildLocalFallbackSummary(args: {
   question: string;
   queryResults: CsvDataQueryResult[];
+  stageSummaries: string[];
   recoveryNotes: string[];
 }) {
   const aggregate = args.queryResults
@@ -1433,15 +1574,18 @@ function buildLocalFallbackSummary(args: {
   const notes = args.recoveryNotes.length
     ? `\n\n恢复记录：${args.recoveryNotes.join("；")}`
     : "";
+  const stageText = args.stageSummaries.length
+    ? `阶段性结论：${compactStageSummariesForPrompt(args.stageSummaries).join("；")}\n\n`
+    : "";
 
   if (!aggregate || !topRow) {
-    return `本地查询没有得到可总结的聚合结果。请指定要查询的字段或缩小问题范围。${notes}`;
+    return `${stageText}本地查询没有得到可总结的聚合结果。请指定要查询的字段或缩小问题范围。${notes}`;
   }
 
   const metricText = metricName
     ? `，${metricName} 为 ${String(metricValue)}`
     : "";
-  return `本地聚合结果显示：共有 ${aggregate.totalGroupCount} 个分组，最靠前的分组是 ${topLabel}${metricText}。结果基于 ${aggregate.matchedRowCount}/${aggregate.rowCount} 行数据。${notes}`;
+  return `${stageText}本地聚合结果显示：共有 ${aggregate.totalGroupCount} 个分组，最靠前的分组是 ${topLabel}${metricText}。结果基于 ${aggregate.matchedRowCount}/${aggregate.rowCount} 行数据。${notes}`;
 }
 
 function appendRecoveryNotes(summary: string, recoveryNotes: string[]) {
