@@ -59,7 +59,9 @@ export async function POST(request: Request) {
     const requestArgs = {
       question: body.question,
       profile: compactProfileForQuery(body.profile),
-      previousResults: compactPreviousResultsForQuery(body.previousResults ?? []),
+      previousResults: compactPreviousResultsForQuery(
+        body.previousResults ?? [],
+      ),
       domain: body.domain ?? "campaign",
       enableThinking: body.enable_thinking ?? false,
       forceFinal: body.force_final ?? false,
@@ -175,7 +177,11 @@ async function requestQueryDecisionOnce(args: {
       return createFallbackFinalDecision(args, "Final answer was requested.");
     }
 
-    const queries = normalizeQueries(record.queries, args.profile, args.question);
+    const queries = normalizeQueries(
+      record.queries,
+      args.profile,
+      args.question,
+    );
     if (queries.length === 0) {
       return createFallbackQueryDecision(args);
     }
@@ -389,17 +395,26 @@ function normalizeQuery(
   return [];
 }
 
-function createFallbackQueryDecision(args: {
-  question: string;
-  profile: CsvQueryProfileContext;
-  previousResults: unknown[];
-}, reason?: unknown): QueryAgentResponse {
-  const finalAnswer = buildFallbackFinalAnswer(args.question, args.previousResults);
+function createFallbackQueryDecision(
+  args: {
+    question: string;
+    profile: CsvQueryProfileContext;
+    previousResults: unknown[];
+  },
+  reason?: unknown,
+): QueryAgentResponse {
+  const finalAnswer = buildFallbackFinalAnswer(
+    args.question,
+    args.previousResults,
+  );
   if (finalAnswer) {
     return { type: "final", finalAnswer };
   }
 
-  const aggregateQuery = createFallbackAggregateQuery(args.question, args.profile);
+  const aggregateQuery = createFallbackAggregateQuery(
+    args.question,
+    args.profile,
+  );
   if (aggregateQuery) {
     return {
       type: "queries",
@@ -423,7 +438,10 @@ function createFallbackFinalDecision(
   },
   reason?: unknown,
 ): QueryAgentResponse {
-  const finalAnswer = buildFallbackFinalAnswer(args.question, args.previousResults);
+  const finalAnswer = buildFallbackFinalAnswer(
+    args.question,
+    args.previousResults,
+  );
   if (finalAnswer) {
     return { type: "final", finalAnswer };
   }
@@ -439,7 +457,8 @@ function createFallbackFinalDecision(
 }
 
 function formatFallbackRationale(reason: unknown) {
-  const reasonText = reason instanceof Error ? reason.message : String(reason ?? "");
+  const reasonText =
+    reason instanceof Error ? reason.message : String(reason ?? "");
   return reasonText
     ? `Query planning fell back to a safe local aggregate query: ${reasonText}`
     : "Query planning fell back to a safe local aggregate query.";
@@ -501,12 +520,16 @@ function inferFallbackGroupBy(
   const dimension = profile.columns.find(
     (column) => column.type === "string" || column.type === "date",
   );
-  return dimension ? [dimension.name] : profile.columns.slice(0, 1).map((column) => column.name);
+  return dimension
+    ? [dimension.name]
+    : profile.columns.slice(0, 1).map((column) => column.name);
 }
 
 function findColumnBySemantic(
   profile: CsvQueryProfileContext,
-  semanticType: NonNullable<CsvQueryProfileContext["columns"][number]["semanticType"]>,
+  semanticType: NonNullable<
+    CsvQueryProfileContext["columns"][number]["semanticType"]
+  >,
 ) {
   return profile.columns.find((column) => column.semanticType === semanticType);
 }
@@ -515,50 +538,147 @@ function buildFallbackFinalAnswer(
   question: string,
   previousResults: unknown[],
 ): string | null {
-  const aggregateContext = previousResults
-    .map((result) => toRecord(result))
-    .findLast((result) => Boolean(toRecord(result?.aggregateResult)));
-  const aggregateResult = toRecord(aggregateContext?.aggregateResult);
-  const resultRows = Array.isArray(aggregateResult?.resultRows)
-    ? aggregateResult.resultRows.flatMap((row) => {
-        const record = toRecord(row);
-        return record ? [record] : [];
-      })
-    : [];
+  const contexts = previousResults.flatMap((result) => {
+    const record = toRecord(result);
+    return record ? [record] : [];
+  });
+  const aggregateContexts = contexts.filter((result) => {
+    const aggregate = toRecord(result.aggregateResult);
+    return getAggregateRows(aggregate).length > 0;
+  });
 
-  if (!aggregateResult || resultRows.length === 0) {
+  if (aggregateContexts.length === 0) {
     return null;
   }
 
-  const query = toRecord(aggregateContext?.query);
-  const plan = toRecord(query?.plan);
-  const groupBy = Array.isArray(plan?.groupBy)
-    ? plan.groupBy.flatMap((field) => (typeof field === "string" ? [field] : []))
-    : [];
-  const topRow = resultRows[0];
-  const metricName =
-    "row_count" in topRow
-      ? "row_count"
-      : Object.keys(topRow).find((key) => !groupBy.includes(key));
-  const metricValue = metricName ? topRow[metricName] : undefined;
-  const topLabel = groupBy.length > 0
-    ? groupBy.map((field) => `${field}=${String(topRow[field] ?? "")}`).join(" / ")
-    : JSON.stringify(topRow);
-  const totalGroupCount = Number(aggregateResult.totalGroupCount);
+  const aggregateSummaries = aggregateContexts
+    .slice(-4)
+    .map((context, index) => summarizeAggregateContext(context, index + 1))
+    .filter(Boolean);
+  const statsSummaries = contexts
+    .filter((context) => toRecord(context.stats))
+    .slice(-3)
+    .map(summarizeStatsContext)
+    .filter(Boolean);
+  const distinctSummaries = contexts
+    .filter((context) => Array.isArray(context.values))
+    .slice(-4)
+    .map(summarizeDistinctContext)
+    .filter(Boolean);
 
   if (isChineseQuestion(question)) {
-    const totalText = Number.isFinite(totalGroupCount)
-      ? `共有 ${totalGroupCount} 种组合`
-      : "已完成组合聚合";
-    const metricText = metricName ? `，${metricName} 为 ${String(metricValue)}` : "";
-    return `${totalText}。最受欢迎的组合是 ${topLabel}${metricText}。结果基于本地聚合查询；如结果被截断，完整组合数以 totalGroupCount 为准。`;
+    return [
+      "基于已完成的本地 CSV 聚合结果，当前可以形成以下结论：",
+      "",
+      "## 数据识别与覆盖",
+      ...distinctSummaries.map((summary) => `- ${summary}`),
+      ...statsSummaries.map((summary) => `- ${summary}`),
+      "",
+      "## 关键聚合证据",
+      ...aggregateSummaries.flatMap((summary) => [summary, ""]),
+      "## 初步建议",
+      "- 将低均值/低最小值的 O&D + booking class 组合作为优先补舱、控价或人工复核对象。",
+      "- 将高最大值的 O&D 组合作为高需求或高 LF 风险候选，优先检查是否需要控舱、加价或调配库存。",
+      "- 由于当前字段名来自重复日期表头后的自动重命名，column_1/column_2/column_3 与 departure_date_N 的业务含义应在正式投产前与原始报表口径再次确认。",
+      "- 以上结论只使用本地聚合结果；如聚合返回行被 limit 截断，组合总数以 totalGroupCount 为准。",
+    ]
+      .join("\n")
+      .trim();
   }
 
-  const totalText = Number.isFinite(totalGroupCount)
-    ? `There are ${totalGroupCount} combinations`
-    : "The combinations have been aggregated";
-  const metricText = metricName ? ` with ${metricName} = ${String(metricValue)}` : "";
-  return `${totalText}. The most popular combination is ${topLabel}${metricText}. This is based on the local aggregate query; if rows were truncated, totalGroupCount is the full combination count.`;
+  return [
+    "Based on the completed local CSV aggregations:",
+    "",
+    "Key evidence:",
+    ...aggregateSummaries.map((summary) => `- ${summary}`),
+    "",
+    "Recommendations:",
+    "- Prioritize low-average or low-minimum availability O&D / booking-class combinations for inventory review.",
+    "- Treat high-maximum O&D combinations as demand or load-factor risk candidates for pricing or capacity checks.",
+    "- Confirm the business meaning of inferred column_N and departure_date_N fields before production use.",
+  ]
+    .join("\n")
+    .trim();
+}
+
+function summarizeAggregateContext(
+  context: Record<string, unknown>,
+  index: number,
+) {
+  const aggregate = toRecord(context.aggregateResult);
+  const rows = getAggregateRows(aggregate);
+  if (!aggregate || rows.length === 0) {
+    return "";
+  }
+
+  const plan = getResultPlan(context, aggregate);
+  const goal = typeof plan?.goal === "string" ? plan.goal : `聚合 ${index}`;
+  const groupBy = toStringArray(plan?.groupBy);
+  const metrics = toRecordArray(plan?.metrics).flatMap((metric) =>
+    typeof metric.name === "string" ? [metric.name] : [],
+  );
+  const totalGroupCount = Number(aggregate.totalGroupCount);
+  const matchedRowCount = Number(aggregate.matchedRowCount);
+  const rowCount = Number(aggregate.rowCount);
+  const coverage =
+    Number.isFinite(matchedRowCount) && Number.isFinite(rowCount)
+      ? `匹配 ${matchedRowCount}/${rowCount} 行`
+      : "已完成匹配";
+  const groupText = Number.isFinite(totalGroupCount)
+    ? `共 ${totalGroupCount} 组`
+    : "已生成分组";
+  const topRows = rows.slice(0, 5).map((row, rowIndex) => {
+    const dimensions = groupBy
+      .map((field) => `${field}=${String(row[field] ?? "")}`)
+      .join(" / ");
+    const metricText =
+      metrics.length > 0
+        ? metrics
+            .map((metric) => `${metric}=${formatCellValue(row[metric])}`)
+            .join("，")
+        : Object.entries(row)
+            .filter(
+              ([key]) =>
+                !groupBy.includes(key) && !key.endsWith("__non_null_count"),
+            )
+            .slice(0, 4)
+            .map(([key, value]) => `${key}=${formatCellValue(value)}`)
+            .join("，");
+    return `  ${rowIndex + 1}. ${dimensions || JSON.stringify(row)}${metricText ? `；${metricText}` : ""}`;
+  });
+
+  return [
+    `${index}. ${goal}：${coverage}，${groupText}。Top 结果：`,
+    ...topRows,
+  ].join("\n");
+}
+
+function summarizeStatsContext(context: Record<string, unknown>) {
+  const query = toRecord(context.query);
+  const stats = toRecord(context.stats);
+  if (!stats || typeof query?.column !== "string") {
+    return "";
+  }
+
+  return `${query.column} 统计：非空 ${String(stats.nonEmptyCount ?? "未知")}/${String(stats.rowCount ?? "未知")}，最小 ${String(stats.min ?? "-")}，最大 ${String(stats.max ?? "-")}，均值 ${String(stats.avg ?? "-")}。`;
+}
+
+function summarizeDistinctContext(context: Record<string, unknown>) {
+  const query = toRecord(context.query);
+  const values = Array.isArray(context.values)
+    ? context.values.slice(0, 8)
+    : [];
+  if (typeof query?.column !== "string" || values.length === 0) {
+    return "";
+  }
+
+  return `${query.column} 识别到 ${String(context.matchedRowCount ?? values.length)} 个候选值，示例：${values.map(String).join("、")}。`;
+}
+
+function formatCellValue(value: unknown) {
+  return typeof value === "number"
+    ? Number(value.toFixed(4)).toString()
+    : String(value ?? "");
 }
 
 function isChineseQuestion(question: string) {
@@ -634,8 +754,13 @@ function applyInferredContextFilters(
     return plan;
   }
 
-  const monthColumn = findColumnByName(profile, ["Month of departure_date"]);
-  if (!monthColumn || plan.filters.some((filter) => filter.field === monthColumn.name)) {
+  const monthColumn = findColumnByExactName(profile, [
+    "Month of departure_date",
+  ]);
+  if (
+    !monthColumn ||
+    plan.filters.some((filter) => filter.field === monthColumn.name)
+  ) {
     return plan;
   }
 
@@ -768,7 +893,9 @@ function buildCompletenessGuardQueries(args: {
     "load factor",
     "lf",
   ]);
-  const monthColumn = findColumnByName(args.profile, ["Month of departure_date"]);
+  const monthColumn = findColumnByExactName(args.profile, [
+    "Month of departure_date",
+  ]);
   const dayColumn = findColumnByName(args.profile, ["Day of departure_date"]);
   const requestedSpecificDay = extractRequestedDay(args.question);
   const hasAvailabilityEvidence =
@@ -798,9 +925,7 @@ function buildCompletenessGuardQueries(args: {
     Boolean(availabilityColumn) &&
     !hasAvailabilityEvidence;
   const needsLoadFactorGuard =
-    wantsLoadFactor &&
-    Boolean(loadFactorColumn) &&
-    !hasLoadFactorEvidence;
+    wantsLoadFactor && Boolean(loadFactorColumn) && !hasLoadFactorEvidence;
 
   if (!needsAvailabilityGuard && !needsLoadFactorGuard) {
     return [];
@@ -812,7 +937,11 @@ function buildCompletenessGuardQueries(args: {
     filters.push({ field: monthColumn.name, op: "eq", value: "September" });
   }
   if (dayColumn && requestedSpecificDay) {
-    filters.push({ field: dayColumn.name, op: "eq", value: requestedSpecificDay });
+    filters.push({
+      field: dayColumn.name,
+      op: "eq",
+      value: requestedSpecificDay,
+    });
   }
   if (bookingClassColumn && wantsBookingClass) {
     filters.push({ field: bookingClassColumn.name, op: "notEmpty" });
@@ -821,7 +950,11 @@ function buildCompletenessGuardQueries(args: {
     filters.push({ field: availabilityColumn.name, op: "notEmpty" });
   }
 
-  const groupBy = [routeColumn?.name, pathColumn?.name, bookingClassColumn?.name]
+  const groupBy = [
+    routeColumn?.name,
+    pathColumn?.name,
+    bookingClassColumn?.name,
+  ]
     .flatMap((field) => (field ? [field] : []))
     .slice(0, 3);
   const queries: CsvDataQuery[] = [];
@@ -871,13 +1004,29 @@ function buildCompletenessGuardQueries(args: {
       type: "aggregate",
       plan: {
         goal: "guard_high_load_factor_non_empty_metrics",
-        requiredFields: [routeColumn.name, pathColumn.name, loadFactorColumn.name],
+        requiredFields: [
+          routeColumn.name,
+          pathColumn.name,
+          loadFactorColumn.name,
+        ],
         filters: [
           ...(monthColumn
-            ? [{ field: monthColumn.name, op: "eq" as const, value: "September" }]
+            ? [
+                {
+                  field: monthColumn.name,
+                  op: "eq" as const,
+                  value: "September",
+                },
+              ]
             : []),
           ...(dayColumn && requestedSpecificDay
-            ? [{ field: dayColumn.name, op: "eq" as const, value: requestedSpecificDay }]
+            ? [
+                {
+                  field: dayColumn.name,
+                  op: "eq" as const,
+                  value: requestedSpecificDay,
+                },
+              ]
             : []),
           { field: loadFactorColumn.name, op: "notEmpty" },
         ],
@@ -1007,7 +1156,10 @@ function getAggregateRows(aggregate: Record<string, unknown> | null) {
     : [];
 }
 
-function hasNotEmptyFilter(filters: Record<string, unknown>[], fieldName: string) {
+function hasNotEmptyFilter(
+  filters: Record<string, unknown>[],
+  fieldName: string,
+) {
   return filters.some(
     (filter) => filter.field === fieldName && filter.op === "notEmpty",
   );
@@ -1045,7 +1197,9 @@ function toRecordArray(value: unknown) {
 
 function extractRequestedDay(question: string) {
   const lowerQuestion = question.toLowerCase();
-  const dayMatch = lowerQuestion.match(/\b(?:day|date)\s*(?:of\s*)?(?:=|is|:)?\s*0?([1-9]|[12]\d|30)\b/);
+  const dayMatch = lowerQuestion.match(
+    /\b(?:day|date)\s*(?:of\s*)?(?:=|is|:)?\s*0?([1-9]|[12]\d|30)\b/,
+  );
   if (dayMatch?.[1]) {
     return Number(dayMatch[1]);
   }
@@ -1062,16 +1216,27 @@ function findColumnByName(
   profile: CsvQueryProfileContext,
   candidates: string[],
 ) {
-  const lowerCandidates = candidates.map((candidate) => candidate.toLowerCase());
+  const lowerCandidates = candidates.map((candidate) =>
+    candidate.toLowerCase(),
+  );
   return profile.columns.find((column) => {
     const lowerName = column.name.toLowerCase();
     return lowerCandidates.some(
-      (candidate) =>
-        lowerName === candidate ||
-        lowerName.includes(candidate) ||
-        candidate.includes(lowerName),
+      (candidate) => lowerName === candidate || lowerName.includes(candidate),
     );
   });
+}
+
+function findColumnByExactName(
+  profile: CsvQueryProfileContext,
+  candidates: string[],
+) {
+  const lowerCandidates = new Set(
+    candidates.map((candidate) => candidate.toLowerCase()),
+  );
+  return profile.columns.find((column) =>
+    lowerCandidates.has(column.name.toLowerCase()),
+  );
 }
 
 function tryParseJson(value: string): unknown | null {
