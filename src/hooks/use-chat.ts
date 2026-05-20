@@ -47,6 +47,8 @@ type ActiveCsvContext = {
   content?: string;
 };
 
+const MAX_MODEL_QUERY_ROUNDS = Math.min(3, MAX_QUERY_ITERATIONS);
+
 export function useChat() {
   const {
     session,
@@ -975,11 +977,14 @@ async function runFreeCsvQueryAnalysis(args: {
   const queryResults: CsvDataQueryResult[] = [...(args.previousResults ?? [])];
   const recoveryNotes: string[] = [];
   const progressLog: string[] = [];
+  const executedQueryKeys = new Set(
+    queryResults.map((result) => getCsvDataQueryKey(result.query)),
+  );
   const updateProgressStatus = (current: string) => {
     args.onStatus([...progressLog, current].join("\n"));
   };
 
-  for (let iteration = 0; iteration < MAX_QUERY_ITERATIONS; iteration++) {
+  for (let iteration = 0; iteration < MAX_MODEL_QUERY_ROUNDS; iteration++) {
     const roundNumber = iteration + 1;
     args.onAttachmentPatch({
       status: "planning",
@@ -1029,7 +1034,13 @@ async function runFreeCsvQueryAnalysis(args: {
       decision.queries,
       args.question,
       args.profile,
+      executedQueryKeys,
     );
+    if (queryCandidates.length === 0) {
+      recoveryNotes.push("本轮模型请求的查询都已执行过，已进入总结阶段。");
+      break;
+    }
+
     args.onAttachmentPatch({
       status: "executing",
       progress: getQueryRoundProgress(iteration, 0.35),
@@ -1056,6 +1067,7 @@ async function runFreeCsvQueryAnalysis(args: {
 
       try {
         const result = await executeQueryInWorker(args.workerKey, query);
+        executedQueryKeys.add(getCsvDataQueryKey(query));
         queryResults.push(result);
         successfulQueries += 1;
         args.onAttachmentPatch({
@@ -1113,7 +1125,7 @@ async function runFreeCsvQueryAnalysis(args: {
 function getQueryRoundProgress(iteration: number, roundProgress: number) {
   const progress =
     (iteration + Math.max(0, Math.min(roundProgress, 1))) /
-    MAX_QUERY_ITERATIONS;
+    MAX_MODEL_QUERY_ROUNDS;
   return Math.max(0.01, Math.min(progress, 0.9));
 }
 
@@ -1204,6 +1216,7 @@ async function requestDataQueries(args: {
   domain: "campaign" | "general";
   enableThinking: boolean;
   signal: AbortSignal;
+  forceFinal?: boolean;
 }): Promise<DataQueryDecision> {
   const resp = await fetch("/api/chat/analysis/query", {
     method: "POST",
@@ -1214,6 +1227,7 @@ async function requestDataQueries(args: {
       previousResults: compactPreviousResultsForQuery(args.previousResults),
       domain: args.domain,
       enable_thinking: args.enableThinking,
+      force_final: args.forceFinal ?? false,
     }),
     signal: args.signal,
   });
@@ -1245,7 +1259,7 @@ async function requestDataQueriesFinalAnswer(args: {
 }): Promise<string> {
   let decision: DataQueryDecision;
   try {
-    decision = await requestDataQueries(args);
+    decision = await requestDataQueries({ ...args, forceFinal: true });
   } catch (error) {
     if ((error as Error)?.name === "AbortError") {
       throw error;
@@ -1279,17 +1293,29 @@ function buildExecutableQueryCandidates(
   queries: CsvDataQuery[],
   question: string,
   profile: CsvProfile,
+  executedQueryKeys?: Set<string>,
 ) {
-  const fallback = createLocalFallbackAggregateQuery(question, profile);
   const seen = new Set<string>();
-  return [...queries, fallback].filter((query) => {
-    const key = JSON.stringify(query);
-    if (seen.has(key)) {
+  const uniqueQueries = queries.filter((query) => {
+    const key = getCsvDataQueryKey(query);
+    if (seen.has(key) || executedQueryKeys?.has(key)) {
       return false;
     }
     seen.add(key);
     return true;
   });
+
+  if (uniqueQueries.length > 0) {
+    return uniqueQueries;
+  }
+
+  const fallback = createLocalFallbackAggregateQuery(question, profile);
+  const fallbackKey = getCsvDataQueryKey(fallback);
+  return executedQueryKeys?.has(fallbackKey) ? [] : [fallback];
+}
+
+function getCsvDataQueryKey(query: CsvDataQuery) {
+  return JSON.stringify(query);
 }
 
 function describeCsvDataQuery(query: CsvDataQuery) {

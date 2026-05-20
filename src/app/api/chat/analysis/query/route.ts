@@ -26,6 +26,7 @@ interface QueryRequest {
   previousResults?: CsvQueryResultContext[];
   domain?: "campaign" | "general";
   enable_thinking?: boolean;
+  force_final?: boolean;
 }
 
 type DeepSeekThinking =
@@ -60,6 +61,7 @@ export async function POST(request: Request) {
       previousResults: compactPreviousResultsForQuery(body.previousResults ?? []),
       domain: body.domain ?? "campaign",
       enableThinking: body.enable_thinking ?? false,
+      forceFinal: body.force_final ?? false,
     } satisfies Omit<Parameters<typeof requestQueryDecision>[0], "apiKey">;
 
     let apiKey: string | null = null;
@@ -68,7 +70,9 @@ export async function POST(request: Request) {
     } catch {
       return Response.json({
         ok: true,
-        ...createFallbackQueryDecision(requestArgs),
+        ...(requestArgs.forceFinal
+          ? createFallbackFinalDecision(requestArgs)
+          : createFallbackQueryDecision(requestArgs)),
       });
     }
 
@@ -96,6 +100,7 @@ async function requestQueryDecision(args: {
   previousResults: unknown[];
   domain: "campaign" | "general";
   enableThinking: boolean;
+  forceFinal: boolean;
 }): Promise<QueryAgentResponse> {
   for (let attempt = 1; attempt <= QUERY_MODEL_ATTEMPTS; attempt++) {
     try {
@@ -106,12 +111,16 @@ async function requestQueryDecision(args: {
       return response;
     } catch (error) {
       if (attempt === QUERY_MODEL_ATTEMPTS) {
-        return createFallbackQueryDecision(args, error);
+        return args.forceFinal
+          ? createFallbackFinalDecision(args, error)
+          : createFallbackQueryDecision(args, error);
       }
     }
   }
 
-  return createFallbackQueryDecision(args);
+  return args.forceFinal
+    ? createFallbackFinalDecision(args)
+    : createFallbackQueryDecision(args);
 }
 
 async function requestQueryDecisionOnce(args: {
@@ -121,11 +130,16 @@ async function requestQueryDecisionOnce(args: {
   previousResults: unknown[];
   domain: "campaign" | "general";
   enableThinking: boolean;
+  forceFinal: boolean;
 }): Promise<QueryAgentResponse> {
   const content = await requestQueryModelContent(args);
   const parsed = extractJsonObject(content);
 
   if (Array.isArray(parsed)) {
+    if (args.forceFinal) {
+      return createFallbackFinalDecision(args, "Final answer was requested.");
+    }
+
     const queries = normalizeQueries(parsed, args.profile);
     return queries.length > 0
       ? { type: "queries", queries, rationale: "Parsed a query list directly." }
@@ -133,7 +147,9 @@ async function requestQueryDecisionOnce(args: {
   }
 
   if (!parsed || typeof parsed !== "object") {
-    return createFallbackQueryDecision(args);
+    return args.forceFinal
+      ? createFallbackFinalDecision(args, "Model did not return valid JSON.")
+      : createFallbackQueryDecision(args);
   }
 
   const record = parsed as Record<string, unknown>;
@@ -142,6 +158,10 @@ async function requestQueryDecisionOnce(args: {
   }
 
   if (Array.isArray(record.queries)) {
+    if (args.forceFinal) {
+      return createFallbackFinalDecision(args, "Final answer was requested.");
+    }
+
     const queries = normalizeQueries(record.queries, args.profile);
     if (queries.length === 0) {
       return createFallbackQueryDecision(args);
@@ -155,7 +175,9 @@ async function requestQueryDecisionOnce(args: {
     };
   }
 
-  return createFallbackQueryDecision(args);
+  return args.forceFinal
+    ? createFallbackFinalDecision(args, "Final answer was requested.")
+    : createFallbackQueryDecision(args);
 }
 
 async function requestQueryModelContent(args: {
@@ -165,6 +187,7 @@ async function requestQueryModelContent(args: {
   previousResults: unknown[];
   domain: "campaign" | "general";
   enableThinking: boolean;
+  forceFinal: boolean;
 }) {
   const resp = await fetch(`${DEEPSEEK_BASE}/chat/completions`, {
     method: "POST",
@@ -179,7 +202,7 @@ async function requestQueryModelContent(args: {
       messages: [
         {
           role: "system",
-          content: buildQuerySystemPrompt(args.domain),
+          content: buildQuerySystemPrompt(args.domain, args.forceFinal),
         },
         {
           role: "user",
@@ -187,6 +210,7 @@ async function requestQueryModelContent(args: {
             question: args.question,
             profile: args.profile,
             previousResults: args.previousResults,
+            force_final: args.forceFinal,
           }),
         },
       ],
@@ -213,7 +237,10 @@ function buildThinkingConfig(enableThinking: boolean): DeepSeekThinking {
     : { type: "disabled" };
 }
 
-function buildQuerySystemPrompt(domain: "campaign" | "general") {
+function buildQuerySystemPrompt(
+  domain: "campaign" | "general",
+  forceFinal: boolean,
+) {
   return `You are a CSV data analyst that can request small, bounded browser-side data queries.
 
 You do not have the raw CSV. The browser has it locally. You may decide which rows, columns, filters, distinct values, column stats, or aggregates to query. Return JSON only.
@@ -245,10 +272,14 @@ Rules:
 - Browser-side local queries are cheap. Request multiple bounded queries when they materially improve confidence or coverage.
 - Use row-level queries when the user explicitly asks for specific rows or when examples are needed.
 - rowNumber is 1-based data-row numbering after the header row. If the user asks for "row N" or "第 N 行数据", request {"type":"rows","rowNumbers":[N]}.
-- You may make multiple small queries, then finalAnswer after previousResults are sufficient.
+- If previousResults already contain aggregateResult, stats, values, or rows that directly address the question, return finalAnswer instead of asking for more data.
+- Do not repeat a query shape that is already present in previousResults.
+- You may make multiple small queries only when the missing evidence is specific and materially changes the answer; otherwise return finalAnswer after previousResults are sufficient.
+- When force_final is true, you must return {"finalAnswer":"..."} and must not return queries.
 - State limitations if previousResults are insufficient.
 - Reply finalAnswer in the user's language.
-- Domain is ${domain}; for campaign work prefer route/origin/destination, revenue, passengers/demand, yield, cabin, and date fields when relevant.`;
+- Domain is ${domain}; for campaign work prefer route/origin/destination, revenue, passengers/demand, yield, cabin, and date fields when relevant.
+- force_final is ${forceFinal ? "true" : "false"}.`;
 }
 
 function normalizeQueries(
@@ -352,6 +383,28 @@ function createFallbackQueryDecision(args: {
     finalAnswer: isChineseQuestion(args.question)
       ? "模型没有返回可执行的 JSON 查询计划，并且当前字段画像不足以生成保底查询。请指定要分组或统计的字段名。"
       : "The model did not return an executable JSON query plan, and the current profile was not sufficient to build a fallback query. Please specify the fields to group or count.",
+  };
+}
+
+function createFallbackFinalDecision(
+  args: {
+    question: string;
+    previousResults: unknown[];
+  },
+  reason?: unknown,
+): QueryAgentResponse {
+  const finalAnswer = buildFallbackFinalAnswer(args.question, args.previousResults);
+  if (finalAnswer) {
+    return { type: "final", finalAnswer };
+  }
+
+  const reasonText =
+    reason instanceof Error ? reason.message : String(reason ?? "");
+  return {
+    type: "final",
+    finalAnswer: isChineseQuestion(args.question)
+      ? `当前已进入总结阶段，但已有查询结果不足以生成可靠结论。${reasonText ? `原因：${reasonText}` : ""}`
+      : `The flow is in final-answer mode, but the available query results are not sufficient for a reliable conclusion.${reasonText ? ` Reason: ${reasonText}` : ""}`,
   };
 }
 

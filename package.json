@@ -11,6 +11,7 @@
     "start": "next start",
     "lint": "eslint",
     "test:csv-analysis": "tsx scripts/test-large-csv-analysis.ts",
+    "test:chat-large-csv-flow": "tsx scripts/test-chat-large-csv-flow.ts",
     "test:csv-third-line": "tsx scripts/test-read-sep26-third-line.ts",
     "package": "node scripts/package-manifest.mjs"
   },
