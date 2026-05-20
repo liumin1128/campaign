@@ -204,7 +204,7 @@ export interface CsvProfileOptions {
   sampleValueLimit?: number;
 }
 
-export const SMALL_ATTACHMENT_MAX_BYTES = 200 * 1024;
+export const SMALL_ATTACHMENT_MAX_BYTES = 2 * 1024 * 1024;
 export const LARGE_CSV_MAX_BYTES = 50 * 1024 * 1024;
 export const MAX_GROUP_BY_FIELDS = 3;
 export const MAX_RESULT_ROWS = 100;

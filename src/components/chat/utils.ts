@@ -1,8 +1,6 @@
 import type { FileAttachment } from "./types";
-import {
-  LARGE_CSV_MAX_BYTES,
-  SMALL_ATTACHMENT_MAX_BYTES,
-} from "@/lib/client-analysis/csv-types";
+import { SMALL_ATTACHMENT_MAX_BYTES } from "@/lib/client-analysis/csv-types";
+import { formatBytes } from "@/lib/client-analysis/csv-analysis-prompts";
 
 /** 简易 CSV 解析：将 CSV 文本解析为格式化 markdown 表格 */
 export function parseCSVToMarkdown(raw: string): string {
@@ -72,16 +70,9 @@ export async function processFiles(files: FileList): Promise<FileAttachment[]> {
     }
 
     try {
-      if (isCSV && file.size > LARGE_CSV_MAX_BYTES) {
+      if (file.size > SMALL_ATTACHMENT_MAX_BYTES) {
         alert(
-          `CSV 文件过大：${file.name}。当前本地分析第一版最多支持 50MB。`,
-        );
-        continue;
-      }
-
-      if (isCSV && file.size > SMALL_ATTACHMENT_MAX_BYTES) {
-        alert(
-          `CSV 文件较大：${file.name}。请使用旁边的大 CSV 本地分析按钮添加。`,
+          `文件过大：${file.name}。附件功能最多支持 ${formatBytes(SMALL_ATTACHMENT_MAX_BYTES)}，CSV 大文件请使用旁边的大 CSV 本地分析按钮添加。`,
         );
         continue;
       }

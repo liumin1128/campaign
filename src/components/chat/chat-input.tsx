@@ -56,6 +56,9 @@ export function ChatInput({
   onThinkingChange,
   onRemoveQuote,
 }: ChatInputProps) {
+  const fileInputId = "chat-file-attachments-input";
+  const largeCsvInputId = "chat-large-csv-analysis-input";
+
   return (
     <div className="px-4 py-2">
       {/* 引用预览 */}
@@ -181,20 +184,24 @@ export function ChatInput({
           {/* 右侧操作按钮 */}
           <div className="flex items-center gap-0.5">
             <input
+              id={fileInputId}
               ref={fileInputRef}
               type="file"
               multiple
               accept=".csv,.txt,.md,.json,text/*"
               onChange={onFileSelect}
-              className="hidden"
+              className="sr-only"
+              tabIndex={-1}
             />
             <input
+              id={largeCsvInputId}
               ref={largeCsvInputRef}
               type="file"
               multiple
               accept=".csv,text/csv"
               onChange={onLargeCsvSelect}
-              className="hidden"
+              className="sr-only"
+              tabIndex={-1}
             />
 
             {isLoading ? (
@@ -208,24 +215,22 @@ export function ChatInput({
               </button>
             ) : (
               <>
-                <button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={isLoading}
+                <label
+                  htmlFor={fileInputId}
+                  aria-disabled={isLoading}
                   className="flex size-6 items-center justify-center rounded-md text-gray-400 transition hover:bg-gray-100 hover:text-gray-600 disabled:opacity-40 dark:hover:bg-slate-700 dark:hover:text-slate-300"
                   title={t(language, "upload_file_title")}
                 >
                   <FileImport className="size-3.5" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => largeCsvInputRef.current?.click()}
-                  disabled={isLoading}
+                </label>
+                <label
+                  htmlFor={largeCsvInputId}
+                  aria-disabled={isLoading}
                   className="flex size-6 items-center justify-center rounded-md text-gray-400 transition hover:bg-gray-100 hover:text-gray-600 disabled:opacity-40 dark:hover:bg-slate-700 dark:hover:text-slate-300"
                   title={t(language, "upload_large_csv_title")}
                 >
                   <Database className="size-3.5" />
-                </button>
+                </label>
                 <button
                   type="button"
                   onClick={onSend}
