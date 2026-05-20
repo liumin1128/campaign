@@ -166,6 +166,7 @@ async function requestQueryModelContent(args: {
     body: JSON.stringify({
       model: "deepseek-v4-pro",
       thinking: { type: "enabled", reasoning_effort: "medium" },
+      response_format: { type: "json_object" },
       messages: [
         {
           role: "system",
@@ -226,6 +227,7 @@ Rules:
 - If parser confidence is low or fields look like whole rows, mention the parsing uncertainty instead of forcing an analysis.
 - Never ask for all rows or all columns. Max rows per query is ${MAX_QUERY_RESULT_ROWS}; max columns is ${MAX_QUERY_COLUMNS}; max distinct values is ${MAX_QUERY_DISTINCT_VALUES}.
 - Prefer aggregate, columnStats, and distinctValues before row-level inspection.
+- Browser-side local queries are cheap. Request multiple bounded queries when they materially improve confidence or coverage.
 - Use row-level queries when the user explicitly asks for specific rows or when examples are needed.
 - rowNumber is 1-based data-row numbering after the header row. If the user asks for "row N" or "第 N 行数据", request {"type":"rows","rowNumbers":[N]}.
 - You may make multiple small queries, then finalAnswer after previousResults are sufficient.
