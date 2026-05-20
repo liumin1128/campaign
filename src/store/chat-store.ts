@@ -22,9 +22,11 @@ interface ChatStoreState {
   sessions: ChatSession[];
   activeSessionId: string | null;
   language: Language;
+  enableThinking: boolean;
   draftInputs: Record<string, string>;
   quotedMessages: QuotedMessage[];
   setLanguage: (lang: Language) => void;
+  setEnableThinking: (enabled: boolean) => void;
   createSession: (agentId?: string) => string;
   switchSession: (id: string) => void;
   deleteSession: (id: string) => void;
@@ -65,10 +67,12 @@ export const useChatStore = create<ChatStoreState>()(
       sessions: [],
       activeSessionId: null,
       language: "zh",
+      enableThinking: false,
       draftInputs: {},
       quotedMessages: [],
 
       setLanguage: (lang) => set({ language: lang }),
+      setEnableThinking: (enabled) => set({ enableThinking: enabled }),
 
       createSession: (agentId) => {
         let lang = "zh" as Language;
@@ -175,6 +179,7 @@ export const useChatStore = create<ChatStoreState>()(
         sessions: state.sessions,
         activeSessionId: state.activeSessionId,
         language: state.language,
+        enableThinking: state.enableThinking,
         draftInputs: state.draftInputs,
         quotedMessages: state.quotedMessages,
       }),
@@ -202,9 +207,11 @@ export function useActiveSession(): {
   sessions: ChatSession[];
   activeSessionId: string | null;
   language: Language;
+  enableThinking: boolean;
   draftInputs: Record<string, string>;
   quotedMessages: QuotedMessage[];
   setLanguage: (lang: Language) => void;
+  setEnableThinking: (enabled: boolean) => void;
   createSession: (agentId?: string) => string;
   switchSession: (id: string) => void;
   deleteSession: (id: string) => void;
@@ -218,9 +225,11 @@ export function useActiveSession(): {
   const sessions = useChatStore((s) => s.sessions);
   const activeSessionId = useChatStore((s) => s.activeSessionId);
   const language = useChatStore((s) => s.language);
+  const enableThinking = useChatStore((s) => s.enableThinking);
   const draftInputs = useChatStore((s) => s.draftInputs);
   const quotedMessages = useChatStore((s) => s.quotedMessages);
   const setLanguage = useChatStore((s) => s.setLanguage);
+  const setEnableThinking = useChatStore((s) => s.setEnableThinking);
   const createSession = useChatStore((s) => s.createSession);
   const switchSession = useChatStore((s) => s.switchSession);
   const deleteSession = useChatStore((s) => s.deleteSession);
@@ -238,9 +247,11 @@ export function useActiveSession(): {
     sessions,
     activeSessionId,
     language,
+    enableThinking,
     draftInputs,
     quotedMessages,
     setLanguage,
+    setEnableThinking,
     createSession,
     switchSession,
     deleteSession,

@@ -27,7 +27,13 @@ interface RequestBody {
   messages: Array<{ role: string; content: string }>;
   /** 是否启用互联网搜索（tool calling） */
   enable_search?: boolean;
+  /** 是否启用模型 thinking 模式 */
+  enable_thinking?: boolean;
 }
+
+type DeepSeekThinking =
+  | { type: "enabled"; reasoning_effort: "max" }
+  | { type: "disabled" };
 
 // ---------- Tool 定义 ----------
 
@@ -116,11 +122,11 @@ function parseDSMLToolCalls(
 async function callDeepSeek(
   apiKey: string,
   messages: DeepSeekMessage[],
-  options?: { stream?: boolean; tools?: boolean },
+  options?: { stream?: boolean; tools?: boolean; enableThinking?: boolean },
 ): Promise<Response> {
   const body: Record<string, unknown> = {
     model: "deepseek-v4-pro",
-    thinking: { type: "enabled", reasoning_effort: "max" },
+    thinking: buildThinkingConfig(options?.enableThinking ?? false),
     messages,
   };
 
@@ -142,15 +148,25 @@ async function callDeepSeek(
   });
 }
 
+function buildThinkingConfig(enableThinking: boolean): DeepSeekThinking {
+  return enableThinking
+    ? { type: "enabled", reasoning_effort: "max" }
+    : { type: "disabled" };
+}
+
 /** 非流式调用，用于 tool calling 协商 */
 async function askWithTools(
   apiKey: string,
   messages: DeepSeekMessage[],
+  enableThinking: boolean,
 ): Promise<{
   message: DeepSeekMessage;
   finish_reason: "stop" | "tool_calls" | "length";
 }> {
-  const resp = await callDeepSeek(apiKey, messages, { tools: true });
+  const resp = await callDeepSeek(apiKey, messages, {
+    tools: true,
+    enableThinking,
+  });
 
   if (!resp.ok) {
     const errText = await resp.text();
@@ -401,8 +417,12 @@ function streamStaticContent(message: DeepSeekMessage): Response {
 async function streamFinalResponse(
   apiKey: string,
   messages: DeepSeekMessage[],
+  enableThinking: boolean,
 ): Promise<Response> {
-  const deepseekResp = await callDeepSeek(apiKey, messages, { stream: true });
+  const deepseekResp = await callDeepSeek(apiKey, messages, {
+    stream: true,
+    enableThinking,
+  });
 
   if (!deepseekResp.ok) {
     const errText = await deepseekResp.text();
@@ -431,10 +451,11 @@ export async function POST(request: Request) {
 
     const messages = body.messages as DeepSeekMessage[];
     const enableSearch = body.enable_search ?? false;
+    const enableThinking = body.enable_thinking ?? false;
 
     // ---- 不启用搜索：直接流式 ----
     if (!enableSearch) {
-      return streamFinalResponse(apiKey, messages);
+      return streamFinalResponse(apiKey, messages, enableThinking);
     }
 
     // ---- 启用搜索：Tool Calling 循环 ----
@@ -442,7 +463,7 @@ export async function POST(request: Request) {
     const currentMessages = [...messages];
 
     for (let round = 0; round < MAX_ROUNDS; round++) {
-      const result = await askWithTools(apiKey, currentMessages);
+      const result = await askWithTools(apiKey, currentMessages, enableThinking);
 
       const hasToolCalls =
         result.finish_reason === "tool_calls" &&
@@ -490,7 +511,7 @@ export async function POST(request: Request) {
         }
 
         // content 为 null（如 stop 时），让模型继续流式生成
-        return streamFinalResponse(apiKey, currentMessages);
+        return streamFinalResponse(apiKey, currentMessages, enableThinking);
       }
 
       // 有 tool calls：追加 assistant 消息
@@ -513,7 +534,7 @@ export async function POST(request: Request) {
     }
 
     // 超过最大轮次，直接输出
-    return streamFinalResponse(apiKey, currentMessages);
+    return streamFinalResponse(apiKey, currentMessages, enableThinking);
   } catch (err) {
     const message =
       err instanceof Error ? err.message : "Internal server error";

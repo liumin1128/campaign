@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  Brain,
   Database,
   FileImport,
   PaperPlane,
@@ -16,6 +17,7 @@ interface ChatInputProps {
   input: string;
   isLoading: boolean;
   language: Language;
+  enableThinking: boolean;
   fileAttachments: FileAttachment[];
   quotedMessages: QuotedMessage[];
   inputRef: React.RefObject<HTMLTextAreaElement | null>;
@@ -29,6 +31,7 @@ interface ChatInputProps {
   onLargeCsvSelect: (e: React.ChangeEvent<HTMLInputElement>) => void;
   onRemoveFile: (index: number) => void;
   onLanguageChange: (lang: Language) => void;
+  onThinkingChange: (enabled: boolean) => void;
   onRemoveQuote: (id: string) => void;
 }
 
@@ -36,6 +39,7 @@ export function ChatInput({
   input,
   isLoading,
   language,
+  enableThinking,
   fileAttachments,
   quotedMessages,
   inputRef,
@@ -49,6 +53,7 @@ export function ChatInput({
   onLargeCsvSelect,
   onRemoveFile,
   onLanguageChange,
+  onThinkingChange,
   onRemoveQuote,
 }: ChatInputProps) {
   return (
@@ -140,19 +145,38 @@ export function ChatInput({
         />
 
         <div className="absolute bottom-0 left-0 right-0 flex items-center justify-between px-1.5 py-1">
-          {/* 语言切换 */}
-          <button
-            type="button"
-            onClick={() => onLanguageChange(language === "zh" ? "en" : "zh")}
-            disabled={isLoading}
-            className="flex size-6 items-center justify-center rounded-md text-[10px] font-semibold text-gray-400 transition hover:bg-gray-100 hover:text-gray-600 disabled:opacity-40 dark:hover:bg-slate-700 dark:hover:text-slate-300"
-            title={t(
-              language,
-              language === "zh" ? "lang_switch_to_en" : "lang_switch_to_zh",
-            )}
-          >
-            {language === "zh" ? "EN" : "中"}
-          </button>
+          <div className="flex items-center gap-0.5">
+            {/* 语言切换 */}
+            <button
+              type="button"
+              onClick={() => onLanguageChange(language === "zh" ? "en" : "zh")}
+              disabled={isLoading}
+              className="flex size-6 items-center justify-center rounded-md text-[10px] font-semibold text-gray-400 transition hover:bg-gray-100 hover:text-gray-600 disabled:opacity-40 dark:hover:bg-slate-700 dark:hover:text-slate-300"
+              title={t(
+                language,
+                language === "zh" ? "lang_switch_to_en" : "lang_switch_to_zh",
+              )}
+            >
+              {language === "zh" ? "EN" : "中"}
+            </button>
+            <button
+              type="button"
+              onClick={() => onThinkingChange(!enableThinking)}
+              disabled={isLoading}
+              aria-pressed={enableThinking}
+              className={`flex size-6 items-center justify-center rounded-md transition disabled:opacity-40 ${
+                enableThinking
+                  ? "bg-indigo-100 text-indigo-600 hover:bg-indigo-200 dark:bg-indigo-900/40 dark:text-indigo-300 dark:hover:bg-indigo-900/60"
+                  : "text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-slate-700 dark:hover:text-slate-300"
+              }`}
+              title={t(
+                language,
+                enableThinking ? "thinking_on_title" : "thinking_off_title",
+              )}
+            >
+              <Brain className="size-3.5" />
+            </button>
+          </div>
 
           {/* 右侧操作按钮 */}
           <div className="flex items-center gap-0.5">
@@ -222,22 +246,23 @@ export function ChatInput({
 function getAnalysisLabel(language: Language, attachment: FileAttachment) {
   const status = attachment.analysis?.status ?? "profiling";
 
-  return t(
-    language,
-    status === "profiling"
-      ? "csv_analysis_profiling"
-      : status === "profiled"
-        ? "csv_analysis_profiled"
-        : status === "planning"
-          ? "csv_analysis_planning"
-          : status === "executing"
-            ? "csv_analysis_executing"
-            : status === "summarizing"
-              ? "csv_analysis_summarizing"
-              : status === "completed"
-                ? "csv_analysis_completed"
-                : "csv_analysis_failed",
-  );
+  switch (status) {
+    case "profiling":
+      return t(language, "csv_analysis_profiling");
+    case "profiled":
+      return t(language, "csv_analysis_profiled");
+    case "planning":
+      return t(language, "csv_analysis_planning");
+    case "executing":
+      return t(language, "csv_analysis_executing");
+    case "summarizing":
+      return t(language, "csv_analysis_summarizing");
+    case "completed":
+      return t(language, "csv_analysis_completed");
+    case "failed":
+    default:
+      return t(language, "csv_analysis_failed");
+  }
 }
 
 function getAnalysisProgressText(attachment: FileAttachment) {

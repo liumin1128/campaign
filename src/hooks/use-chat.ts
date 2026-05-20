@@ -53,7 +53,9 @@ export function useChat() {
     sessions,
     activeSessionId,
     language,
+    enableThinking,
     setLanguage,
+    setEnableThinking,
     createSession,
     switchSession,
     deleteSession,
@@ -266,7 +268,7 @@ export function useChat() {
     }
 
     const activeCsvContexts =
-      sessionId && trimmed ? csvContextsRef.current[sessionId] ?? [] : [];
+      sessionId && trimmed ? (csvContextsRef.current[sessionId] ?? []) : [];
     if (activeCsvContexts.length > 0) {
       await handleCsvContextFollowup(quotePrefix + trimmed, activeCsvContexts);
       return;
@@ -307,6 +309,7 @@ export function useChat() {
         body: JSON.stringify({
           messages: buildApiMessages(updatedMessages),
           enable_search: selectedAgent?.enableSearch ?? false,
+          enable_thinking: enableThinking,
         }),
         signal: controller.signal,
       });
@@ -450,7 +453,8 @@ export function useChat() {
 
     if (files.length === 0) return;
 
-    const validAttachments: Array<{ file: File; attachment: FileAttachment }> = [];
+    const validAttachments: Array<{ file: File; attachment: FileAttachment }> =
+      [];
 
     for (const file of files) {
       const isCSV = file.name.endsWith(".csv") || file.type === "text/csv";
@@ -460,7 +464,9 @@ export function useChat() {
       }
 
       if (file.size > LARGE_CSV_MAX_BYTES) {
-        alert(`CSV 文件过大：${file.name}。当前本地分析第一版最多支持 50MB，已跳过。`);
+        alert(
+          `CSV 文件过大：${file.name}。当前本地分析第一版最多支持 50MB，已跳过。`,
+        );
         continue;
       }
 
@@ -515,12 +521,11 @@ export function useChat() {
             content,
           });
         } catch (error) {
+          const errorMessage = formatErrorMessage(error);
           updateAnalysisAttachment(id, {
             status: "failed",
-            error: error instanceof Error ? error.message : String(error),
-            content: `[CSV 本地分析：${file.name}]\n分析失败：${
-              error instanceof Error ? error.message : String(error)
-            }`,
+            error: errorMessage,
+            content: `[CSV 本地分析：${file.name}]\n分析失败：${errorMessage}`,
           });
         }
       }),
@@ -556,14 +561,17 @@ export function useChat() {
       (attachment) => attachment.analysis?.status === "failed",
     );
     if (failedAttachment) {
-      alert(failedAttachment.analysis?.error ?? "CSV 分析失败，请重新添加文件。");
+      alert(
+        failedAttachment.analysis?.error ?? "CSV 分析失败，请重新添加文件。",
+      );
       return;
     }
 
     const sid = sessionId;
     const assistantId = crypto.randomUUID();
     const userId = crypto.randomUUID();
-    const initialStoredAttachments = csvAnalysisAttachments.map(toStoredAttachment);
+    const initialStoredAttachments =
+      csvAnalysisAttachments.map(toStoredAttachment);
     const userMsg: Message = {
       id: userId,
       role: "user",
@@ -596,14 +604,18 @@ export function useChat() {
       const finalContexts: ActiveCsvContext[] = [];
       const summaries: string[] = [];
 
-      for (const [index, analysisAttachment] of csvAnalysisAttachments.entries()) {
+      for (const [
+        index,
+        analysisAttachment,
+      ] of csvAnalysisAttachments.entries()) {
         const attachmentId = analysisAttachment.id;
         const profile = analysisAttachment.analysis!.profile!;
         const profileSummary = analysisAttachment.analysis!.profileSummary!;
-        const statusPrefix =
-          csvAnalysisAttachments.length > 1
-            ? `(${index + 1}/${csvAnalysisAttachments.length}) ${analysisAttachment.name}：`
-            : "";
+        const statusPrefix = buildCsvBatchStatusPrefix(
+          index,
+          csvAnalysisAttachments.length,
+          analysisAttachment.name,
+        );
 
         updateAnalysisAttachment(attachmentId, { status: "planning" });
         updateAssistantMessage(
@@ -620,6 +632,7 @@ export function useChat() {
           profileSummary,
           domain:
             selectedAgent?.id === "campaign_planning" ? "campaign" : "general",
+          enableThinking,
           signal: controller.signal,
           onStatus: (message) => {
             updateAssistantMessage(
@@ -670,10 +683,11 @@ export function useChat() {
         if (message.id === userId) {
           return {
             ...message,
-            attachments: message.attachments?.map((attachment) =>
-              finalAttachments.find(
-                (finalAttachment) => finalAttachment.id === attachment.id,
-              ) ?? attachment,
+            attachments: message.attachments?.map(
+              (attachment) =>
+                finalAttachments.find(
+                  (finalAttachment) => finalAttachment.id === attachment.id,
+                ) ?? attachment,
             ),
           };
         }
@@ -753,10 +767,11 @@ export function useChat() {
       const summaries: string[] = [];
 
       for (const [index, context] of csvContexts.entries()) {
-        const statusPrefix =
-          csvContexts.length > 1
-            ? `(${index + 1}/${csvContexts.length}) ${context.name}：`
-            : "";
+        const statusPrefix = buildCsvBatchStatusPrefix(
+          index,
+          csvContexts.length,
+          context.name,
+        );
 
         updateAssistantMessage(
           sid,
@@ -773,6 +788,7 @@ export function useChat() {
           previousResults: context.queryResults,
           domain:
             selectedAgent?.id === "campaign_planning" ? "campaign" : "general",
+          enableThinking,
           signal: controller.signal,
           onStatus: (message) => {
             updateAssistantMessage(
@@ -845,7 +861,9 @@ export function useChat() {
           ...attachment,
           content: patch.content ?? attachment.content,
           analysis: {
-            ...(attachment.analysis ?? { status: "profiling" as CsvAnalysisStatus }),
+            ...(attachment.analysis ?? {
+              status: "profiling" as CsvAnalysisStatus,
+            }),
             ...patch,
             id,
           },
@@ -862,6 +880,7 @@ export function useChat() {
     selectedAgent,
     fileAttachments,
     language,
+    enableThinking,
     sessions,
     activeSessionId,
     session,
@@ -883,6 +902,7 @@ export function useChat() {
     // 操作
     setInput,
     setLanguage,
+    setEnableThinking,
     setSelectedAgent: handleSetSelectedAgent,
     handleSend,
     handleStop,
@@ -912,6 +932,14 @@ function toStoredAttachment(attachment: FileAttachment): FileAttachment {
   };
 }
 
+function buildCsvBatchStatusPrefix(
+  index: number,
+  total: number,
+  name: string,
+): string {
+  return total > 1 ? `(${index + 1}/${total}) ${name}：` : "";
+}
+
 function updateAssistantMessage(
   sessionId: string,
   baseMessages: Message[],
@@ -933,9 +961,12 @@ async function runFreeCsvQueryAnalysis(args: {
   profileSummary: CsvProfileSummary;
   previousResults?: CsvDataQueryResult[];
   domain: "campaign" | "general";
+  enableThinking: boolean;
   signal: AbortSignal;
   onStatus: (message: string) => void;
-  onAttachmentPatch: (patch: Partial<CsvAnalysisState> & { content?: string }) => void;
+  onAttachmentPatch: (
+    patch: Partial<CsvAnalysisState> & { content?: string },
+  ) => void;
 }): Promise<{
   summary: string;
   queryResults: CsvDataQueryResult[];
@@ -966,6 +997,7 @@ async function runFreeCsvQueryAnalysis(args: {
       profile: args.profile,
       previousResults: queryResults,
       domain: args.domain,
+      enableThinking: args.enableThinking,
       signal: args.signal,
       recoveryNotes,
     });
@@ -1053,7 +1085,11 @@ async function runFreeCsvQueryAnalysis(args: {
     }
   }
 
-  args.onAttachmentPatch({ status: "summarizing", progress: 0.92, queryResults });
+  args.onAttachmentPatch({
+    status: "summarizing",
+    progress: 0.92,
+    queryResults,
+  });
   updateProgressStatus("正在根据已查询的数据生成结论…");
 
   const summary = await requestDataQueriesFinalAnswer({
@@ -1061,6 +1097,7 @@ async function runFreeCsvQueryAnalysis(args: {
     profile: args.profile,
     previousResults: queryResults,
     domain: args.domain,
+    enableThinking: args.enableThinking,
     signal: args.signal,
     recoveryNotes,
   });
@@ -1074,7 +1111,8 @@ async function runFreeCsvQueryAnalysis(args: {
 }
 
 function getQueryRoundProgress(iteration: number, roundProgress: number) {
-  const progress = (iteration + Math.max(0, Math.min(roundProgress, 1))) /
+  const progress =
+    (iteration + Math.max(0, Math.min(roundProgress, 1))) /
     MAX_QUERY_ITERATIONS;
   return Math.max(0.01, Math.min(progress, 0.9));
 }
@@ -1085,7 +1123,9 @@ function formatRationaleForStatus(rationale: string | undefined) {
   }
 
   const singleLine = rationale.replace(/\s+/g, " ").trim();
-  return singleLine.length > 180 ? `${singleLine.slice(0, 177)}...` : singleLine;
+  return singleLine.length > 180
+    ? `${singleLine.slice(0, 177)}...`
+    : singleLine;
 }
 
 function buildQueryAttachmentContent(args: {
@@ -1125,6 +1165,7 @@ async function requestDataQueriesWithFallback(args: {
   profile: CsvProfile;
   previousResults: CsvDataQueryResult[];
   domain: "campaign" | "general";
+  enableThinking: boolean;
   signal: AbortSignal;
   recoveryNotes: string[];
 }): Promise<DataQueryDecision> {
@@ -1134,7 +1175,9 @@ async function requestDataQueriesWithFallback(args: {
       args.recoveryNotes.push("模型没有返回可执行查询，已切换到本地后备查询。");
       return {
         type: "queries",
-        queries: [createLocalFallbackAggregateQuery(args.question, args.profile)],
+        queries: [
+          createLocalFallbackAggregateQuery(args.question, args.profile),
+        ],
       };
     }
 
@@ -1159,6 +1202,7 @@ async function requestDataQueries(args: {
   profile: CsvProfile;
   previousResults: CsvDataQueryResult[];
   domain: "campaign" | "general";
+  enableThinking: boolean;
   signal: AbortSignal;
 }): Promise<DataQueryDecision> {
   const resp = await fetch("/api/chat/analysis/query", {
@@ -1169,6 +1213,7 @@ async function requestDataQueries(args: {
       profile: compactProfileForQuery(args.profile),
       previousResults: compactPreviousResultsForQuery(args.previousResults),
       domain: args.domain,
+      enable_thinking: args.enableThinking,
     }),
     signal: args.signal,
   });
@@ -1194,6 +1239,7 @@ async function requestDataQueriesFinalAnswer(args: {
   profile: CsvProfile;
   previousResults: CsvDataQueryResult[];
   domain: "campaign" | "general";
+  enableThinking: boolean;
   signal: AbortSignal;
   recoveryNotes?: string[];
 }): Promise<string> {
@@ -1248,9 +1294,8 @@ function buildExecutableQueryCandidates(
 
 function describeCsvDataQuery(query: CsvDataQuery) {
   if (query.type === "aggregate") {
-    const groupText = query.plan.groupBy.length > 0
-      ? query.plan.groupBy.join(" + ")
-      : "全表";
+    const groupText =
+      query.plan.groupBy.length > 0 ? query.plan.groupBy.join(" + ") : "全表";
     const metricText = query.plan.metrics
       .map((metric) => metric.name || `${metric.agg}(${metric.field})`)
       .join(", ");
@@ -1296,7 +1341,10 @@ function createLocalFallbackAggregateQuery(
   };
 }
 
-function inferLocalFallbackGroupBy(question: string, profile: CsvProfile): string[] {
+function inferLocalFallbackGroupBy(
+  question: string,
+  profile: CsvProfile,
+): string[] {
   const lowerQuestion = question.toLowerCase();
   const origin = findProfileColumnBySemantic(profile, "origin");
   const destination = findProfileColumnBySemantic(profile, "destination");
@@ -1326,7 +1374,9 @@ function inferLocalFallbackGroupBy(question: string, profile: CsvProfile): strin
   const dimension = profile.columns.find(
     (column) => column.type === "string" || column.type === "date",
   );
-  return dimension ? [dimension.name] : profile.columns.slice(0, 1).map((column) => column.name);
+  return dimension
+    ? [dimension.name]
+    : profile.columns.slice(0, 1).map((column) => column.name);
 }
 
 function findProfileColumnBySemantic(
@@ -1354,7 +1404,9 @@ function buildLocalFallbackSummary(args: {
   const metricValue = metricName && topRow ? topRow[metricName] : undefined;
   const topLabel =
     topRow && groupBy.length > 0
-      ? groupBy.map((field) => `${field}=${String(topRow[field] ?? "")}`).join(" / ")
+      ? groupBy
+          .map((field) => `${field}=${String(topRow[field] ?? "")}`)
+          .join(" / ")
       : topRow
         ? JSON.stringify(topRow)
         : "";
@@ -1366,7 +1418,9 @@ function buildLocalFallbackSummary(args: {
     return `本地查询没有得到可总结的聚合结果。请指定要查询的字段或缩小问题范围。${notes}`;
   }
 
-  const metricText = metricName ? `，${metricName} 为 ${String(metricValue)}` : "";
+  const metricText = metricName
+    ? `，${metricName} 为 ${String(metricValue)}`
+    : "";
   return `本地聚合结果显示：共有 ${aggregate.totalGroupCount} 个分组，最靠前的分组是 ${topLabel}${metricText}。结果基于 ${aggregate.matchedRowCount}/${aggregate.rowCount} 行数据。${notes}`;
 }
 

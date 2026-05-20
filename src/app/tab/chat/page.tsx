@@ -17,6 +17,7 @@ export default function ChatPage() {
     selectedAgent,
     fileAttachments,
     language,
+    enableThinking,
     sessions,
     activeSessionId,
     session,
@@ -36,6 +37,7 @@ export default function ChatPage() {
     largeCsvInputRef,
     setInput,
     setLanguage,
+    setEnableThinking,
     setSelectedAgent,
     handleSend,
     handleStop,
@@ -44,7 +46,6 @@ export default function ChatPage() {
     handleLargeCsvSelect,
     handleRemoveFile,
     toggleQuotedMessage,
-    clearQuotedMessages,
     createSession,
     switchSession,
     deleteSession,
@@ -118,6 +119,7 @@ export default function ChatPage() {
               input={input}
               isLoading={isLoading}
               language={language}
+              enableThinking={enableThinking}
               fileAttachments={fileAttachments}
               quotedMessages={quotedMessages}
               inputRef={inputRef}
@@ -131,6 +133,7 @@ export default function ChatPage() {
               onLargeCsvSelect={handleLargeCsvSelect}
               onRemoveFile={handleRemoveFile}
               onLanguageChange={setLanguage}
+              onThinkingChange={setEnableThinking}
               onRemoveQuote={(id) => {
                 const msg = quotedMessages.find((q) => q.id === id);
                 if (msg) toggleQuotedMessage(msg);

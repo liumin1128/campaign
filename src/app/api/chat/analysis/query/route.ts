@@ -25,7 +25,12 @@ interface QueryRequest {
   profile?: CsvQueryProfileContext;
   previousResults?: CsvQueryResultContext[];
   domain?: "campaign" | "general";
+  enable_thinking?: boolean;
 }
+
+type DeepSeekThinking =
+  | { type: "enabled"; reasoning_effort: "medium" }
+  | { type: "disabled" };
 
 type QueryAgentResponse =
   | { type: "queries"; queries: CsvDataQuery[]; rationale?: string }
@@ -54,6 +59,7 @@ export async function POST(request: Request) {
       profile: compactProfileForQuery(body.profile),
       previousResults: compactPreviousResultsForQuery(body.previousResults ?? []),
       domain: body.domain ?? "campaign",
+      enableThinking: body.enable_thinking ?? false,
     } satisfies Omit<Parameters<typeof requestQueryDecision>[0], "apiKey">;
 
     let apiKey: string | null = null;
@@ -89,6 +95,7 @@ async function requestQueryDecision(args: {
   profile: CsvQueryProfileContext;
   previousResults: unknown[];
   domain: "campaign" | "general";
+  enableThinking: boolean;
 }): Promise<QueryAgentResponse> {
   for (let attempt = 1; attempt <= QUERY_MODEL_ATTEMPTS; attempt++) {
     try {
@@ -113,6 +120,7 @@ async function requestQueryDecisionOnce(args: {
   profile: CsvQueryProfileContext;
   previousResults: unknown[];
   domain: "campaign" | "general";
+  enableThinking: boolean;
 }): Promise<QueryAgentResponse> {
   const content = await requestQueryModelContent(args);
   const parsed = extractJsonObject(content);
@@ -156,6 +164,7 @@ async function requestQueryModelContent(args: {
   profile: CsvQueryProfileContext;
   previousResults: unknown[];
   domain: "campaign" | "general";
+  enableThinking: boolean;
 }) {
   const resp = await fetch(`${DEEPSEEK_BASE}/chat/completions`, {
     method: "POST",
@@ -165,7 +174,7 @@ async function requestQueryModelContent(args: {
     },
     body: JSON.stringify({
       model: "deepseek-v4-pro",
-      thinking: { type: "enabled", reasoning_effort: "medium" },
+      thinking: buildThinkingConfig(args.enableThinking),
       response_format: { type: "json_object" },
       messages: [
         {
@@ -196,6 +205,12 @@ async function requestQueryModelContent(args: {
   }
 
   return content;
+}
+
+function buildThinkingConfig(enableThinking: boolean): DeepSeekThinking {
+  return enableThinking
+    ? { type: "enabled", reasoning_effort: "medium" }
+    : { type: "disabled" };
 }
 
 function buildQuerySystemPrompt(domain: "campaign" | "general") {

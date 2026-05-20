@@ -16,7 +16,12 @@ interface SummarizeRequest {
   plan?: AnalysisPlan;
   result?: AnalysisResult;
   domain?: "campaign" | "general";
+  enable_thinking?: boolean;
 }
+
+type DeepSeekThinking =
+  | { type: "enabled"; reasoning_effort: "medium" }
+  | { type: "disabled" };
 
 export async function POST(request: Request) {
   try {
@@ -44,6 +49,7 @@ export async function POST(request: Request) {
       plan: body.plan,
       result: compactResult(body.result),
       domain: body.domain ?? "campaign",
+      enableThinking: body.enable_thinking ?? false,
     });
 
     return Response.json({ ok: true, summary });
@@ -65,6 +71,7 @@ async function summarizeWithModel(args: {
   plan: AnalysisPlan;
   result: unknown;
   domain: "campaign" | "general";
+  enableThinking: boolean;
 }) {
   const resp = await fetch(`${DEEPSEEK_BASE}/chat/completions`, {
     method: "POST",
@@ -74,7 +81,7 @@ async function summarizeWithModel(args: {
     },
     body: JSON.stringify({
       model: "deepseek-v4-pro",
-      thinking: { type: "enabled", reasoning_effort: "medium" },
+      thinking: buildThinkingConfig(args.enableThinking),
       messages: [
         {
           role: "system",
@@ -105,6 +112,12 @@ async function summarizeWithModel(args: {
   }
 
   return content.trim();
+}
+
+function buildThinkingConfig(enableThinking: boolean): DeepSeekThinking {
+  return enableThinking
+    ? { type: "enabled", reasoning_effort: "medium" }
+    : { type: "disabled" };
 }
 
 function buildSummarizerSystemPrompt(domain: "campaign" | "general") {

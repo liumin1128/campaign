@@ -11,7 +11,12 @@ interface PlanRequest {
   question?: string;
   profile?: CsvProfile;
   domain?: "campaign" | "general";
+  enable_thinking?: boolean;
 }
+
+type DeepSeekThinking =
+  | { type: "enabled"; reasoning_effort: "medium" }
+  | { type: "disabled" };
 
 export async function POST(request: Request) {
   try {
@@ -37,6 +42,7 @@ export async function POST(request: Request) {
       question: body.question,
       profile: compactProfile(body.profile),
       domain: body.domain ?? "campaign",
+      enableThinking: body.enable_thinking ?? false,
     });
     const validation = validateAnalysisPlan(plannerResult.plan, body.profile);
 
@@ -61,6 +67,7 @@ async function requestPlanFromModel(args: {
   question: string;
   profile: unknown;
   domain: "campaign" | "general";
+  enableThinking: boolean;
 }): Promise<{ plan: unknown; notes: string[] }> {
   const resp = await fetch(`${DEEPSEEK_BASE}/chat/completions`, {
     method: "POST",
@@ -70,7 +77,7 @@ async function requestPlanFromModel(args: {
     },
     body: JSON.stringify({
       model: "deepseek-v4-pro",
-      thinking: { type: "disabled" },
+      thinking: buildThinkingConfig(args.enableThinking),
       messages: [
         {
           role: "system",
@@ -109,6 +116,12 @@ async function requestPlanFromModel(args: {
     plan: record?.plan ?? parsed,
     notes: extractNotes(parsed),
   };
+}
+
+function buildThinkingConfig(enableThinking: boolean): DeepSeekThinking {
+  return enableThinking
+    ? { type: "enabled", reasoning_effort: "medium" }
+    : { type: "disabled" };
 }
 
 function buildPlannerSystemPrompt(domain: "campaign" | "general") {
