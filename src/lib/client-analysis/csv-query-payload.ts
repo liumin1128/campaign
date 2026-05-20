@@ -12,6 +12,9 @@ const MAX_PROFILE_SAMPLE_VALUES_FOR_QUERY = 3;
 const MAX_PROFILE_SAMPLE_ROWS_FOR_QUERY = 3;
 const MAX_PREVIOUS_RESULTS_FOR_QUERY = 64;
 const MAX_PREVIOUS_RESULT_ROWS_FOR_QUERY = MAX_QUERY_RESULT_ROWS;
+const MAX_RELATED_FILES_FOR_QUERY = 8;
+const MAX_RELATED_STAGE_SUMMARIES_FOR_QUERY = 6;
+const MAX_RELATED_SUMMARY_CHARS_FOR_QUERY = 1200;
 
 type QueryColumnProfile = Pick<
   CsvColumnProfile,
@@ -53,6 +56,20 @@ export interface CsvQueryResultContext {
   };
   warnings: string[];
 }
+
+export interface CsvRelatedFileContext {
+  name: string;
+  profile: CsvQueryProfileContext;
+  stageSummaries?: string[];
+  summary?: string;
+}
+
+type RelatedFileInput = {
+  name: string;
+  profile: CsvProfile | CsvQueryProfileContext;
+  stageSummaries?: string[];
+  summary?: string;
+};
 
 export function compactProfileForQuery(
   profile: CsvProfile | CsvQueryProfileContext,
@@ -117,6 +134,17 @@ export function compactPreviousResultsForQuery(
   }));
 }
 
+export function compactRelatedFilesForQuery(
+  files: RelatedFileInput[],
+): CsvRelatedFileContext[] {
+  return files.slice(0, MAX_RELATED_FILES_FOR_QUERY).map((file) => ({
+    name: file.name,
+    profile: compactProfileForQuery(file.profile),
+    stageSummaries: compactStageSummaries(file.stageSummaries ?? []),
+    summary: compactText(file.summary, MAX_RELATED_SUMMARY_CHARS_FOR_QUERY),
+  }));
+}
+
 function compactDataQuality(
   dataQuality: CsvProfile["dataQuality"],
 ): CsvQueryProfileContext["dataQuality"] {
@@ -128,4 +156,18 @@ function compactDataQuality(
     totalMissingCells: dataQuality.totalMissingCells,
     warnings: dataQuality.warnings,
   };
+}
+
+function compactStageSummaries(summaries: string[]) {
+  return summaries
+    .flatMap((summary) => {
+      const normalized = summary.replace(/\s+/g, " ").trim();
+      return normalized ? [normalized.slice(0, 800)] : [];
+    })
+    .slice(-MAX_RELATED_STAGE_SUMMARIES_FOR_QUERY);
+}
+
+function compactText(value: string | undefined, maxChars: number) {
+  const normalized = value?.replace(/\s+/g, " ").trim();
+  return normalized ? normalized.slice(0, maxChars) : undefined;
 }

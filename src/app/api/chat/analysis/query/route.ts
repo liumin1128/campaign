@@ -2,6 +2,8 @@ import { getDeepSeekApiKey } from "@/lib/env";
 import {
   compactPreviousResultsForQuery,
   compactProfileForQuery,
+  compactRelatedFilesForQuery,
+  type CsvRelatedFileContext,
   type CsvQueryProfileContext,
   type CsvQueryResultContext,
 } from "@/lib/client-analysis/csv-query-payload";
@@ -26,6 +28,7 @@ interface QueryRequest {
   profile?: CsvQueryProfileContext;
   previousResults?: CsvQueryResultContext[];
   stageSummaries?: string[];
+  relatedFiles?: CsvRelatedFileContext[];
   domain?: "campaign" | "general";
   enable_thinking?: boolean;
   force_final?: boolean;
@@ -64,6 +67,7 @@ export async function POST(request: Request) {
         body.previousResults ?? [],
       ),
       stageSummaries: compactStageSummariesForPrompt(body.stageSummaries ?? []),
+      relatedFiles: compactRelatedFilesForQuery(body.relatedFiles ?? []),
       domain: body.domain ?? "campaign",
       enableThinking: body.enable_thinking ?? false,
       forceFinal: body.force_final ?? false,
@@ -104,6 +108,7 @@ async function requestQueryDecision(args: {
   profile: CsvQueryProfileContext;
   previousResults: unknown[];
   stageSummaries: string[];
+  relatedFiles: CsvRelatedFileContext[];
   domain: "campaign" | "general";
   enableThinking: boolean;
   forceFinal: boolean;
@@ -135,6 +140,7 @@ async function requestQueryDecisionOnce(args: {
   profile: CsvQueryProfileContext;
   previousResults: unknown[];
   stageSummaries: string[];
+  relatedFiles: CsvRelatedFileContext[];
   domain: "campaign" | "general";
   enableThinking: boolean;
   forceFinal: boolean;
@@ -209,6 +215,7 @@ async function requestQueryModelContent(args: {
   profile: CsvQueryProfileContext;
   previousResults: unknown[];
   stageSummaries: string[];
+  relatedFiles: CsvRelatedFileContext[];
   domain: "campaign" | "general";
   enableThinking: boolean;
   forceFinal: boolean;
@@ -235,6 +242,7 @@ async function requestQueryModelContent(args: {
             profile: args.profile,
             previousResults: args.previousResults,
             stageSummaries: args.stageSummaries,
+            relatedFiles: args.relatedFiles,
             force_final: args.forceFinal,
           }),
         },
@@ -307,6 +315,7 @@ Rules:
 - Use only fields that exist in profile.
 - Read profile.dataQuality.parseMetadata to understand the detected encoding, delimiter, and parser confidence.
 - Treat stageSummaries as the working memory of prior rounds. Use them before scanning previousResults, preserve already established interim conclusions, and choose follow-up queries that close gaps instead of restarting the analysis.
+- relatedFiles contains compact profiles and interim conclusions from other uploaded CSV files. Use it to align comparable dimensions, notice join/comparison opportunities, and avoid analyzing this file in isolation when the user asks for a multi-file answer. You may only request queries for the current file; do not invent query results for related files.
 - If parser confidence is low or fields look like whole rows, mention the parsing uncertainty instead of forcing an analysis.
 - Never ask for all rows or all columns. Max rows per row-detail query is ${MAX_QUERY_RESULT_ROWS}; max columns is ${MAX_QUERY_COLUMNS}; max distinct values is ${MAX_QUERY_DISTINCT_VALUES}. Aggregate queries can summarize the full dataset and may return top-ranked groups.
 - Use {"op":"notEmpty"} filters to exclude missing dimension or metric fields before ranking by low availability or high load factor.

@@ -16,6 +16,8 @@ import {
 import {
   compactPreviousResultsForQuery,
   compactProfileForQuery,
+  compactRelatedFilesForQuery,
+  type CsvRelatedFileContext,
 } from "@/lib/client-analysis/csv-query-payload";
 import {
   executeQueryInWorker,
@@ -603,88 +605,104 @@ export function useChat() {
     abortRef.current = controller;
 
     try {
-      const finalAttachments: FileAttachment[] = [];
-      const finalContexts: ActiveCsvContext[] = [];
-      const summaries: string[] = [];
+      const domain = getCsvAnalysisDomain(selectedAgent?.id);
+      const baseRelatedFiles = compactRelatedFilesForQuery(
+        csvAnalysisAttachments.map((attachment) => ({
+          name: attachment.name,
+          profile: attachment.analysis!.profile!,
+        })),
+      );
 
-      for (const [
-        index,
-        analysisAttachment,
-      ] of csvAnalysisAttachments.entries()) {
-        const attachmentId = analysisAttachment.id;
-        const profile = analysisAttachment.analysis!.profile!;
-        const profileSummary = analysisAttachment.analysis!.profileSummary!;
-        const statusPrefix = buildCsvBatchStatusPrefix(
-          index,
-          csvAnalysisAttachments.length,
-          analysisAttachment.name,
-        );
+      const analysisResults = await Promise.all(
+        csvAnalysisAttachments.map(async (analysisAttachment, index) => {
+          const attachmentId = analysisAttachment.id;
+          const profile = analysisAttachment.analysis!.profile!;
+          const profileSummary = analysisAttachment.analysis!.profileSummary!;
+          const statusPrefix = buildCsvBatchStatusPrefix(
+            index,
+            csvAnalysisAttachments.length,
+            analysisAttachment.name,
+          );
 
-        updateAnalysisAttachment(attachmentId, { status: "planning" });
-        updateAssistantMessage(
-          sid,
-          updatedMessages,
-          assistantId,
-          `${statusPrefix}模型正在决定要查询哪些数据…`,
-        );
+          updateAnalysisAttachment(attachmentId, { status: "planning" });
+          updateAssistantMessage(
+            sid,
+            updatedMessages,
+            assistantId,
+            `${statusPrefix}模型正在决定要查询哪些数据…`,
+          );
 
-        const queryAnalysis = await runFreeCsvQueryAnalysis({
-          workerKey: attachmentId!,
-          question: userContent,
-          profile,
-          profileSummary,
-          domain:
-            selectedAgent?.id === "campaign_planning" ? "campaign" : "general",
-          enableThinking,
-          signal: controller.signal,
-          onStatus: (message) => {
-            updateAssistantMessage(
-              sid,
-              updatedMessages,
-              assistantId,
-              `${statusPrefix}${message}`,
-            );
-          },
-          onAttachmentPatch: (patch) => {
-            updateAnalysisAttachment(attachmentId, patch);
-          },
-        });
-        const { summary, queryResults, stageSummaries, content } =
-          queryAnalysis;
-        const finalAttachment: FileAttachment = {
-          ...toStoredAttachment(analysisAttachment),
-          content,
-        };
-
-        finalAttachments.push(finalAttachment);
-        if (attachmentId) {
-          finalContexts.push({
-            id: attachmentId,
-            name: analysisAttachment.name,
-            size: analysisAttachment.size,
+          const queryAnalysis = await runFreeCsvQueryAnalysis({
+            workerKey: attachmentId!,
+            question: userContent,
             profile,
             profileSummary,
+            domain,
+            enableThinking,
+            signal: controller.signal,
+            relatedFiles: baseRelatedFiles.filter(
+              (file) => file.name !== analysisAttachment.name,
+            ),
+            onStatus: (message) => {
+              updateAssistantMessage(
+                sid,
+                updatedMessages,
+                assistantId,
+                `${statusPrefix}${message}`,
+              );
+            },
+            onAttachmentPatch: (patch) => {
+              updateAnalysisAttachment(attachmentId, patch);
+            },
+          });
+          const { summary, queryResults, stageSummaries, content } =
+            queryAnalysis;
+          const finalAttachment: FileAttachment = {
+            ...toStoredAttachment(analysisAttachment),
+            content,
+          };
+          const context: ActiveCsvContext | null = attachmentId
+            ? {
+                id: attachmentId,
+                name: analysisAttachment.name,
+                size: analysisAttachment.size,
+                profile,
+                profileSummary,
+                queryResults,
+                stageSummaries,
+                summary,
+                content,
+              }
+            : null;
+
+          updateAnalysisAttachment(attachmentId, {
+            status: "completed",
             queryResults,
             stageSummaries,
             summary,
             content,
           });
-        }
-        summaries.push(
-          csvAnalysisAttachments.length > 1
-            ? `## ${analysisAttachment.name}\n\n${summary}`
-            : summary,
-        );
-        updateAnalysisAttachment(attachmentId, {
-          status: "completed",
-          queryResults,
-          stageSummaries,
-          summary,
-          content,
-        });
-      }
 
-      const summary = summaries.join("\n\n");
+          return { finalAttachment, context };
+        }),
+      );
+
+      const finalAttachments = analysisResults.map(
+        (result) => result.finalAttachment,
+      );
+      const finalContexts = analysisResults.flatMap((result) =>
+        result.context ? [result.context] : [],
+      );
+      const summary =
+        finalContexts.length > 1
+          ? await requestCombinedCsvSummary({
+              question: userContent,
+              contexts: finalContexts,
+              domain,
+              enableThinking,
+              signal: controller.signal,
+            })
+          : (finalContexts[0]?.summary ?? "");
       const finalMessages = updatedMessages.map((message) => {
         if (message.id === userId) {
           return {
@@ -769,65 +787,82 @@ export function useChat() {
     abortRef.current = controller;
 
     try {
-      const nextContexts: ActiveCsvContext[] = [];
-      const summaries: string[] = [];
-
-      for (const [index, context] of csvContexts.entries()) {
-        const statusPrefix = buildCsvBatchStatusPrefix(
-          index,
-          csvContexts.length,
-          context.name,
-        );
-
-        updateAssistantMessage(
-          sid,
-          updatedMessages,
-          assistantId,
-          `${statusPrefix}模型正在决定要继续读取哪些数据…`,
-        );
-
-        const queryAnalysis = await runFreeCsvQueryAnalysis({
-          workerKey: context.id,
-          question: userContent,
+      const domain = getCsvAnalysisDomain(selectedAgent?.id);
+      const baseRelatedFiles = compactRelatedFilesForQuery(
+        csvContexts.map((context) => ({
+          name: context.name,
           profile: context.profile,
-          profileSummary: context.profileSummary,
-          previousResults: context.queryResults,
-          previousStageSummaries: context.stageSummaries,
-          domain:
-            selectedAgent?.id === "campaign_planning" ? "campaign" : "general",
-          enableThinking,
-          signal: controller.signal,
-          onStatus: (message) => {
-            updateAssistantMessage(
-              sid,
-              updatedMessages,
-              assistantId,
-              `${statusPrefix}${message}`,
-            );
-          },
-          onAttachmentPatch: () => {},
-        });
+          stageSummaries: context.stageSummaries,
+          summary: context.summary,
+        })),
+      );
 
-        nextContexts.push({
-          ...context,
-          queryResults: queryAnalysis.queryResults,
-          stageSummaries: queryAnalysis.stageSummaries,
-          summary: queryAnalysis.summary,
-          content: queryAnalysis.content,
-        });
-        summaries.push(
-          csvContexts.length > 1
-            ? `## ${context.name}\n\n${queryAnalysis.summary}`
-            : queryAnalysis.summary,
-        );
-      }
+      const nextContexts = await Promise.all(
+        csvContexts.map(async (context, index) => {
+          const statusPrefix = buildCsvBatchStatusPrefix(
+            index,
+            csvContexts.length,
+            context.name,
+          );
+
+          updateAssistantMessage(
+            sid,
+            updatedMessages,
+            assistantId,
+            `${statusPrefix}模型正在决定要继续读取哪些数据…`,
+          );
+
+          const queryAnalysis = await runFreeCsvQueryAnalysis({
+            workerKey: context.id,
+            question: userContent,
+            profile: context.profile,
+            profileSummary: context.profileSummary,
+            previousResults: context.queryResults,
+            previousStageSummaries: context.stageSummaries,
+            relatedFiles: baseRelatedFiles.filter(
+              (file) => file.name !== context.name,
+            ),
+            domain,
+            enableThinking,
+            signal: controller.signal,
+            onStatus: (message) => {
+              updateAssistantMessage(
+                sid,
+                updatedMessages,
+                assistantId,
+                `${statusPrefix}${message}`,
+              );
+            },
+            onAttachmentPatch: () => {},
+          });
+
+          return {
+            ...context,
+            queryResults: queryAnalysis.queryResults,
+            stageSummaries: queryAnalysis.stageSummaries,
+            summary: queryAnalysis.summary,
+            content: queryAnalysis.content,
+          };
+        }),
+      );
+
+      const combinedSummary =
+        nextContexts.length > 1
+          ? await requestCombinedCsvSummary({
+              question: userContent,
+              contexts: nextContexts,
+              domain,
+              enableThinking,
+              signal: controller.signal,
+            })
+          : (nextContexts[0]?.summary ?? "");
 
       replaceCsvContexts(sid, nextContexts);
       updateSessionMessages(
         sid,
         updatedMessages.map((message) =>
           message.id === assistantId
-            ? { ...message, content: summaries.join("\n\n") }
+            ? { ...message, content: combinedSummary }
             : message,
         ),
       );
@@ -969,6 +1004,7 @@ async function runFreeCsvQueryAnalysis(args: {
   profileSummary: CsvProfileSummary;
   previousResults?: CsvDataQueryResult[];
   previousStageSummaries?: string[];
+  relatedFiles?: CsvRelatedFileContext[];
   domain: "campaign" | "general";
   enableThinking: boolean;
   signal: AbortSignal;
@@ -1014,6 +1050,7 @@ async function runFreeCsvQueryAnalysis(args: {
       profile: args.profile,
       previousResults: queryResults,
       stageSummaries,
+      relatedFiles: args.relatedFiles ?? [],
       domain: args.domain,
       enableThinking: args.enableThinking,
       signal: args.signal,
@@ -1147,6 +1184,7 @@ async function runFreeCsvQueryAnalysis(args: {
     profile: args.profile,
     previousResults: queryResults,
     stageSummaries,
+    relatedFiles: args.relatedFiles ?? [],
     domain: args.domain,
     enableThinking: args.enableThinking,
     signal: args.signal,
@@ -1216,9 +1254,15 @@ function summarizeQueryResultForStage(result: CsvDataQueryResult) {
     const nonEmpty = result.stats.nonEmptyCount ?? result.matchedRowCount;
     const rowCount = result.stats.rowCount ?? result.rowCount;
     const metricParts = [
-      result.stats.min !== undefined ? `最小 ${formatStageValue(result.stats.min)}` : "",
-      result.stats.max !== undefined ? `最大 ${formatStageValue(result.stats.max)}` : "",
-      result.stats.avg !== undefined ? `均值 ${formatStageValue(result.stats.avg)}` : "",
+      result.stats.min !== undefined
+        ? `最小 ${formatStageValue(result.stats.min)}`
+        : "",
+      result.stats.max !== undefined
+        ? `最大 ${formatStageValue(result.stats.max)}`
+        : "",
+      result.stats.avg !== undefined
+        ? `均值 ${formatStageValue(result.stats.avg)}`
+        : "",
     ].filter(Boolean);
 
     return `${column} 统计非空 ${String(nonEmpty ?? "未知")}/${String(rowCount ?? "未知")}${metricParts.length ? `，${metricParts.join("，")}` : ""}`;
@@ -1300,6 +1344,97 @@ function buildQueryAttachmentContent(args: {
   return `${baseContent}\n\n阶段性结论：\n${stageSummaryText || "暂无"}\n\n模型本地查询记录：\n${querySummary || "未执行额外查询"}`;
 }
 
+function getCsvAnalysisDomain(
+  agentId: string | undefined,
+): "campaign" | "general" {
+  return agentId === "campaign_planning" ? "campaign" : "general";
+}
+
+async function requestCombinedCsvSummary(args: {
+  question: string;
+  contexts: ActiveCsvContext[];
+  domain: "campaign" | "general";
+  enableThinking: boolean;
+  signal: AbortSignal;
+}) {
+  const files = compactRelatedFilesForQuery(
+    args.contexts.map((context) => ({
+      name: context.name,
+      profile: context.profile,
+      stageSummaries: context.stageSummaries,
+      summary: context.summary,
+    })),
+  );
+
+  try {
+    const resp = await fetch("/api/chat/analysis/combine", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        question: args.question,
+        files,
+        domain: args.domain,
+        enable_thinking: args.enableThinking,
+      }),
+      signal: args.signal,
+    });
+    const data = await resp.json();
+
+    if (!resp.ok || !data.ok || typeof data.summary !== "string") {
+      throw new Error(data.error ?? "CSV 多文件综合总结失败。");
+    }
+
+    return data.summary;
+  } catch (error) {
+    if ((error as Error)?.name === "AbortError") {
+      throw error;
+    }
+
+    return buildLocalCombinedCsvSummary(args.question, args.contexts, error);
+  }
+}
+
+function buildLocalCombinedCsvSummary(
+  question: string,
+  contexts: ActiveCsvContext[],
+  error?: unknown,
+) {
+  const isChinese = /[\u3400-\u9fff]/.test(question);
+  const sections = contexts.map((context) => {
+    const stageText = compactStageSummariesForPrompt(
+      context.stageSummaries ?? [],
+    )
+      .map((summary) => `- ${summary}`)
+      .join("\n");
+    return `## ${context.name}\n\n${context.summary ?? "暂无单文件摘要"}${stageText ? `\n\n${stageText}` : ""}`;
+  });
+  const errorText = error ? `\n\n恢复记录：${formatErrorMessage(error)}` : "";
+
+  if (isChinese) {
+    return [
+      "多文件分析已并行完成。综合总结接口不可用时，先给出以下基于各文件阶段性结论的保底汇总：",
+      "",
+      "总体判断：请优先寻找多个文件之间同名或语义相近的字段，结合各文件已确认的阶段性结论做横向对比、趋势衔接和异常互证。",
+      "",
+      ...sections,
+      errorText,
+    ]
+      .join("\n")
+      .trim();
+  }
+
+  return [
+    "Multi-file analysis completed in parallel. The integrated summary endpoint was unavailable, so here is a fallback synthesis from each file's interim conclusions:",
+    "",
+    "Overall: compare shared or semantically similar fields across files, then use the per-file conclusions below for trend stitching and anomaly validation.",
+    "",
+    ...sections,
+    errorText,
+  ]
+    .join("\n")
+    .trim();
+}
+
 type DataQueryDecision =
   | { type: "queries"; queries: CsvDataQuery[]; rationale?: string }
   | { type: "final"; finalAnswer: string };
@@ -1309,6 +1444,7 @@ async function requestDataQueriesWithFallback(args: {
   profile: CsvProfile;
   previousResults: CsvDataQueryResult[];
   stageSummaries: string[];
+  relatedFiles: CsvRelatedFileContext[];
   domain: "campaign" | "general";
   enableThinking: boolean;
   signal: AbortSignal;
@@ -1347,6 +1483,7 @@ async function requestDataQueries(args: {
   profile: CsvProfile;
   previousResults: CsvDataQueryResult[];
   stageSummaries: string[];
+  relatedFiles: CsvRelatedFileContext[];
   domain: "campaign" | "general";
   enableThinking: boolean;
   signal: AbortSignal;
@@ -1360,6 +1497,7 @@ async function requestDataQueries(args: {
       profile: compactProfileForQuery(args.profile),
       previousResults: compactPreviousResultsForQuery(args.previousResults),
       stageSummaries: compactStageSummariesForPrompt(args.stageSummaries),
+      relatedFiles: args.relatedFiles,
       domain: args.domain,
       enable_thinking: args.enableThinking,
       force_final: args.forceFinal ?? false,
@@ -1388,6 +1526,7 @@ async function requestDataQueriesFinalAnswer(args: {
   profile: CsvProfile;
   previousResults: CsvDataQueryResult[];
   stageSummaries: string[];
+  relatedFiles: CsvRelatedFileContext[];
   domain: "campaign" | "general";
   enableThinking: boolean;
   signal: AbortSignal;
