@@ -26,8 +26,6 @@ import {
   type CsvRow,
 } from "../src/lib/client-analysis/csv-types";
 
-const DEFAULT_MAX_MODEL_QUERY_ROUNDS = Math.min(3, MAX_QUERY_ITERATIONS);
-
 type StepStatus = "ok" | "error";
 
 type LogStep = {
@@ -97,7 +95,7 @@ async function main() {
   const question = options.question ?? defaultQuestion;
   const domain = options.domain ?? "campaign";
   const enableThinking = options.enableThinking ?? false;
-  const maxIterations = options.maxIterations ?? DEFAULT_MAX_MODEL_QUERY_ROUNDS;
+  const maxIterations = options.maxIterations ?? MAX_QUERY_ITERATIONS;
   const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
   const logDir = path.resolve(projectRoot, "logs");
   const logFile = path.join(logDir, `chat-large-csv-flow-${timestamp}.json`);
@@ -712,7 +710,7 @@ function analyzeFlowLog(log: RunLog): OptimizationFinding[] {
       evidence: `${slowest.name} 用时 ${slowest.durationMs} ms；全流程记录步骤耗时合计约 ${roundMs(totalDuration)} ms。`,
       recommendation:
         slowest.name.includes("model-decision")
-          ? "模型决策是主要瓶颈，优先减少轮次数、压缩 prompt，并让首次决策一次返回统计、唯一值和关键聚合查询。"
+          ? "模型决策是主要瓶颈，优先让每轮尤其首轮批量请求更完整的互补查询，并压缩不必要的 prompt，而不是提前限制模型继续取证。"
           : "本地计算或解析是主要瓶颈，优先优化 CSV 解析、字段画像和聚合执行路径。",
     });
   }
@@ -722,7 +720,7 @@ function analyzeFlowLog(log: RunLog): OptimizationFinding[] {
       title: "模型决策轮次偏多",
       evidence: `共调用 ${modelSteps.length} 次 /api/chat/analysis/query，模型步骤耗时合计 ${roundMs(modelDuration)} ms。`,
       recommendation:
-        "在 query prompt 中鼓励先批量请求 2-4 个互补查询，并在已有聚合结果后更积极返回 finalAnswer；也可以为常见航空字段增加确定性首轮查询模板。",
+        "在 query prompt 中鼓励首轮批量请求覆盖关键维度/指标的互补查询；如果结果仍截断或缺少问题关键字段，应继续查询而不是提前 finalAnswer。",
     });
   }
 

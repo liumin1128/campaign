@@ -47,7 +47,7 @@ type ActiveCsvContext = {
   content?: string;
 };
 
-const MAX_MODEL_QUERY_ROUNDS = Math.min(3, MAX_QUERY_ITERATIONS);
+const QUERY_ROUND_PROGRESS_DENOMINATOR = MAX_QUERY_ITERATIONS;
 
 export function useChat() {
   const {
@@ -984,7 +984,7 @@ async function runFreeCsvQueryAnalysis(args: {
     args.onStatus([...progressLog, current].join("\n"));
   };
 
-  for (let iteration = 0; iteration < MAX_MODEL_QUERY_ROUNDS; iteration++) {
+  for (let iteration = 0; iteration < MAX_QUERY_ITERATIONS; iteration++) {
     const roundNumber = iteration + 1;
     args.onAttachmentPatch({
       status: "planning",
@@ -1125,7 +1125,7 @@ async function runFreeCsvQueryAnalysis(args: {
 function getQueryRoundProgress(iteration: number, roundProgress: number) {
   const progress =
     (iteration + Math.max(0, Math.min(roundProgress, 1))) /
-    MAX_MODEL_QUERY_ROUNDS;
+    QUERY_ROUND_PROGRESS_DENOMINATOR;
   return Math.max(0.01, Math.min(progress, 0.9));
 }
 

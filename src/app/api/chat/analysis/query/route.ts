@@ -19,6 +19,7 @@ export const maxDuration = 60;
 
 const DEEPSEEK_BASE = "https://api.deepseek.com";
 const QUERY_MODEL_ATTEMPTS = 2;
+const MAX_QUERIES_PER_ROUND = 8;
 
 interface QueryRequest {
   question?: string;
@@ -245,6 +246,8 @@ function buildQuerySystemPrompt(
 
 You do not have the raw CSV. The browser has it locally. You may decide which rows, columns, filters, distinct values, column stats, or aggregates to query. Return JSON only.
 
+Local computation and browser/server message transfer are cheap for this workflow. Optimize for fewer model/API turns by requesting a broad, evidence-complete batch of bounded local queries each round.
+
 Available response shapes:
 1. Ask for more data:
 {
@@ -267,14 +270,16 @@ Rules:
 - Use only fields that exist in profile.
 - Read profile.dataQuality.parseMetadata to understand the detected encoding, delimiter, and parser confidence.
 - If parser confidence is low or fields look like whole rows, mention the parsing uncertainty instead of forcing an analysis.
-- Never ask for all rows or all columns. Max rows per query is ${MAX_QUERY_RESULT_ROWS}; max columns is ${MAX_QUERY_COLUMNS}; max distinct values is ${MAX_QUERY_DISTINCT_VALUES}.
+- Never ask for all rows or all columns. Max rows per row-detail query is ${MAX_QUERY_RESULT_ROWS}; max columns is ${MAX_QUERY_COLUMNS}; max distinct values is ${MAX_QUERY_DISTINCT_VALUES}. Aggregate queries can summarize the full dataset and may return top-ranked groups.
 - Prefer aggregate, columnStats, and distinctValues before row-level inspection.
-- Browser-side local queries are cheap. Request multiple bounded queries when they materially improve confidence or coverage.
+- In the first query round, request enough complementary queries to cover the user's main dimensions and metrics in one batch whenever possible. You may request up to ${MAX_QUERIES_PER_ROUND} queries per round.
+- For analytical questions, combine columnStats for key metrics, distinctValues for key dimensions, and several aggregate queries with different groupBy/ranking/filter views instead of asking for one narrow query at a time.
 - Use row-level queries when the user explicitly asks for specific rows or when examples are needed.
 - rowNumber is 1-based data-row numbering after the header row. If the user asks for "row N" or "第 N 行数据", request {"type":"rows","rowNumbers":[N]}.
-- If previousResults already contain aggregateResult, stats, values, or rows that directly address the question, return finalAnswer instead of asking for more data.
+- If previousResults already contain aggregateResult, stats, values, or rows that fully address the question, return finalAnswer instead of asking for more data.
 - Do not repeat a query shape that is already present in previousResults.
-- You may make multiple small queries only when the missing evidence is specific and materially changes the answer; otherwise return finalAnswer after previousResults are sufficient.
+- If previousResults are truncated, missing important dimensions, missing important metrics, or only cover part of the user's question, ask for additional targeted queries instead of drawing a broad conclusion from partial evidence.
+- Do not claim comprehensive coverage until previousResults cover each key dimension, metric, and filter implied by the question, or until you explicitly state the remaining gap.
 - When force_final is true, you must return {"finalAnswer":"..."} and must not return queries.
 - State limitations if previousResults are insufficient.
 - Reply finalAnswer in the user's language.
@@ -287,7 +292,7 @@ function normalizeQueries(
   profile: CsvQueryProfileContext,
 ): CsvDataQuery[] {
   return rawQueries
-    .slice(0, 4)
+    .slice(0, MAX_QUERIES_PER_ROUND)
     .flatMap((query) => normalizeQuery(query, profile));
 }
 
