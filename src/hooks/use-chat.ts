@@ -39,6 +39,7 @@ import {
   buildPiUserPrompt,
   runPiAgent,
 } from "@/lib/pi-agent/run-client-agent";
+import { classifyPiTask } from "@/lib/pi-agent/task-routing";
 import type { PiCsvContext } from "@/lib/pi-agent/types";
 import { useActiveSession, useChatStore } from "@/store/chat-store";
 import { usePromptOverrideStore } from "@/store/prompt-override-store";
@@ -259,11 +260,16 @@ export function useChat() {
       language === "zh"
         ? "请基于这个 CSV 做一次概要分析并给出可执行洞察。"
         : "Please summarize this CSV and provide actionable insights.";
+    const taskRoute = classifyPiTask(trimmed);
     const activeCsvContexts =
       sessionId && trimmed ? (csvContextsRef.current[sessionId] ?? []) : [];
+    const standaloneWebSearch =
+      taskRoute.requestsWebSearch &&
+      !taskRoute.referencesCsvContext &&
+      csvAnalysisAttachments.length === 0;
 
-    if (enableThinking) {
-      let piCsvContexts = activeCsvContexts;
+    if (enableThinking || taskRoute.requestsWebSearch) {
+      let piCsvContexts = standaloneWebSearch ? [] : activeCsvContexts;
       if (csvAnalysisAttachments.length > 0) {
         const readyContexts = getReadyCsvContexts(csvAnalysisAttachments);
         if (!readyContexts.ok) {
@@ -279,6 +285,7 @@ export function useChat() {
             (csvAnalysisAttachments.length > 0 ? defaultCsvQuestion : "")),
         piCsvContexts,
         fileAttachments,
+        standaloneWebSearch ? [] : messages,
       );
       return;
     }
@@ -454,6 +461,7 @@ export function useChat() {
     userContent: string,
     csvContexts: ActiveCsvContext[],
     attachments: FileAttachment[],
+    history: Message[],
   ) {
     if (!sessionId || isLoading) return;
 
@@ -488,7 +496,7 @@ export function useChat() {
       const result = await runPiAgent({
         sessionId: sid,
         systemPrompt: fullSystemPrompt,
-        history: messages,
+        history,
         prompt: buildPiUserPrompt(userContent, storedAttachments),
         csvContexts,
         signal: controller.signal,
@@ -758,69 +766,70 @@ export function useChat() {
         })),
       );
 
-      const analysisResults = await Promise.all(
-        csvAnalysisAttachments.map(async (analysisAttachment, index) => {
-          const attachmentId = analysisAttachment.id;
-          if (!attachmentId) {
-            throw new Error(
-              `CSV「${analysisAttachment.name}」缺少本地分析标识，请重新添加文件。`,
-            );
-          }
+      const analysisResults: Array<{
+        finalAttachment: FileAttachment;
+        context: ActiveCsvContext;
+      }> = [];
+      for (const [index, analysisAttachment] of csvAnalysisAttachments.entries()) {
+        const attachmentId = analysisAttachment.id;
+        if (!attachmentId) {
+          throw new Error(
+            `CSV「${analysisAttachment.name}」缺少本地分析标识，请重新添加文件。`,
+          );
+        }
 
-          const profile = analysisAttachment.analysis!.profile!;
-          const profileSummary = analysisAttachment.analysis!.profileSummary!;
+        const profile = analysisAttachment.analysis!.profile!;
+        const profileSummary = analysisAttachment.analysis!.profileSummary!;
 
-          updateAnalysisAttachment(attachmentId, { status: "planning" });
-          reportStatus(index, "模型正在决定要查询哪些数据…");
+        updateAnalysisAttachment(attachmentId, { status: "planning" });
+        reportStatus(index, "模型正在决定要查询哪些数据…");
 
-          const queryAnalysis = await runFreeCsvQueryAnalysis({
-            workerKey: attachmentId,
-            question: userContent,
-            profile,
-            profileSummary,
-            domain,
-            enableThinking,
-            signal: controller.signal,
-            relatedFiles: baseRelatedFiles.filter(
-              (file) => file.name !== analysisAttachment.name,
-            ),
-            onStatus: (message) => {
-              reportStatus(index, message);
-            },
-            onAttachmentPatch: (patch) => {
-              updateAnalysisAttachment(attachmentId, patch);
-            },
-          });
-          const { summary, queryResults, stageSummaries, content } =
-            queryAnalysis;
-          const finalAttachment: FileAttachment = {
-            ...toStoredAttachment(analysisAttachment),
-            content,
-          };
-          const context: ActiveCsvContext = {
-            id: attachmentId,
-            name: analysisAttachment.name,
-            size: analysisAttachment.size,
-            profile,
-            profileSummary,
-            queryResults,
-            stageSummaries,
-            summary,
-            content,
-          };
+        const queryAnalysis = await runFreeCsvQueryAnalysis({
+          workerKey: attachmentId,
+          question: userContent,
+          profile,
+          profileSummary,
+          domain,
+          enableThinking,
+          signal: controller.signal,
+          relatedFiles: baseRelatedFiles.filter(
+            (file) => file.name !== analysisAttachment.name,
+          ),
+          onStatus: (message) => {
+            reportStatus(index, message);
+          },
+          onAttachmentPatch: (patch) => {
+            updateAnalysisAttachment(attachmentId, patch);
+          },
+        });
+        const { summary, queryResults, stageSummaries, content } = queryAnalysis;
+        const finalAttachment: FileAttachment = {
+          ...toStoredAttachment(analysisAttachment),
+          content,
+        };
+        const context: ActiveCsvContext = {
+          id: attachmentId,
+          name: analysisAttachment.name,
+          size: analysisAttachment.size,
+          profile,
+          profileSummary,
+          queryResults,
+          stageSummaries,
+          summary,
+          content,
+        };
 
-          updateAnalysisAttachment(attachmentId, {
-            status: "completed",
-            queryResults,
-            stageSummaries,
-            summary,
-            content,
-          });
-          reportStatus(index, "已完成单文件分析，等待综合总结…");
+        updateAnalysisAttachment(attachmentId, {
+          status: "completed",
+          queryResults,
+          stageSummaries,
+          summary,
+          content,
+        });
+        reportStatus(index, "已完成单文件分析，等待综合总结…");
 
-          return { finalAttachment, context };
-        }),
-      );
+        analysisResults.push({ finalAttachment, context });
+      }
 
       const finalAttachments = analysisResults.map(
         (result) => result.finalAttachment,
@@ -936,40 +945,39 @@ export function useChat() {
         })),
       );
 
-      const nextContexts = await Promise.all(
-        csvContexts.map(async (context, index) => {
-          reportStatus(index, "模型正在决定要继续读取哪些数据…");
+      const nextContexts: ActiveCsvContext[] = [];
+      for (const [index, context] of csvContexts.entries()) {
+        reportStatus(index, "模型正在决定要继续读取哪些数据…");
 
-          const queryAnalysis = await runFreeCsvQueryAnalysis({
-            workerKey: context.id,
-            question: userContent,
-            profile: context.profile,
-            profileSummary: context.profileSummary,
-            previousResults: context.queryResults,
-            previousStageSummaries: context.stageSummaries,
-            relatedFiles: baseRelatedFiles.filter(
-              (file) => file.name !== context.name,
-            ),
-            domain,
-            enableThinking,
-            signal: controller.signal,
-            onStatus: (message) => {
-              reportStatus(index, message);
-            },
-            onAttachmentPatch: () => {},
-          });
+        const queryAnalysis = await runFreeCsvQueryAnalysis({
+          workerKey: context.id,
+          question: userContent,
+          profile: context.profile,
+          profileSummary: context.profileSummary,
+          previousResults: context.queryResults,
+          previousStageSummaries: context.stageSummaries,
+          relatedFiles: baseRelatedFiles.filter(
+            (file) => file.name !== context.name,
+          ),
+          domain,
+          enableThinking,
+          signal: controller.signal,
+          onStatus: (message) => {
+            reportStatus(index, message);
+          },
+          onAttachmentPatch: () => {},
+        });
 
-          reportStatus(index, "已完成单文件追问分析，等待综合总结…");
+        reportStatus(index, "已完成单文件追问分析，等待综合总结…");
 
-          return {
-            ...context,
-            queryResults: queryAnalysis.queryResults,
-            stageSummaries: queryAnalysis.stageSummaries,
-            summary: queryAnalysis.summary,
-            content: queryAnalysis.content,
-          };
-        }),
-      );
+        nextContexts.push({
+          ...context,
+          queryResults: queryAnalysis.queryResults,
+          stageSummaries: queryAnalysis.stageSummaries,
+          summary: queryAnalysis.summary,
+          content: queryAnalysis.content,
+        });
+      }
 
       const combinedSummary =
         nextContexts.length > 1

@@ -8,6 +8,7 @@ import {
 import { toProxyAssistantEvent } from "../src/lib/pi-agent/proxy-events";
 import { executeAnalysisScriptInSandbox } from "../src/lib/pi-agent/script-sandbox";
 import { getServerPiAgentLimits } from "../src/lib/pi-agent/server-limits";
+import { classifyPiTask } from "../src/lib/pi-agent/task-routing";
 
 async function main() {
   assert.deepEqual(normalizePiAgentLimits(null), DEFAULT_PI_AGENT_LIMITS);
@@ -31,6 +32,21 @@ async function main() {
   delete process.env.PI_AGENT_MAX_MODEL_TURNS;
   delete process.env.PI_AGENT_MAX_TOOL_CALLS;
   delete process.env.PI_AGENT_MAX_WEB_SEARCHES;
+
+  assert.deepEqual(
+    classifyPiTask(
+      "联网搜索2026年10月份，中国—澳新/南亚/非洲方向的热点新闻和事件",
+    ),
+    { requestsWebSearch: true, referencesCsvContext: false },
+  );
+  assert.deepEqual(
+    classifyPiTask("结合前面上传的 CSV 数据，联网搜索相关热点"),
+    { requestsWebSearch: true, referencesCsvContext: true },
+  );
+  assert.deepEqual(classifyPiTask("继续分析上述数据"), {
+    requestsWebSearch: false,
+    referencesCsvContext: true,
+  });
 
   const budget = createPiAgentBudget({
     maxModelTurns: 4,
