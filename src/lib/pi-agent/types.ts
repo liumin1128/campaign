@@ -6,6 +6,7 @@ import type {
   CsvProfileSummary,
 } from "@/lib/client-analysis/csv-types";
 import type { PiAgentBudgetState } from "./budget";
+import type { GenericFileContext } from "@/lib/file-agent/types";
 
 export interface PiCsvContext {
   id: string;
@@ -31,6 +32,7 @@ export interface RunPiAgentOptions {
   history: Message[];
   prompt: string;
   csvContexts: PiCsvContext[];
+  fileContexts: GenericFileContext[];
   signal: AbortSignal;
   onUpdate: (update: PiAgentUpdate) => void;
 }

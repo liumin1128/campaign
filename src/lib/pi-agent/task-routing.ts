@@ -1,6 +1,6 @@
 export interface PiTaskRoute {
   requestsWebSearch: boolean;
-  referencesCsvContext: boolean;
+  referencesFileContext: boolean;
 }
 
 const WEB_SEARCH_PATTERNS = [
@@ -12,7 +12,7 @@ const WEB_SEARCH_PATTERNS = [
   /(?:热点新闻|最新新闻|时事新闻)/i,
 ];
 
-const CSV_CONTEXT_PATTERNS = [
+const FILE_CONTEXT_PATTERNS = [
   /\bcsv\b/i,
   /(?:上传|已上传|前面|上述|这些|该).{0,10}(?:文件|数据|表格|分析)/i,
   /(?:继续|重新).{0,8}(?:分析|查询|读取)(?:文件|数据|表格)?/i,
@@ -22,7 +22,7 @@ const CSV_CONTEXT_PATTERNS = [
 export function classifyPiTask(prompt: string): PiTaskRoute {
   return {
     requestsWebSearch: WEB_SEARCH_PATTERNS.some((pattern) => pattern.test(prompt)),
-    referencesCsvContext: CSV_CONTEXT_PATTERNS.some((pattern) =>
+    referencesFileContext: FILE_CONTEXT_PATTERNS.some((pattern) =>
       pattern.test(prompt),
     ),
   };

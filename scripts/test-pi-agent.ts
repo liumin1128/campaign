@@ -37,15 +37,15 @@ async function main() {
     classifyPiTask(
       "联网搜索2026年10月份，中国—澳新/南亚/非洲方向的热点新闻和事件",
     ),
-    { requestsWebSearch: true, referencesCsvContext: false },
+    { requestsWebSearch: true, referencesFileContext: false },
   );
   assert.deepEqual(
     classifyPiTask("结合前面上传的 CSV 数据，联网搜索相关热点"),
-    { requestsWebSearch: true, referencesCsvContext: true },
+    { requestsWebSearch: true, referencesFileContext: true },
   );
   assert.deepEqual(classifyPiTask("继续分析上述数据"), {
     requestsWebSearch: false,
-    referencesCsvContext: true,
+    referencesFileContext: true,
   });
 
   const budget = createPiAgentBudget({

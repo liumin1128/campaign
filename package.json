@@ -14,6 +14,7 @@
     "test:chat-large-csv-flow": "tsx scripts/test-chat-large-csv-flow.ts",
     "test:csv-third-line": "tsx scripts/test-read-sep26-third-line.ts",
     "test:pi-agent": "tsx scripts/test-pi-agent.ts",
+    "test:file-agent": "tsx scripts/test-file-agent.ts",
     "package": "node scripts/package-manifest.mjs"
   },
   "dependencies": {

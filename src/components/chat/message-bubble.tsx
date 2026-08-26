@@ -1,6 +1,6 @@
 "use client";
 
-import { Database, FileCsv } from "flowbite-react-icons/outline";
+import { Database, FileCsv, FileImport } from "flowbite-react-icons/outline";
 import { isMarkdownContent } from "@/utils/markdown";
 import MarkdownDisplay from "@/components/markdown-display";
 import { ReasoningBlock } from "./reasoning-block";
@@ -104,6 +104,8 @@ export function MessageBubble({
               >
                 {att.type === "csv-analysis" ? (
                   <Database className="size-4 shrink-0" />
+                ) : att.type === "file" ? (
+                  <FileImport className="size-4 shrink-0" />
                 ) : (
                   <FileCsv className="size-4 shrink-0" />
                 )}
@@ -116,6 +118,8 @@ export function MessageBubble({
                     language,
                     att.type === "csv-analysis"
                       ? "file_type_csv_analysis"
+                      : att.type === "file"
+                        ? "file_type_file"
                       : att.type === "csv"
                         ? "file_type_csv"
                         : "file_type_text",

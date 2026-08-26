@@ -81,6 +81,8 @@ export function ChatInput({
             >
               {att.type === "csv-analysis" ? (
                 <Database className="size-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
+              ) : att.type === "file" ? (
+                <FileImport className="size-3.5 shrink-0 text-indigo-600 dark:text-indigo-400" />
               ) : (
                 <FileCsv className="size-3.5 shrink-0 text-indigo-600 dark:text-indigo-400" />
               )}
@@ -93,6 +95,9 @@ export function ChatInput({
               >
                 {att.name}
                 {att.size ? ` · ${formatBytes(att.size)}` : ""}
+                {att.type === "file" && att.descriptor
+                  ? ` · ${att.descriptor.kind}`
+                  : ""}
                 {att.type === "csv-analysis"
                   ? ` · ${getAnalysisLabel(language, att)}${getAnalysisProgressText(att)}`
                   : ""}
@@ -188,7 +193,6 @@ export function ChatInput({
               ref={fileInputRef}
               type="file"
               multiple
-              accept=".csv,.txt,.md,.json,text/*"
               onChange={onFileSelect}
               className="sr-only"
               tabIndex={-1}

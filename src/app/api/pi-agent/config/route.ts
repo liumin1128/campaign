@@ -1,5 +1,6 @@
 import { PI_AGENT_MODEL_ID } from "@/lib/pi-agent/model";
 import { getServerPiAgentLimits } from "@/lib/pi-agent/server-limits";
+import { getServerFileAgentLimits } from "@/lib/file-agent/server-limits";
 
 export const runtime = "nodejs";
 
@@ -8,5 +9,6 @@ export async function GET() {
     model: PI_AGENT_MODEL_ID,
     thinkingLevel: "max",
     limits: getServerPiAgentLimits(),
+    fileLimits: getServerFileAgentLimits(),
   });
 }

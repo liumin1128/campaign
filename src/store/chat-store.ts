@@ -189,7 +189,7 @@ export const useChatStore = create<ChatStoreState>()(
 
 // 持久化 hydration 完成后，确保始终有一个活跃会话
 if (typeof window !== "undefined" && useChatStore.persist) {
-  useChatStore.persist.onFinishHydration(() => {
+  const ensureActiveSession = () => {
     const state = useChatStore.getState();
     const hasActiveSession = state.sessions.some(
       (s) => s.id === state.activeSessionId,
@@ -198,7 +198,13 @@ if (typeof window !== "undefined" && useChatStore.persist) {
       // 无活跃会话时自动创建（即使有遗留会话但 activeSessionId 失效也重建）
       state.createSession();
     }
-  });
+  };
+
+  if (useChatStore.persist.hasHydrated()) {
+    ensureActiveSession();
+  } else {
+    useChatStore.persist.onFinishHydration(ensureActiveSession);
+  }
 }
 
 /** 获取当前活跃会话 */

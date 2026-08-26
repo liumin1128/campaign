@@ -20,6 +20,7 @@ import { createPiAgentBudget } from "./budget";
 import { fetchPiAgentLimits } from "./client-config";
 import { PI_AGENT_MODEL } from "./model";
 import { createPiAgentTools } from "./tools";
+import { createGenericFileAgentTools } from "@/lib/file-agent/pi-tools";
 import type {
   RunPiAgentOptions,
   RunPiAgentResult,
@@ -52,14 +53,22 @@ export async function runPiAgent(
 
   const agent = new Agent({
     initialState: {
-      systemPrompt: buildAgentSystemPrompt(args.systemPrompt, args.csvContexts, limits),
+      systemPrompt: buildAgentSystemPrompt(
+        args.systemPrompt,
+        args.csvContexts,
+        args.fileContexts,
+        limits,
+      ),
       model: PI_AGENT_MODEL,
       thinkingLevel: "max",
       messages: convertChatHistory(args.history),
-      tools: createPiAgentTools({
-        csvContexts: args.csvContexts,
-        scriptResults,
-      }),
+      tools: [
+        ...createPiAgentTools({
+          csvContexts: args.csvContexts,
+          scriptResults,
+        }),
+        ...createGenericFileAgentTools(args.fileContexts),
+      ],
     },
     streamFn: (model, context, options) =>
       streamProxy(model, context, {
@@ -202,9 +211,10 @@ export function buildPiUserPrompt(
 function buildAgentSystemPrompt(
   basePrompt: string,
   csvContexts: RunPiAgentOptions["csvContexts"],
+  fileContexts: RunPiAgentOptions["fileContexts"],
   limits: Awaited<ReturnType<typeof fetchPiAgentLimits>>,
 ) {
-  const fileCatalog = csvContexts.map((context) => ({
+  const legacyCsvCatalog = csvContexts.map((context) => ({
     id: context.id,
     name: context.name,
     size: context.size,
@@ -212,19 +222,23 @@ function buildAgentSystemPrompt(
     sampleRows: context.profile.sampleRows.slice(0, 5),
     previousSummary: context.summary?.slice(0, 4_000),
   }));
+  const fileCatalog = fileContexts.map((context) => context.descriptor);
 
   return `${basePrompt}
 
 # Pi Agent 思考循环
 
-你可以自主决定是否以及何时调用工具。需要实时事实时使用 web_search；需要读取已附加的大 CSV 时使用 query_large_file；只有结构化查询不足以完成计算时才使用 run_analysis_script。收集到足够证据后，停止调用工具并直接给出最终答案。
+你可以自主决定是否以及何时调用工具。需要实时事实时使用 web_search。处理通用文件时，先调用 inspect_file，再根据 capabilities 选择 search_file、read_file_chunk 或 query_file；不要顺序读取整个大文件。旧版大 CSV 使用 query_large_file。只有本地查询不足以完成二次计算时才使用 run_analysis_script。收集到足够证据后，停止调用工具并直接给出最终答案。
 
 约束：最多 ${limits.maxModelTurns} 个模型回合、${limits.maxToolCalls} 次工具调用、${limits.maxWebSearches} 次 Web Search。不要为了耗尽预算而调用工具，也不要重复相同查询。工具失败时应调整方法或基于已有证据作答。
 
 run_analysis_script 中的代码是函数体，输入变量名为 input，必须使用 return 返回可 JSON 序列化的数据。脚本没有网络、文件系统、浏览器或 Node.js API。
 
-已附加的大文件目录：
-${fileCatalog.length > 0 ? JSON.stringify(fileCatalog) : "无"}`;
+通用文件目录：
+${fileCatalog.length > 0 ? JSON.stringify(fileCatalog) : "无"}
+
+旧版 CSV 分析目录：
+${legacyCsvCatalog.length > 0 ? JSON.stringify(legacyCsvCatalog) : "无"}`;
 }
 
 function convertChatHistory(messages: ChatMessage[]): AgentMessage[] {

@@ -8,7 +8,6 @@ import type {
 } from "@/components/chat/types";
 import { getLocalizedAgents, t } from "@/components/chat/i18n";
 import { GLOBAL_EMPHASIS } from "@/components/chat/system-prompts";
-import { processFiles } from "@/components/chat/utils";
 import {
   buildAnalysisAttachmentContent,
   summarizeProfile,
@@ -41,6 +40,13 @@ import {
 } from "@/lib/pi-agent/run-client-agent";
 import { classifyPiTask } from "@/lib/pi-agent/task-routing";
 import type { PiCsvContext } from "@/lib/pi-agent/types";
+import { fetchFileAgentLimits } from "@/lib/file-agent/client-config";
+import {
+  registerGenericFile,
+  resetAllGenericFiles,
+  resetGenericFile,
+} from "@/lib/file-agent/file-worker-client";
+import type { GenericFileContext } from "@/lib/file-agent/types";
 import { useActiveSession, useChatStore } from "@/store/chat-store";
 import { usePromptOverrideStore } from "@/store/prompt-override-store";
 
@@ -87,6 +93,7 @@ export function useChat() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const largeCsvInputRef = useRef<HTMLInputElement>(null);
   const csvContextsRef = useRef<Record<string, ActiveCsvContext[]>>({});
+  const fileContextsRef = useRef<Record<string, GenericFileContext[]>>({});
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -110,7 +117,9 @@ export function useChat() {
   useEffect(() => {
     return () => {
       resetAllCsvWorkers();
+      resetAllGenericFiles();
       csvContextsRef.current = {};
+      fileContextsRef.current = {};
     };
   }, []);
 
@@ -158,12 +167,27 @@ export function useChat() {
     [],
   );
 
+  const replaceFileContexts = useCallback(
+    (id: string, nextContexts: GenericFileContext[]) => {
+      const nextIds = new Set(nextContexts.map((context) => context.id));
+      for (const context of fileContextsRef.current[id] ?? []) {
+        if (!nextIds.has(context.id)) resetGenericFile(context.id);
+      }
+      fileContextsRef.current[id] = nextContexts;
+    },
+    [],
+  );
+
   const handleDeleteSession = useCallback(
     (id: string) => {
       for (const context of csvContextsRef.current[id] ?? []) {
         resetCsvWorker(context.id);
       }
+      for (const context of fileContextsRef.current[id] ?? []) {
+        resetGenericFile(context.id);
+      }
       delete csvContextsRef.current[id];
+      delete fileContextsRef.current[id];
       deleteSession(id);
     },
     [deleteSession],
@@ -256,20 +280,63 @@ export function useChat() {
     const csvAnalysisAttachments = fileAttachments.filter(
       (attachment) => attachment.type === "csv-analysis",
     );
+    const genericFileAttachments = fileAttachments.filter(
+      (attachment) => attachment.type === "file",
+    );
     const defaultCsvQuestion =
       language === "zh"
         ? "请基于这个 CSV 做一次概要分析并给出可执行洞察。"
         : "Please summarize this CSV and provide actionable insights.";
+    const defaultFileQuestion =
+      language === "zh"
+        ? "请先检查这些文件，再自行选择检索或查询方式，给出有依据的结论。"
+        : "Inspect these files, choose the appropriate search or query method, and provide an evidence-based conclusion.";
     const taskRoute = classifyPiTask(trimmed);
     const activeCsvContexts =
       sessionId && trimmed ? (csvContextsRef.current[sessionId] ?? []) : [];
+    const activeFileContexts =
+      sessionId && trimmed ? (fileContextsRef.current[sessionId] ?? []) : [];
+    const readyFileContexts = getReadyGenericFileContexts(genericFileAttachments);
+    const hasHistoricalGenericFiles = messages.some((message) =>
+      message.attachments?.some((attachment) => attachment.type === "file"),
+    );
+    if (
+      taskRoute.referencesFileContext &&
+      readyFileContexts.length === 0 &&
+      activeFileContexts.length === 0 &&
+      hasHistoricalGenericFiles
+    ) {
+      alert(
+        language === "zh"
+          ? "原始文件已不在当前浏览器会话中，请重新上传后再查询。"
+          : "The original file is no longer available in this browser session. Please upload it again.",
+      );
+      return;
+    }
     const standaloneWebSearch =
       taskRoute.requestsWebSearch &&
-      !taskRoute.referencesCsvContext &&
-      csvAnalysisAttachments.length === 0;
+      !taskRoute.referencesFileContext &&
+      csvAnalysisAttachments.length === 0 &&
+      genericFileAttachments.length === 0;
 
-    if (enableThinking || taskRoute.requestsWebSearch) {
+    const shouldUseFileContexts =
+      readyFileContexts.length > 0 ||
+      (taskRoute.referencesFileContext && activeFileContexts.length > 0);
+
+    if (
+      enableThinking ||
+      taskRoute.requestsWebSearch ||
+      genericFileAttachments.length > 0 ||
+      shouldUseFileContexts
+    ) {
       let piCsvContexts = standaloneWebSearch ? [] : activeCsvContexts;
+      const piFileContexts = standaloneWebSearch
+        ? []
+        : readyFileContexts.length > 0
+          ? readyFileContexts
+          : taskRoute.referencesFileContext
+            ? activeFileContexts
+            : [];
       if (csvAnalysisAttachments.length > 0) {
         const readyContexts = getReadyCsvContexts(csvAnalysisAttachments);
         if (!readyContexts.ok) {
@@ -282,8 +349,13 @@ export function useChat() {
       await handlePiThinkingSend(
         quotePrefix +
           (trimmed ||
-            (csvAnalysisAttachments.length > 0 ? defaultCsvQuestion : "")),
+            (csvAnalysisAttachments.length > 0
+              ? defaultCsvQuestion
+              : genericFileAttachments.length > 0
+                ? defaultFileQuestion
+                : "")),
         piCsvContexts,
+        piFileContexts,
         fileAttachments,
         standaloneWebSearch ? [] : messages,
       );
@@ -460,6 +532,7 @@ export function useChat() {
   async function handlePiThinkingSend(
     userContent: string,
     csvContexts: ActiveCsvContext[],
+    genericFileContexts: GenericFileContext[],
     attachments: FileAttachment[],
     history: Message[],
   ) {
@@ -499,6 +572,7 @@ export function useChat() {
         history,
         prompt: buildPiUserPrompt(userContent, storedAttachments),
         csvContexts,
+        fileContexts: genericFileContexts,
         signal: controller.signal,
         onUpdate: (update) => {
           latestContent = update.content;
@@ -542,6 +616,9 @@ export function useChat() {
           })),
         );
       }
+      if (genericFileContexts.length > 0) {
+        replaceFileContexts(sid, genericFileContexts);
+      }
       setFileAttachments([]);
     } catch (error) {
       const aborted = (error as Error)?.name === "AbortError";
@@ -578,15 +655,45 @@ export function useChat() {
   }
 
   async function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
-    const files = e.target.files;
-    if (!files || files.length === 0) return;
-
-    const newAttachments = await processFiles(files);
-    if (newAttachments.length > 0) {
-      setFileAttachments((prev) => [...prev, ...newAttachments]);
-    }
-
+    const files = Array.from(e.target.files ?? []);
     e.target.value = "";
+    if (files.length === 0) return;
+
+    const limits = await fetchFileAgentLimits();
+    const results = await Promise.all(
+      files.map(async (file) => {
+        try {
+          const descriptor = await registerGenericFile(file, limits);
+          return {
+            id: descriptor.id,
+            name: descriptor.name,
+            content: formatGenericFileAttachmentContent(descriptor),
+            type: "file" as const,
+            size: descriptor.size,
+            descriptor,
+          } satisfies FileAttachment;
+        } catch (error) {
+          alert(`文件注册失败：${file.name}。${formatErrorMessage(error)}`);
+          return null;
+        }
+      }),
+    );
+    const attachments: FileAttachment[] = results.flatMap((attachment) =>
+      attachment ? [attachment] : [],
+    );
+    const unsupportedNames = attachments
+      .filter((attachment) => !attachment.descriptor?.capabilities.includes("read"))
+      .map((attachment) => attachment.name);
+    if (unsupportedNames.length > 0) {
+      alert(
+        language === "zh"
+          ? `以下文件当前只能识别类型，请先转换为 UTF-8 文本、CSV、TSV、JSON 或 JSONL：${unsupportedNames.join("、")}`
+          : `These files must be converted to UTF-8 text, CSV, TSV, JSON, or JSONL first: ${unsupportedNames.join(", ")}`,
+      );
+    }
+    if (attachments.length > 0) {
+      setFileAttachments((previous) => [...previous, ...attachments]);
+    }
   }
 
   async function handleLargeCsvSelect(e: React.ChangeEvent<HTMLInputElement>) {
@@ -679,6 +786,9 @@ export function useChat() {
       const removed = prev[index];
       if (removed?.type === "csv-analysis" && removed.id) {
         resetCsvWorker(removed.id);
+      }
+      if (removed?.type === "file" && removed.id) {
+        resetGenericFile(removed.id);
       }
       return prev.filter((_, i) => i !== index);
     });
@@ -1105,7 +1215,27 @@ function toStoredAttachment(attachment: FileAttachment): FileAttachment {
     content: attachment.content,
     type: attachment.type,
     size: attachment.size,
+    descriptor: attachment.descriptor,
   };
+}
+
+function getReadyGenericFileContexts(
+  attachments: FileAttachment[],
+): GenericFileContext[] {
+  return attachments.flatMap((attachment) =>
+    attachment.id && attachment.descriptor
+      ? [{ id: attachment.id, descriptor: attachment.descriptor }]
+      : [],
+  );
+}
+
+function formatGenericFileAttachmentContent(
+  descriptor: GenericFileContext["descriptor"],
+) {
+  const warningText = descriptor.warnings.length
+    ? `\n提示：${descriptor.warnings.join("；")}`
+    : "";
+  return `[本地文件：${descriptor.name}]\n类型：${descriptor.kind}\n大小：${descriptor.size} 字节\n可用能力：${descriptor.capabilities.join(", ") || "inspect"}${warningText}`;
 }
 
 function getReadyCsvContexts(

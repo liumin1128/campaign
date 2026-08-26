@@ -25,12 +25,12 @@ const translations = {
     // 输入框
     chat_input_placeholder: "输入消息，Shift+Enter 换行...",
     chat_input_loading_placeholder: "AI 正在回复...",
-    upload_file_title: "上传文件（支持 CSV）",
+    upload_file_title: "上传本地文件（文本类可直接检索，复杂格式需预处理）",
     upload_large_csv_title: "添加大 CSV 本地分析",
     thinking_on_title: "关闭 thinking 模式",
     thinking_off_title: "开启 thinking 模式",
     stop_title: "停止生成",
-    send_hint: "回车发送 · 支持 CSV 文件上传解析",
+    send_hint: "回车发送 · 支持本地文本文件检索",
     loading_hint: "正在生成回复，点击停止按钮中断",
 
     // 会话列表
@@ -53,6 +53,7 @@ const translations = {
     file_type_csv: "CSV",
     file_type_text: "文本",
     file_type_csv_analysis: "本地分析",
+    file_type_file: "本地文件",
     csv_analysis_profiling: "正在读取字段",
     csv_analysis_profiled: "已读取字段",
     csv_analysis_planning: "正在生成计划",
@@ -119,12 +120,12 @@ const translations = {
 
     chat_input_placeholder: "Type a message, Shift+Enter for new line...",
     chat_input_loading_placeholder: "AI is responding...",
-    upload_file_title: "Upload files (CSV supported)",
+    upload_file_title: "Upload local files (text formats are searchable)",
     upload_large_csv_title: "Add large CSV for local analysis",
     thinking_on_title: "Turn thinking mode off",
     thinking_off_title: "Turn thinking mode on",
     stop_title: "Stop generating",
-    send_hint: "Enter to send · CSV file upload supported",
+    send_hint: "Enter to send · Local text-file search supported",
     loading_hint: "Generating response, click stop to interrupt",
 
     session_title: "Chats",
@@ -143,6 +144,7 @@ const translations = {
     file_type_csv: "CSV",
     file_type_text: "Text",
     file_type_csv_analysis: "Local analysis",
+    file_type_file: "Local file",
     csv_analysis_profiling: "Reading fields",
     csv_analysis_profiled: "Fields ready",
     csv_analysis_planning: "Planning",
