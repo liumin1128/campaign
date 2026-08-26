@@ -35,20 +35,15 @@ import {
   type CsvProfile,
   type CsvProfileSummary,
 } from "@/lib/client-analysis/csv-types";
+import {
+  buildPiUserPrompt,
+  runPiAgent,
+} from "@/lib/pi-agent/run-client-agent";
+import type { PiCsvContext } from "@/lib/pi-agent/types";
 import { useActiveSession, useChatStore } from "@/store/chat-store";
 import { usePromptOverrideStore } from "@/store/prompt-override-store";
 
-type ActiveCsvContext = {
-  id: string;
-  name: string;
-  size?: number;
-  profile: CsvProfile;
-  profileSummary: CsvProfileSummary;
-  queryResults?: CsvDataQueryResult[];
-  stageSummaries?: string[];
-  summary?: string;
-  content?: string;
-};
+type ActiveCsvContext = PiCsvContext;
 
 const QUERY_ROUND_PROGRESS_DENOMINATOR = MAX_QUERY_ITERATIONS;
 
@@ -260,11 +255,35 @@ export function useChat() {
     const csvAnalysisAttachments = fileAttachments.filter(
       (attachment) => attachment.type === "csv-analysis",
     );
+    const defaultCsvQuestion =
+      language === "zh"
+        ? "请基于这个 CSV 做一次概要分析并给出可执行洞察。"
+        : "Please summarize this CSV and provide actionable insights.";
+    const activeCsvContexts =
+      sessionId && trimmed ? (csvContextsRef.current[sessionId] ?? []) : [];
+
+    if (enableThinking) {
+      let piCsvContexts = activeCsvContexts;
+      if (csvAnalysisAttachments.length > 0) {
+        const readyContexts = getReadyCsvContexts(csvAnalysisAttachments);
+        if (!readyContexts.ok) {
+          alert(readyContexts.error);
+          return;
+        }
+        piCsvContexts = readyContexts.contexts;
+      }
+
+      await handlePiThinkingSend(
+        quotePrefix +
+          (trimmed ||
+            (csvAnalysisAttachments.length > 0 ? defaultCsvQuestion : "")),
+        piCsvContexts,
+        fileAttachments,
+      );
+      return;
+    }
+
     if (csvAnalysisAttachments.length > 0) {
-      const defaultCsvQuestion =
-        language === "zh"
-          ? "请基于这个 CSV 做一次概要分析并给出可执行洞察。"
-          : "Please summarize this CSV and provide actionable insights.";
       await handleCsvAnalysisSend(
         quotePrefix + (trimmed || defaultCsvQuestion),
         csvAnalysisAttachments,
@@ -272,8 +291,6 @@ export function useChat() {
       return;
     }
 
-    const activeCsvContexts =
-      sessionId && trimmed ? (csvContextsRef.current[sessionId] ?? []) : [];
     if (activeCsvContexts.length > 0) {
       await handleCsvContextFollowup(quotePrefix + trimmed, activeCsvContexts);
       return;
@@ -427,6 +444,118 @@ export function useChat() {
           ),
         );
       }
+    } finally {
+      setIsLoading(false);
+      abortRef.current = null;
+    }
+  }
+
+  async function handlePiThinkingSend(
+    userContent: string,
+    csvContexts: ActiveCsvContext[],
+    attachments: FileAttachment[],
+  ) {
+    if (!sessionId || isLoading) return;
+
+    const sid = sessionId;
+    const assistantId = crypto.randomUUID();
+    const storedAttachments = attachments.map(toStoredAttachment);
+    const userMsg: Message = {
+      id: crypto.randomUUID(),
+      role: "user",
+      content: userContent,
+      attachments: storedAttachments.length > 0 ? storedAttachments : undefined,
+    };
+    const assistantMsg: Message = {
+      id: assistantId,
+      role: "assistant",
+      content: "Pi Agent 正在思考…",
+      reasoning: "",
+    };
+    const updatedMessages = [...messages, userMsg, assistantMsg];
+    let latestContent = assistantMsg.content;
+    let latestReasoning = "";
+
+    updateSessionMessages(sid, updatedMessages);
+    setInput("");
+    setDraftInput(sid, "");
+    setIsLoading(true);
+
+    const controller = new AbortController();
+    abortRef.current = controller;
+
+    try {
+      const result = await runPiAgent({
+        sessionId: sid,
+        systemPrompt: fullSystemPrompt,
+        history: messages,
+        prompt: buildPiUserPrompt(userContent, storedAttachments),
+        csvContexts,
+        signal: controller.signal,
+        onUpdate: (update) => {
+          latestContent = update.content;
+          latestReasoning = update.reasoning;
+          updateSessionMessages(
+            sid,
+            updatedMessages.map((message) =>
+              message.id === assistantId
+                ? {
+                    ...message,
+                    content: update.content,
+                    reasoning: update.reasoning,
+                  }
+                : message,
+            ),
+          );
+        },
+      });
+
+      latestContent = result.content;
+      latestReasoning = result.reasoning;
+      updateSessionMessages(
+        sid,
+        updatedMessages.map((message) =>
+          message.id === assistantId
+            ? {
+                ...message,
+                content: result.content,
+                reasoning: result.reasoning,
+              }
+            : message,
+        ),
+      );
+
+      if (csvContexts.length > 0) {
+        replaceCsvContexts(
+          sid,
+          csvContexts.map((context) => ({
+            ...context,
+            summary: result.content,
+          })),
+        );
+      }
+      setFileAttachments([]);
+    } catch (error) {
+      const aborted = (error as Error)?.name === "AbortError";
+      const errorMessage = aborted
+        ? t(language, "stopped")
+        : error instanceof Error
+          ? error.message
+          : String(error);
+      updateSessionMessages(
+        sid,
+        updatedMessages.map((message) =>
+          message.id === assistantId
+            ? {
+                ...message,
+                content: aborted
+                  ? `${latestContent}\n\n_${errorMessage}_`
+                  : `❌ ${errorMessage}`,
+                reasoning: latestReasoning,
+              }
+            : message,
+        ),
+      );
     } finally {
       setIsLoading(false);
       abortRef.current = null;
@@ -969,6 +1098,49 @@ function toStoredAttachment(attachment: FileAttachment): FileAttachment {
     type: attachment.type,
     size: attachment.size,
   };
+}
+
+function getReadyCsvContexts(
+  attachments: FileAttachment[],
+):
+  | { ok: true; contexts: ActiveCsvContext[] }
+  | { ok: false; error: string } {
+  const contexts: ActiveCsvContext[] = [];
+
+  for (const attachment of attachments) {
+    if (attachment.analysis?.status === "failed") {
+      return {
+        ok: false,
+        error: attachment.analysis.error ?? "CSV 分析失败，请重新添加文件。",
+      };
+    }
+    if (!attachment.id) {
+      return {
+        ok: false,
+        error: `CSV「${attachment.name}」缺少本地分析标识，请重新添加文件。`,
+      };
+    }
+    if (!attachment.analysis?.profile || !attachment.analysis.profileSummary) {
+      return {
+        ok: false,
+        error: `CSV「${attachment.name}」字段画像还没有准备好，请稍后再发送。`,
+      };
+    }
+
+    contexts.push({
+      id: attachment.id,
+      name: attachment.name,
+      size: attachment.size,
+      profile: attachment.analysis.profile,
+      profileSummary: attachment.analysis.profileSummary,
+      queryResults: attachment.analysis.queryResults,
+      stageSummaries: attachment.analysis.stageSummaries,
+      summary: attachment.analysis.summary,
+      content: attachment.content,
+    });
+  }
+
+  return { ok: true, contexts };
 }
 
 function buildCsvBatchStatusPrefix(

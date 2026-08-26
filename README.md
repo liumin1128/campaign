@@ -52,3 +52,10 @@ teamsapp provision --env prod
 
 # 部署代码（push 到 GitHub，Vercel 自动构建）
 git push origin main
+
+
+# ========== Pi Agent 思考模式 ==========
+# 以下均为服务端运行时环境变量；未配置时使用右侧默认值
+PI_AGENT_MAX_MODEL_TURNS=12
+PI_AGENT_MAX_TOOL_CALLS=24
+PI_AGENT_MAX_WEB_SEARCHES=5

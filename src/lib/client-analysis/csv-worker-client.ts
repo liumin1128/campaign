@@ -15,6 +15,7 @@ type PendingRequest = {
   resolve: (value: CsvProfile | AnalysisResult | CsvDataQueryResult) => void;
   reject: (reason?: unknown) => void;
   onProgress?: (progress: number) => void;
+  cleanup?: () => void;
 };
 
 type WorkerEntry = {
@@ -50,11 +51,18 @@ export function executePlanInWorker(
 export function executeQueryInWorker(
   workerKey: string,
   query: CsvDataQuery,
+  signal?: AbortSignal,
 ): Promise<CsvDataQueryResult> {
   const id = crypto.randomUUID();
   const request: CsvWorkerRequest = { id, type: "executeQuery", query };
 
-  return sendWorkerRequest(workerKey, id, request) as Promise<CsvDataQueryResult>;
+  return sendWorkerRequest(
+    workerKey,
+    id,
+    request,
+    undefined,
+    signal,
+  ) as Promise<CsvDataQueryResult>;
 }
 
 export function resetCsvWorker(workerKey: string) {
@@ -64,6 +72,7 @@ export function resetCsvWorker(workerKey: string) {
   }
 
   for (const pending of entry.pendingRequests.values()) {
+    pending.cleanup?.();
     pending.reject(new Error("CSV Worker 已重置。"));
   }
   entry.pendingRequests.clear();
@@ -82,13 +91,29 @@ function sendWorkerRequest(
   id: string,
   request: CsvWorkerRequest,
   onProgress?: (progress: number) => void,
+  signal?: AbortSignal,
 ) {
   const entry = getWorkerEntry(workerKey);
 
   return new Promise<CsvProfile | AnalysisResult | CsvDataQueryResult>(
     (resolve, reject) => {
-    entry.pendingRequests.set(id, { resolve, reject, onProgress });
-    entry.worker.postMessage(request);
+      if (signal?.aborted) {
+        reject(createAbortError());
+        return;
+      }
+
+      const handleAbort = () => {
+        entry.pendingRequests.delete(id);
+        reject(createAbortError());
+      };
+      signal?.addEventListener("abort", handleAbort, { once: true });
+      entry.pendingRequests.set(id, {
+        resolve,
+        reject,
+        onProgress,
+        cleanup: () => signal?.removeEventListener("abort", handleAbort),
+      });
+      entry.worker.postMessage(request);
     },
   );
 }
@@ -124,6 +149,7 @@ function getWorkerEntry(workerKey: string) {
     }
 
     entry.pendingRequests.delete(response.id);
+    pending.cleanup?.();
 
     if (response.type === "profileComplete") {
       pending.resolve(response.profile);
@@ -145,6 +171,7 @@ function getWorkerEntry(workerKey: string) {
 
   worker.onerror = (event) => {
     for (const pending of entry.pendingRequests.values()) {
+      pending.cleanup?.();
       pending.reject(new Error(event.message || "CSV Worker 执行失败。"));
     }
     entry.pendingRequests.clear();
@@ -153,4 +180,8 @@ function getWorkerEntry(workerKey: string) {
   };
 
   return entry;
+}
+
+function createAbortError() {
+  return new DOMException("Operation aborted", "AbortError");
 }
