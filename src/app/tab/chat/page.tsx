@@ -31,6 +31,12 @@ export default function ChatPage() {
     langInstruction,
     isGlobalRulesOverridden,
     isAgentPromptOverridden,
+    memoryEnabled,
+    memoryItems,
+    lastUsedMemoryIds,
+    setMemoryEnabled,
+    removeMemory,
+    clearMemories,
     messagesEndRef,
     inputRef,
     fileInputRef,
@@ -160,6 +166,14 @@ export default function ChatPage() {
             language={language}
             isGlobalRulesOverridden={isGlobalRulesOverridden}
             isAgentPromptOverridden={isAgentPromptOverridden}
+            memory={{
+              enabled: memoryEnabled,
+              items: memoryItems,
+              usedMemoryIds: lastUsedMemoryIds,
+              onEnabledChange: setMemoryEnabled,
+              onDelete: removeMemory,
+              onClear: clearMemories,
+            }}
           />
         )}
       </div>

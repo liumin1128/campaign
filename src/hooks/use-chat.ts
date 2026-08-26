@@ -47,8 +47,10 @@ import {
   resetGenericFile,
 } from "@/lib/file-agent/file-worker-client";
 import type { GenericFileContext } from "@/lib/file-agent/types";
+import { getRecentChatMessages } from "@/lib/chat-memory/retrieval";
 import { useActiveSession, useChatStore } from "@/store/chat-store";
 import { usePromptOverrideStore } from "@/store/prompt-override-store";
+import { useChatMemory } from "@/hooks/use-chat-memory";
 
 type ActiveCsvContext = PiCsvContext;
 
@@ -82,11 +84,25 @@ export function useChat() {
   const selectedAgent =
     agents.find((a) => a.id === session?.selectedAgentId) ?? agents[0];
   const sessionId = session?.id;
+  const {
+    enabled: memoryEnabled,
+    memories: memoryItems,
+    getMemoryContext,
+    markMemoriesUsed,
+    scheduleMemoryUpdate,
+    setEnabled: setMemoryEnabled,
+    removeMemory,
+    forgetSession,
+    clearMemories,
+  } = useChatMemory();
 
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [fileAttachments, setFileAttachments] = useState<FileAttachment[]>([]);
   const [devMode, setDevMode] = useState(false);
+  const [lastMemoryPrompt, setLastMemoryPrompt] = useState("");
+  const [lastUsedMemoryIds, setLastUsedMemoryIds] = useState<string[]>([]);
+  const [lastHistoryCompacted, setLastHistoryCompacted] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -103,6 +119,9 @@ export function useChat() {
   useEffect(() => {
     setFileAttachments([]);
     setIsLoading(false);
+    setLastMemoryPrompt("");
+    setLastUsedMemoryIds([]);
+    setLastHistoryCompacted(false);
     // 直接从 store 读取最新草稿，避免将 draftInputs 加入依赖链导致不必要重跑
     const draft = useChatStore.getState().draftInputs[sessionId ?? ""] ?? "";
     setInput(draft);
@@ -188,9 +207,10 @@ export function useChat() {
       }
       delete csvContextsRef.current[id];
       delete fileContextsRef.current[id];
+      forgetSession(id);
       deleteSession(id);
     },
-    [deleteSession],
+    [deleteSession, forgetSession],
   );
 
   /** 语言回复指令 */
@@ -224,9 +244,17 @@ export function useChat() {
   const isAgentPromptOverridden =
     (overrideAgentPrompts[selectedAgent?.id ?? ""] ?? "") !== "";
 
-  /** 从 activeSession 的消息构建 API 请求消息体 */
+  const buildFullSystemPrompt = useCallback(
+    (memoryPrompt = "") =>
+      effectiveSystemPrompt +
+      (memoryPrompt ? `\n\n${memoryPrompt}` : "") +
+      languageInstruction,
+    [effectiveSystemPrompt, languageInstruction],
+  );
+
+  /** 从 activeSession 的摘要与最近消息构建 API 请求消息体 */
   const buildApiMessages = useCallback(
-    (msgs: Message[]) => {
+    (msgs: Message[], memoryPrompt = "", compactHistory = false) => {
       const mapMsg = (m: Message) => ({
         role: m.role as "user" | "assistant",
         content:
@@ -239,30 +267,61 @@ export function useChat() {
             : m.content,
       });
 
-      const systemContent = effectiveSystemPrompt + languageInstruction;
+      const systemContent = buildFullSystemPrompt(memoryPrompt);
+      const requestMessages = compactHistory
+        ? getRecentChatMessages(msgs)
+        : msgs;
 
       return [
         {
           role: "system" as const,
           content: systemContent,
         },
-        ...msgs.map(mapMsg),
+        ...requestMessages.map(mapMsg),
       ];
     },
-    [effectiveSystemPrompt, languageInstruction],
+    [buildFullSystemPrompt],
   );
 
   // ---- 开发者模式数据 ----
 
-  const fullSystemPrompt = effectiveSystemPrompt + languageInstruction;
+  const fullSystemPrompt = buildFullSystemPrompt(lastMemoryPrompt);
   const agentPrompt = effectiveAgentSpecific;
 
   const apiMessages = useMemo(
-    () => buildApiMessages(messages),
-    [buildApiMessages, messages],
+    () =>
+      buildApiMessages(messages, lastMemoryPrompt, lastHistoryCompacted),
+    [buildApiMessages, lastHistoryCompacted, lastMemoryPrompt, messages],
   );
 
   const toggleDevMode = useCallback(() => setDevMode((v) => !v), []);
+
+  const resetMemoryDebugContext = useCallback(() => {
+    setLastMemoryPrompt("");
+    setLastUsedMemoryIds([]);
+    setLastHistoryCompacted(false);
+  }, []);
+
+  const handleSetMemoryEnabled = useCallback(
+    (enabled: boolean) => {
+      setMemoryEnabled(enabled);
+      if (!enabled) resetMemoryDebugContext();
+    },
+    [resetMemoryDebugContext, setMemoryEnabled],
+  );
+
+  const handleRemoveMemory = useCallback(
+    (memoryId: string) => {
+      removeMemory(memoryId);
+      if (lastUsedMemoryIds.includes(memoryId)) resetMemoryDebugContext();
+    },
+    [lastUsedMemoryIds, removeMemory, resetMemoryDebugContext],
+  );
+
+  const handleClearMemories = useCallback(() => {
+    clearMemories();
+    resetMemoryDebugContext();
+  }, [clearMemories, resetMemoryDebugContext]);
 
   async function handleSend() {
     const trimmed = input.trim();
@@ -322,6 +381,24 @@ export function useChat() {
     const shouldUseFileContexts =
       readyFileContexts.length > 0 ||
       (taskRoute.referencesFileContext && activeFileContexts.length > 0);
+    const memoryQuestion =
+      trimmed ||
+      (csvAnalysisAttachments.length > 0
+        ? defaultCsvQuestion
+        : genericFileAttachments.length > 0
+          ? defaultFileQuestion
+          : "");
+    const memorySelection = getMemoryContext(
+      memoryQuestion,
+      sessionId,
+      selectedAgent.id,
+    );
+    const requestMemoryPrompt = memorySelection.prompt;
+    const shouldCompactHistory = !!memorySelection.currentMemory;
+    setLastMemoryPrompt(requestMemoryPrompt);
+    setLastUsedMemoryIds(memorySelection.memoryIds);
+    setLastHistoryCompacted(shouldCompactHistory);
+    markMemoriesUsed(memorySelection.memoryIds);
 
     if (
       enableThinking ||
@@ -357,7 +434,12 @@ export function useChat() {
         piCsvContexts,
         piFileContexts,
         fileAttachments,
-        standaloneWebSearch ? [] : messages,
+        standaloneWebSearch
+          ? []
+          : shouldCompactHistory
+            ? getRecentChatMessages(messages)
+            : messages,
+        buildFullSystemPrompt(requestMemoryPrompt),
       );
       return;
     }
@@ -366,12 +448,17 @@ export function useChat() {
       await handleCsvAnalysisSend(
         quotePrefix + (trimmed || defaultCsvQuestion),
         csvAnalysisAttachments,
+        requestMemoryPrompt,
       );
       return;
     }
 
     if (activeCsvContexts.length > 0) {
-      await handleCsvContextFollowup(quotePrefix + trimmed, activeCsvContexts);
+      await handleCsvContextFollowup(
+        quotePrefix + trimmed,
+        activeCsvContexts,
+        requestMemoryPrompt,
+      );
       return;
     }
 
@@ -408,7 +495,11 @@ export function useChat() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          messages: buildApiMessages(updatedMessages),
+          messages: buildApiMessages(
+            updatedMessages,
+            requestMemoryPrompt,
+            shouldCompactHistory,
+          ),
           enable_search: selectedAgent?.enableSearch ?? false,
           enable_thinking: enableThinking,
         }),
@@ -500,6 +591,25 @@ export function useChat() {
           }
         }
       }
+
+      if (accumulatedContent.trim() && !accumulatedContent.startsWith("❌")) {
+        const finalMessages = withAssistant.map((message) =>
+          message.id === assistantId
+            ? {
+                ...message,
+                reasoning: accumulatedReasoning,
+                content: accumulatedContent,
+              }
+            : message,
+        );
+        scheduleMemoryUpdate({
+          sessionId: sid,
+          sessionTitle: getStoredSessionTitle(sid),
+          agentId: selectedAgent.id,
+          language,
+          messages: finalMessages,
+        });
+      }
     } catch (err) {
       if ((err as Error)?.name === "AbortError") {
         updateSessionMessages(
@@ -535,6 +645,7 @@ export function useChat() {
     genericFileContexts: GenericFileContext[],
     attachments: FileAttachment[],
     history: Message[],
+    requestSystemPrompt: string,
   ) {
     if (!sessionId || isLoading) return;
 
@@ -568,7 +679,7 @@ export function useChat() {
     try {
       const result = await runPiAgent({
         sessionId: sid,
-        systemPrompt: fullSystemPrompt,
+        systemPrompt: requestSystemPrompt,
         history,
         prompt: buildPiUserPrompt(userContent, storedAttachments),
         csvContexts,
@@ -594,18 +705,16 @@ export function useChat() {
 
       latestContent = result.content;
       latestReasoning = result.reasoning;
-      updateSessionMessages(
-        sid,
-        updatedMessages.map((message) =>
-          message.id === assistantId
-            ? {
-                ...message,
-                content: result.content,
-                reasoning: result.reasoning,
-              }
-            : message,
-        ),
+      const finalMessages = updatedMessages.map((message) =>
+        message.id === assistantId
+          ? {
+              ...message,
+              content: result.content,
+              reasoning: result.reasoning,
+            }
+          : message,
       );
+      updateSessionMessages(sid, finalMessages);
 
       if (csvContexts.length > 0) {
         replaceCsvContexts(
@@ -620,6 +729,15 @@ export function useChat() {
         replaceFileContexts(sid, genericFileContexts);
       }
       setFileAttachments([]);
+      if (result.content.trim()) {
+        scheduleMemoryUpdate({
+          sessionId: sid,
+          sessionTitle: getStoredSessionTitle(sid),
+          agentId: selectedAgent.id,
+          language,
+          messages: finalMessages,
+        });
+      }
     } catch (error) {
       const aborted = (error as Error)?.name === "AbortError";
       const errorMessage = aborted
@@ -797,6 +915,7 @@ export function useChat() {
   async function handleCsvAnalysisSend(
     userContent: string,
     csvAnalysisAttachments: FileAttachment[],
+    memoryContext: string,
   ) {
     if (!sessionId || isLoading) return;
 
@@ -901,6 +1020,7 @@ export function useChat() {
           profileSummary,
           domain,
           enableThinking,
+          memoryContext,
           signal: controller.signal,
           relatedFiles: baseRelatedFiles.filter(
             (file) => file.name !== analysisAttachment.name,
@@ -952,6 +1072,7 @@ export function useChat() {
               contexts: finalContexts,
               domain,
               enableThinking,
+              memoryContext,
               signal: controller.signal,
             })
           : (finalContexts[0]?.summary ?? "");
@@ -978,6 +1099,15 @@ export function useChat() {
       updateSessionMessages(sid, finalMessages);
       replaceCsvContexts(sid, finalContexts);
       setFileAttachments([]);
+      if (summary.trim()) {
+        scheduleMemoryUpdate({
+          sessionId: sid,
+          sessionTitle: getStoredSessionTitle(sid),
+          agentId: selectedAgent.id,
+          language,
+          messages: finalMessages,
+        });
+      }
     } catch (error) {
       const aborted = (error as Error)?.name === "AbortError";
       const errorMessage = aborted
@@ -1009,6 +1139,7 @@ export function useChat() {
   async function handleCsvContextFollowup(
     userContent: string,
     csvContexts: ActiveCsvContext[],
+    memoryContext: string,
   ) {
     if (!sessionId || isLoading) return;
 
@@ -1071,6 +1202,7 @@ export function useChat() {
           ),
           domain,
           enableThinking,
+          memoryContext,
           signal: controller.signal,
           onStatus: (message) => {
             reportStatus(index, message);
@@ -1096,19 +1228,27 @@ export function useChat() {
               contexts: nextContexts,
               domain,
               enableThinking,
+              memoryContext,
               signal: controller.signal,
             })
           : (nextContexts[0]?.summary ?? "");
 
       replaceCsvContexts(sid, nextContexts);
-      updateSessionMessages(
-        sid,
-        updatedMessages.map((message) =>
-          message.id === assistantId
-            ? { ...message, content: combinedSummary }
-            : message,
-        ),
+      const finalMessages = updatedMessages.map((message) =>
+        message.id === assistantId
+          ? { ...message, content: combinedSummary }
+          : message,
       );
+      updateSessionMessages(sid, finalMessages);
+      if (combinedSummary.trim()) {
+        scheduleMemoryUpdate({
+          sessionId: sid,
+          sessionTitle: getStoredSessionTitle(sid),
+          agentId: selectedAgent.id,
+          language,
+          messages: finalMessages,
+        });
+      }
     } catch (error) {
       const aborted = (error as Error)?.name === "AbortError";
       const errorMessage = aborted
@@ -1180,6 +1320,12 @@ export function useChat() {
     langInstruction: languageInstruction,
     isGlobalRulesOverridden,
     isAgentPromptOverridden,
+    memoryEnabled,
+    memoryItems,
+    lastUsedMemoryIds,
+    setMemoryEnabled: handleSetMemoryEnabled,
+    removeMemory: handleRemoveMemory,
+    clearMemories: handleClearMemories,
     // refs
     messagesEndRef,
     inputRef,
@@ -1217,6 +1363,13 @@ function toStoredAttachment(attachment: FileAttachment): FileAttachment {
     size: attachment.size,
     descriptor: attachment.descriptor,
   };
+}
+
+function getStoredSessionTitle(sessionId: string) {
+  return (
+    useChatStore.getState().sessions.find((item) => item.id === sessionId)
+      ?.title ?? ""
+  );
 }
 
 function getReadyGenericFileContexts(
@@ -1356,6 +1509,7 @@ async function runFreeCsvQueryAnalysis(args: {
   relatedFiles?: CsvRelatedFileContext[];
   domain: "campaign" | "general";
   enableThinking: boolean;
+  memoryContext: string;
   signal: AbortSignal;
   onStatus: (message: string) => void;
   onAttachmentPatch: (
@@ -1402,6 +1556,7 @@ async function runFreeCsvQueryAnalysis(args: {
       relatedFiles: args.relatedFiles ?? [],
       domain: args.domain,
       enableThinking: args.enableThinking,
+      memoryContext: args.memoryContext,
       signal: args.signal,
       recoveryNotes,
     });
@@ -1536,6 +1691,7 @@ async function runFreeCsvQueryAnalysis(args: {
     relatedFiles: args.relatedFiles ?? [],
     domain: args.domain,
     enableThinking: args.enableThinking,
+    memoryContext: args.memoryContext,
     signal: args.signal,
     recoveryNotes,
   });
@@ -1704,6 +1860,7 @@ async function requestCombinedCsvSummary(args: {
   contexts: ActiveCsvContext[];
   domain: "campaign" | "general";
   enableThinking: boolean;
+  memoryContext: string;
   signal: AbortSignal;
 }) {
   const files = compactRelatedFilesForQuery(
@@ -1724,6 +1881,7 @@ async function requestCombinedCsvSummary(args: {
         files,
         domain: args.domain,
         enable_thinking: args.enableThinking,
+        memoryContext: args.memoryContext,
       }),
       signal: args.signal,
     });
@@ -1796,6 +1954,7 @@ async function requestDataQueriesWithFallback(args: {
   relatedFiles: CsvRelatedFileContext[];
   domain: "campaign" | "general";
   enableThinking: boolean;
+  memoryContext: string;
   signal: AbortSignal;
   recoveryNotes: string[];
 }): Promise<DataQueryDecision> {
@@ -1835,6 +1994,7 @@ async function requestDataQueries(args: {
   relatedFiles: CsvRelatedFileContext[];
   domain: "campaign" | "general";
   enableThinking: boolean;
+  memoryContext: string;
   signal: AbortSignal;
   forceFinal?: boolean;
 }): Promise<DataQueryDecision> {
@@ -1849,6 +2009,7 @@ async function requestDataQueries(args: {
       relatedFiles: args.relatedFiles,
       domain: args.domain,
       enable_thinking: args.enableThinking,
+      memoryContext: args.memoryContext,
       force_final: args.forceFinal ?? false,
     }),
     signal: args.signal,
@@ -1878,6 +2039,7 @@ async function requestDataQueriesFinalAnswer(args: {
   relatedFiles: CsvRelatedFileContext[];
   domain: "campaign" | "general";
   enableThinking: boolean;
+  memoryContext: string;
   signal: AbortSignal;
   recoveryNotes?: string[];
 }): Promise<string> {

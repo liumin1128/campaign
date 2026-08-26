@@ -4,6 +4,8 @@ import { useState, useMemo } from "react";
 import type { Language, Message } from "./types";
 import { t } from "./i18n";
 import { usePromptOverrideStore } from "@/store/prompt-override-store";
+import type { ConversationMemory } from "@/lib/chat-memory/types";
+import { MemoryPanel } from "./memory-panel";
 
 // ---------- Types ----------
 
@@ -25,7 +27,7 @@ export interface DevPanelData {
   agentName: string;
 }
 
-type Tab = "system" | "messages" | "reasoning";
+type Tab = "system" | "messages" | "reasoning" | "memory";
 
 type EditingField = "globalRules" | "agentPrompt" | null;
 
@@ -38,6 +40,14 @@ interface DevPanelProps {
   language: Language;
   isGlobalRulesOverridden?: boolean;
   isAgentPromptOverridden?: boolean;
+  memory: {
+    enabled: boolean;
+    items: ConversationMemory[];
+    usedMemoryIds: string[];
+    onEnabledChange: (enabled: boolean) => void;
+    onDelete: (memoryId: string) => void;
+    onClear: () => void;
+  };
 }
 
 export function DevPanel({
@@ -47,6 +57,7 @@ export function DevPanel({
   language,
   isGlobalRulesOverridden = false,
   isAgentPromptOverridden = false,
+  memory,
 }: DevPanelProps) {
   const [activeTab, setActiveTab] = useState<Tab>("system");
   const [editingField, setEditingField] = useState<EditingField>(null);
@@ -78,6 +89,7 @@ export function DevPanel({
     { id: "system", label: t(language, "dev_mode_tab_system") },
     { id: "messages", label: t(language, "dev_mode_tab_messages") },
     { id: "reasoning", label: t(language, "dev_mode_tab_reasoning") },
+    { id: "memory", label: t(language, "dev_mode_tab_memory") },
   ];
 
   /** 开始编辑某个字段 */
@@ -188,6 +200,17 @@ export function DevPanel({
         )}
         {activeTab === "reasoning" && (
           <ReasoningTab reasoningItems={reasoningItems} language={language} />
+        )}
+        {activeTab === "memory" && (
+          <MemoryPanel
+            enabled={memory.enabled}
+            memories={memory.items}
+            usedMemoryIds={memory.usedMemoryIds}
+            language={language}
+            onEnabledChange={memory.onEnabledChange}
+            onDelete={memory.onDelete}
+            onClear={memory.onClear}
+          />
         )}
       </div>
     </div>
