@@ -35,7 +35,7 @@ interface QueryRequest {
 }
 
 type DeepSeekThinking =
-  | { type: "enabled"; reasoning_effort: "medium" }
+  | { type: "enabled"; reasoning_effort: "max" }
   | { type: "disabled" };
 
 type QueryAgentResponse =
@@ -227,7 +227,7 @@ async function requestQueryModelContent(args: {
       Authorization: `Bearer ${args.apiKey}`,
     },
     body: JSON.stringify({
-      model: "deepseek-v4-pro",
+      model: "deepseek-v4-flash-vision-exp",
       thinking: buildThinkingConfig(args.enableThinking),
       response_format: { type: "json_object" },
       messages: [
@@ -266,7 +266,7 @@ async function requestQueryModelContent(args: {
 
 function buildThinkingConfig(enableThinking: boolean): DeepSeekThinking {
   return enableThinking
-    ? { type: "enabled", reasoning_effort: "medium" }
+    ? { type: "enabled", reasoning_effort: "max" }
     : { type: "disabled" };
 }
 

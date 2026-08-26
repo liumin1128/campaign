@@ -125,7 +125,7 @@ async function callDeepSeek(
   options?: { stream?: boolean; tools?: boolean; enableThinking?: boolean },
 ): Promise<Response> {
   const body: Record<string, unknown> = {
-    model: "deepseek-v4-pro",
+    model: "deepseek-v4-flash-vision-exp",
     thinking: buildThinkingConfig(options?.enableThinking ?? false),
     messages,
   };

@@ -150,8 +150,8 @@ async function requestDataQueries(args: {
       Authorization: `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
-      model: "deepseek-v4-pro",
-      thinking: { type: "enabled", reasoning_effort: "medium" },
+      model: "deepseek-v4-flash-vision-exp",
+      thinking: { type: "enabled", reasoning_effort: "max" },
       messages: [
         { role: "system", content: buildQuerySystemPrompt() },
         {

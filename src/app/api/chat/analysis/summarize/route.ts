@@ -20,7 +20,7 @@ interface SummarizeRequest {
 }
 
 type DeepSeekThinking =
-  | { type: "enabled"; reasoning_effort: "medium" }
+  | { type: "enabled"; reasoning_effort: "max" }
   | { type: "disabled" };
 
 export async function POST(request: Request) {
@@ -80,7 +80,7 @@ async function summarizeWithModel(args: {
       Authorization: `Bearer ${args.apiKey}`,
     },
     body: JSON.stringify({
-      model: "deepseek-v4-pro",
+      model: "deepseek-v4-flash-vision-exp",
       thinking: buildThinkingConfig(args.enableThinking),
       messages: [
         {
@@ -116,7 +116,7 @@ async function summarizeWithModel(args: {
 
 function buildThinkingConfig(enableThinking: boolean): DeepSeekThinking {
   return enableThinking
-    ? { type: "enabled", reasoning_effort: "medium" }
+    ? { type: "enabled", reasoning_effort: "max" }
     : { type: "disabled" };
 }
 
