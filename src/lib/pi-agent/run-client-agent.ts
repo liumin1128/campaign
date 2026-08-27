@@ -98,13 +98,8 @@ export async function runPiAgent(
   const unsubscribe = agent.subscribe((event) => {
     switch (event.type) {
       case "turn_start": {
-        const turn = budget.startModelTurn();
+        budget.startModelTurn();
         currentTurnText = "";
-        reasoning = appendCapped(
-          reasoning,
-          `${reasoning ? "\n\n" : ""}[Pi Agent] 第 ${turn}/${limits.maxModelTurns} 轮`,
-          MAX_REASONING_CHARS,
-        );
         notify();
         break;
       }
