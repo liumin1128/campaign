@@ -1,0 +1,739 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="description" content="/tab/chat 对话功能技术架构可视化：分层架构、发送分流、四条执行链路时序、状态存储与模块地图" />
+<title>/tab/chat 对话功能技术架构</title>
+<style>
+  :root {
+    --bg: #f4f6fa;
+    --surface: #ffffff;
+    --surface-2: #f8fafd;
+    --ink: #101828;
+    --muted: #5b6474;
+    --line: #dde3ec;
+    --line-strong: #b9c3d4;
+    --client: #2457d6;   --client-soft: #ecf2ff;   --client-line: #b9ccf5;
+    --server: #0d8a80;   --server-soft: #e8f7f5;   --server-line: #a8ddd6;
+    --external: #b26b06; --external-soft: #fff5e2; --external-line: #efd3a0;
+    --warn: #b45309;      --warn-soft: #fff7e0;
+    --risk: #b42318;      --risk-soft: #fdeeed;
+    --code-ink: #1e2b3c;
+    --radius: 10px;
+    --sidebar: 16rem;
+    --mono: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; scroll-padding-top: 1.25rem; }
+  body {
+    margin: 0; min-width: 20rem; background: var(--bg); color: var(--ink);
+    font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
+    font-size: 14.5px; line-height: 1.7;
+  }
+  a { color: var(--client); }
+  code { font-family: var(--mono); font-size: 0.86em; background: #eef1f6; border: 1px solid var(--line); border-radius: 4px; padding: 0.06em 0.35em; color: var(--code-ink); }
+  h1, h2, h3 { margin: 0; line-height: 1.3; }
+
+  /* ---------- layout ---------- */
+  .shell { display: grid; grid-template-columns: var(--sidebar) minmax(0, 1fr); min-height: 100dvh; }
+  .sidebar {
+    position: fixed; inset: 0 auto 0 0; z-index: 10; width: var(--sidebar);
+    overflow-y: auto; border-right: 1px solid var(--line); background: var(--surface);
+    padding: 1.25rem 1rem;
+  }
+  .brand { display: block; margin: 0 0 1.1rem; text-decoration: none; color: var(--ink); }
+  .brand strong { display: block; font-size: 1rem; }
+  .brand span { font-size: 0.75rem; color: var(--muted); font-family: var(--mono); }
+  .nav-title { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin: 1rem 0 0.4rem; }
+  .nav-list { list-style: none; margin: 0; padding: 0; }
+  .nav-list a {
+    display: block; padding: 0.42rem 0.6rem; border-radius: 6px; text-decoration: none;
+    color: var(--muted); font-size: 0.88rem; border-left: 2px solid transparent;
+  }
+  .nav-list a:hover { background: var(--surface-2); color: var(--ink); }
+  .nav-list a[aria-current="true"] { background: var(--client-soft); color: var(--client); border-left-color: var(--client); font-weight: 600; }
+  .sidebar-note { font-size: 0.74rem; color: var(--muted); margin-top: 1.1rem; border-top: 1px dashed var(--line); padding-top: 0.8rem; }
+
+  main { grid-column: 2; padding: 1.5rem clamp(1rem, 3vw, 2.5rem) 4rem; max-width: 78rem; }
+  section { margin-bottom: 3rem; scroll-margin-top: 1.25rem; }
+
+  .section-head h2 { font-size: 1.35rem; letter-spacing: -0.01em; }
+  .section-head p { margin: 0.3rem 0 1rem; color: var(--muted); }
+
+  .eyebrow { font-family: var(--mono); font-size: 0.78rem; color: var(--client); margin: 0 0 0.3rem; text-transform: uppercase; letter-spacing: 0.06em; }
+  .lead { font-size: 1.02rem; color: #374151; max-width: 62rem; }
+
+  /* ---------- overview ---------- */
+  .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr)); gap: 0.8rem; margin: 1.2rem 0; }
+  .summary-item { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 0.9rem 1rem; }
+  .summary-label { display: block; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+  .summary-value { display: block; font-size: 1.05rem; font-weight: 700; margin-top: 0.15rem; }
+  .summary-detail { display: block; font-size: 0.83rem; color: var(--muted); margin-top: 0.3rem; }
+
+  .callout, .important-note {
+    background: var(--client-soft); border: 1px solid var(--client-line); border-radius: var(--radius);
+    padding: 0.8rem 1rem; font-size: 0.92rem; margin: 1rem 0;
+  }
+  .important-note { background: var(--warn-soft); border-color: var(--external-line); }
+
+  .chips { display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 0.8rem 0 0; }
+  .chip {
+    font-family: var(--mono); font-size: 0.76rem; background: var(--surface-2);
+    border: 1px solid var(--line); border-radius: 999px; padding: 0.22rem 0.65rem; color: #334155;
+  }
+  .chip b { color: var(--ink); }
+
+  /* ---------- layer diagram ---------- */
+  .layer-diagram { display: grid; grid-template-columns: 1fr auto 1fr auto 1fr; gap: 0.6rem; align-items: stretch; }
+  .lane { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 0.8rem; display: flex; flex-direction: column; gap: 0.6rem; }
+  .lane.client { border-color: var(--client-line); }
+  .lane.server { border-color: var(--server-line); }
+  .lane.external { border-color: var(--external-line); }
+  .lane-title { display: flex; flex-direction: column; font-weight: 700; font-size: 0.95rem; }
+  .lane-title span { font-weight: 500; font-size: 0.68rem; letter-spacing: 0.08em; color: var(--muted); }
+  .lane.client .lane-title { color: var(--client); }
+  .lane.server .lane-title { color: var(--server); }
+  .lane.external .lane-title { color: var(--external); }
+
+  .node { border: 1px solid var(--line); border-radius: 8px; background: var(--surface-2); padding: 0.5rem 0.65rem; }
+  .node strong { display: block; font-size: 0.85rem; }
+  .node span { display: block; font-size: 0.76rem; color: var(--muted); margin-top: 0.1rem; }
+  .lane.client .node { border-color: var(--client-line); background: var(--client-soft); }
+  .lane.server .node { border-color: var(--server-line); background: var(--server-soft); }
+  .lane.external .node { border-color: var(--external-line); background: var(--external-soft); }
+
+  .lane-connector { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.35rem; color: var(--muted); font-size: 0.72rem; text-align: center; min-width: 5.2rem; }
+  .lane-connector .arrow { font-size: 1.15rem; color: var(--line-strong); font-weight: 700; }
+  .lane-connector code { font-size: 0.68rem; }
+
+  .boundary-note { display: grid; grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr)); gap: 0.7rem; margin-top: 1rem; }
+  .mini-note { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 0.6rem 0.75rem; font-size: 0.82rem; color: #334155; }
+  .mini-note strong { color: var(--ink); }
+
+  /* ---------- decision flow ---------- */
+  .flow { display: flex; flex-direction: column; align-items: center; gap: 0; max-width: 46rem; margin: 0 auto; }
+  .flow-node {
+    width: 100%; border: 1px solid var(--line); background: var(--surface); border-radius: 9px;
+    padding: 0.55rem 0.85rem; font-size: 0.85rem;
+  }
+  .flow-node .t { font-weight: 700; }
+  .flow-node .s { display: block; font-size: 0.78rem; color: var(--muted); }
+  .flow-node.cond { background: var(--client-soft); border-color: var(--client-line); }
+  .flow-node.engine { border-color: var(--server-line); background: var(--server-soft); }
+  .flow-node.fallback { border-color: var(--external-line); background: var(--external-soft); }
+  .flow-branch { display: none; }
+  .flow-arrow { width: 2px; height: 1.1rem; background: var(--line-strong); position: relative; }
+  .flow-arrow::after { content: ""; position: absolute; bottom: -1px; left: -3.5px; border: 4px solid transparent; border-top-color: var(--line-strong); }
+  .flow-label { font-size: 0.7rem; color: var(--muted); font-family: var(--mono); background: var(--surface); border: 1px solid var(--line); border-radius: 4px; padding: 0.05rem 0.4rem; margin: 0.25rem 0; transform: translateY(-50%); z-index: 1; }
+  .flow-gap { display: flex; flex-direction: column; align-items: center; width: 100%; }
+  .flow-fork { display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem; width: 100%; }
+  .flow-row { display: grid; grid-template-columns: 8rem 1fr; gap: 0.8rem; align-items: center; width: 100%; }
+  .flow-row .tag { font-family: var(--mono); font-size: 0.72rem; color: var(--client); text-align: right; }
+  .engines { display: grid; grid-template-columns: repeat(auto-fit, minmax(21rem, 1fr)); gap: 0.9rem; margin-top: 1.2rem; }
+  .engine-card { background: var(--surface); border: 1px solid var(--line); border-left-width: 4px; border-radius: var(--radius); padding: 0.8rem 1rem; }
+  .engine-card.p1 { border-left-color: var(--client); }
+  .engine-card.p2 { border-left-color: var(--server); }
+  .engine-card.p3 { border-left-color: var(--external); }
+  .engine-card.p4 { border-left-color: var(--line-strong); }
+  .engine-card h3 { font-size: 0.95rem; }
+  .engine-card h3 small { font-weight: 500; color: var(--muted); font-size: 0.72rem; margin-left: 0.4rem; font-family: var(--mono); }
+  .engine-card p { margin: 0.3rem 0; font-size: 0.83rem; color: #374151; }
+  .condition { font-family: var(--mono); font-size: 0.74rem; background: var(--surface-2); border: 1px solid var(--line); border-radius: 6px; padding: 0.3rem 0.55rem; margin: 0.45rem 0; overflow-wrap: anywhere; }
+
+  /* ---------- sequences ---------- */
+  .tabs { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-bottom: 0.9rem; }
+  .tab-button {
+    font: inherit; font-size: 0.85rem; border: 1px solid var(--line); background: var(--surface);
+    border-radius: 999px; padding: 0.35rem 0.95rem; cursor: pointer; color: var(--muted);
+  }
+  .tab-button[aria-selected="true"] { background: var(--client); border-color: var(--client); color: #fff; font-weight: 600; }
+  .tab-button:focus-visible { outline: 2px solid var(--client); outline-offset: 2px; }
+
+  .ribbon { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem; margin-bottom: 0.9rem; font-size: 0.78rem; }
+  .ribbon .rc { border-radius: 6px; padding: 0.22rem 0.6rem; font-weight: 600; font-size: 0.76rem; }
+  .rc.local { background: var(--client-soft); color: var(--client); border: 1px solid var(--client-line); }
+  .rc.server { background: var(--server-soft); color: var(--server); border: 1px solid var(--server-line); }
+  .rc.external { background: var(--external-soft); color: var(--external); border: 1px solid var(--external-line); }
+  .ribbon .sep { color: var(--line-strong); font-weight: 700; }
+
+  .trace { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
+  .trace-head, .trace-row { display: grid; grid-template-columns: 2.2rem 8.5rem 1fr 12rem; gap: 0.6rem; padding: 0.5rem 0.8rem; align-items: start; }
+  .trace-head { background: var(--surface-2); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); font-weight: 600; border-bottom: 1px solid var(--line); }
+  .trace-row { border-top: 1px solid var(--line); font-size: 0.83rem; }
+  .trace-row:first-of-type { border-top: 0; }
+  .trace-index { font-family: var(--mono); color: var(--client); font-weight: 700; }
+  .trace-actor { font-weight: 600; font-family: var(--mono); font-size: 0.78rem; }
+  .trace-output { font-size: 0.76rem; color: var(--muted); font-family: var(--mono); overflow-wrap: anywhere; }
+
+  /* ---------- state table ---------- */
+  .table-wrap { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 0.83rem; }
+  th, td { text-align: left; padding: 0.55rem 0.8rem; border-bottom: 1px solid var(--line); vertical-align: top; }
+  thead th { background: var(--surface-2); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); }
+  tbody tr:last-child td { border-bottom: 0; }
+  .badge { display: inline-block; font-size: 0.72rem; border-radius: 999px; padding: 0.1rem 0.55rem; font-weight: 600; }
+  .badge.persist { background: #eafaf0; color: #1a7f4b; border: 1px solid #bfe6d0; }
+  .badge.local { background: var(--client-soft); color: var(--client); border: 1px solid var(--client-line); }
+  .badge.volatile { background: var(--warn-soft); color: var(--warn); border: 1px solid var(--external-line); }
+
+  /* ---------- file map ---------- */
+  .file-groups { display: grid; grid-template-columns: repeat(auto-fit, minmax(22rem, 1fr)); gap: 1rem; }
+  .file-group { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 0.8rem 1rem; }
+  .file-group h3 { font-size: 0.92rem; margin-bottom: 0.5rem; }
+  .file-item { padding: 0.4rem 0; border-top: 1px dashed var(--line); }
+  .file-item:first-of-type { border-top: 0; }
+  .file-item a { font-family: var(--mono); font-size: 0.78rem; text-decoration: none; overflow-wrap: anywhere; }
+  .file-item a:hover { text-decoration: underline; }
+  .file-item span { display: block; font-size: 0.76rem; color: var(--muted); }
+
+  /* ---------- insights ---------- */
+  .insight-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(19rem, 1fr)); gap: 0.9rem; }
+  .insight { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 0.8rem 1rem; }
+  .insight.fact { border-top: 3px solid var(--server); }
+  .insight.risk { border-top: 3px solid var(--risk); }
+  .insight h3 { font-size: 0.92rem; }
+  .insight p { margin: 0.35rem 0 0; font-size: 0.82rem; color: #374151; }
+
+  footer { color: var(--muted); font-size: 0.78rem; border-top: 1px solid var(--line); padding-top: 1rem; margin-top: 2rem; }
+
+  @media (max-width: 60rem) {
+    .shell { grid-template-columns: 1fr; }
+    .sidebar { position: static; width: auto; border-right: 0; border-bottom: 1px solid var(--line); }
+    main { grid-column: 1; }
+    .layer-diagram { grid-template-columns: 1fr; }
+    .lane-connector { flex-direction: row; min-width: 0; }
+    .trace-head { display: none; }
+    .trace-row { grid-template-columns: 1.6rem 1fr; }
+    .trace-output { grid-column: 2; }
+  }
+</style>
+</head>
+<body>
+<a class="skip-link" href="#overview" style="position:fixed;top:0.5rem;left:0.5rem;transform:translateY(-200%);">跳转到正文</a>
+
+<div class="shell">
+  <aside class="sidebar" aria-label="目录">
+    <a class="brand" href="#overview">
+      <strong>/tab/chat 对话架构</strong>
+      <span>docs/chat-architecture.html</span>
+    </a>
+    <p class="nav-title">Contents</p>
+    <nav>
+      <ul class="nav-list">
+        <li><a href="#overview">概览与关键数字</a></li>
+        <li><a href="#architecture">分层架构图</a></li>
+        <li><a href="#routing">一次发送的分流</a></li>
+        <li><a href="#sequences">四条执行链路时序</a></li>
+        <li><a href="#state">状态与存储矩阵</a></li>
+        <li><a href="#modules">模块地图</a></li>
+        <li><a href="#insights">关键设计与风险</a></li>
+      </ul>
+    </nav>
+    <p class="sidebar-note">
+      基于当前工作区源码静态梳理。图中的「本地」指浏览器主线程、Web Worker、sessionStorage 或 localStorage。
+      全部事实以 <code>src/hooks/use-chat.ts</code> 与 <code>src/app/api/**</code> 为准。
+    </p>
+  </aside>
+
+  <main id="main">
+    <!-- ============ 1. overview ============ -->
+    <section class="intro" id="overview">
+      <p class="eyebrow">src/app/tab/chat/page.tsx → useChat()</p>
+      <h1>/tab/chat AI 对话功能技术架构</h1>
+      <p class="lead">
+        这是一个「<strong>浏览器负责会话编排与本地文件计算，Next.js 服务端负责密钥隔离与模型网关</strong>」的混合架构。
+        核心调度器是 <code>useChat()</code>，一次发送会按优先级被分配到四套执行引擎之一。
+      </p>
+
+      <div class="summary-grid" aria-label="架构摘要">
+        <article class="summary-item">
+          <span class="summary-label">入口与编排</span>
+          <span class="summary-value">Client Component + useChat</span>
+          <span class="summary-detail">页面只组合 UI；消息、路由、SSE 流、附件、记忆与取消全部由 Hook 协调。</span>
+        </article>
+        <article class="summary-item">
+          <span class="summary-label">执行引擎</span>
+          <span class="summary-value">4 条主链路</span>
+          <span class="summary-detail">普通 SSE · Pi Agent 工具循环 · CSV 本地分析循环 · 长期记忆闭环。</span>
+        </article>
+        <article class="summary-item">
+          <span class="summary-label">数据边界</span>
+          <span class="summary-value">原始文件留在浏览器</span>
+          <span class="summary-detail">模型只接收提示词、文件描述、样例与有界查询结果；API 密钥只在服务端。</span>
+        </article>
+        <article class="summary-item">
+          <span class="summary-label">持久化</span>
+          <span class="summary-value">无数据库</span>
+          <span class="summary-detail">会话在 sessionStorage，长期记忆在 localStorage，原始文件仅在 Worker 内存。</span>
+        </article>
+      </div>
+
+      <div class="callout">
+        <strong>一句话运行原理</strong>
+        <p>
+          用户发送后 <code>handleSend()</code> 先组装引用、长期记忆与 Agent 提示词，再按
+          「Thinking / 联网 / 文件附件 / CSV」条件选择引擎；执行过程把 reasoning/content 增量写回当前会话，
+          成功后异步排队更新长期记忆，失败或停止时按链路语义降级。
+        </p>
+      </div>
+
+      <h3>关键数字</h3>
+      <div class="chips">
+        <span class="chip">会话上限 <b>20</b></span>
+        <span class="chip">Pi Agent <b>12 回合 / 24 工具 / 5 搜索</b></span>
+        <span class="chip">CSV ≤ <b>50MB</b>，查询循环 ≤ <b>12 轮</b>，每轮 ≤ <b>8 个查询</b></span>
+        <span class="chip">普通消息压缩至最近 <b>12 条</b></span>
+        <span class="chip">Pi 历史 ≤ <b>24 条</b>（每条 120k 字符）</span>
+        <span class="chip">记忆 Prompt ≤ <b>2,000 字符</b>，来源 ≤ <b>16 条</b></span>
+        <span class="chip">记忆保留 <b>180 天</b>，每用户 ≤ <b>100 条</b></span>
+        <span class="chip">/api/chat 限时 <b>180s</b>，工具协商 ≤ <b>5 轮</b></span>
+        <span class="chip">QuickJS 沙箱 <b>32MB / 1.5s</b></span>
+      </div>
+    </section>
+
+    <!-- ============ 2. architecture ============ -->
+    <section id="architecture">
+      <div class="section-head">
+        <h2>分层架构图</h2>
+        <p>三层职责：浏览器（编排 + 本地工具）↔ Next.js Route Handler（BFF + 模型网关）↔ 外部 Provider。</p>
+      </div>
+
+      <div class="layer-diagram" role="group" aria-label="浏览器、Next.js 服务端与外部服务三层架构">
+        <div class="lane client">
+          <div class="lane-title">浏览器 <span>CLIENT RUNTIME</span></div>
+          <div class="node"><strong>ChatPage + 15 个 UI 组件</strong><span>Session/Agent 选择器、MessageBubble、ChatInput、DevPanel、MemoryPanel…</span></div>
+          <div class="node"><strong>useChat() 编排器</strong><span>发送分流、提示词构造、SSE 消费、附件与错误处理（~2,300 行）</span></div>
+          <div class="node"><strong>Zustand Stores + refs</strong><span>会话 / 草稿 / 引用 / 记忆 / 请求令牌 / 活动文件上下文</span></div>
+          <div class="node"><strong>Pi Agent Runtime</strong><span>@earendil-works/pi-agent-core：模型回合与工具回合在浏览器编排，工具并行</span></div>
+          <div class="node"><strong>Web Workers × 3 套</strong><span>CSV Worker（全量行 + 查询）、File Worker（通用文件检索）、Script Worker（QuickJS 沙箱）</span></div>
+        </div>
+
+        <div class="lane-connector" aria-hidden="true">
+          <span class="arrow">⇄</span><code>fetch + SSE</code>
+        </div>
+
+        <div class="lane server">
+          <div class="lane-title">Next.js 服务端 <span>ROUTE HANDLERS</span></div>
+          <div class="node"><strong>POST /api/chat</strong><span>普通对话 SSE；可选服务端 search_web 工具协商（≤5 轮）</span></div>
+          <div class="node"><strong>POST /api/stream</strong><span>Pi Agent 单模型回合流式代理（DeepSeek 流，含重试）</span></div>
+          <div class="node"><strong>GET /api/pi-agent/config</strong><span>下发模型、思考级别与 Pi/File 限制（可被 env 覆盖）</span></div>
+          <div class="node"><strong>POST /api/pi-agent/tools/web-search</strong><span>代理 Tavily，返回结果 + 可信度 + 核验摘要</span></div>
+          <div class="node"><strong>POST /api/chat/analysis/query · combine</strong><span>CSV 查询规划与多文件综合，不接收原始 CSV 内容</span></div>
+          <div class="node"><strong>POST /api/chat/memory/summarize</strong><span>增量压缩为结构化长期记忆（JSON 输出 + 敏感过滤）</span></div>
+          <div class="node"><strong>（保留）/analysis/plan · /analysis/summarize</strong><span>旧版固定 plan→execute 链路，当前主流程未使用</span></div>
+        </div>
+
+        <div class="lane-connector" aria-hidden="true">
+          <span class="arrow">⇄</span><code>OpenAI-compatible API</code>
+        </div>
+
+        <div class="lane external">
+          <div class="lane-title">外部服务 <span>PROVIDERS</span></div>
+          <div class="node"><strong>DeepSeek API</strong><span>deepseek-v4-flash-vision-exp；文本 + 图像输入，thinking 可配 max，1M 上下文</span></div>
+          <div class="node"><strong>Tavily API</strong><span>实时搜索、来源正文、发布时点、可信度标注与核验摘要</span></div>
+        </div>
+      </div>
+
+      <div class="boundary-note">
+        <div class="mini-note"><strong>密钥隔离：</strong>DeepSeek / Tavily 密钥仅由服务端 <code>getDeepSeekApiKey()</code> 等读取，不会进入客户端 bundle。</div>
+        <div class="mini-note"><strong>原始文件不出浏览器：</strong>CSV 全量行与通用文件都保存在 Web Worker；模型只看到描述、样例、被工具选中的有界结果。</div>
+        <div class="mini-note"><strong>无服务端会话存储：</strong>消息与记忆不落库；刷新后聊天记录仍在（sessionStorage），但 Worker 中的文件上下文会丢失。</div>
+      </div>
+    </section>
+
+    <!-- ============ 3. routing ============ -->
+    <section id="routing">
+      <div class="section-head">
+        <h2>一次发送的分流</h2>
+        <p>分流逻辑在 <code>src/hooks/use-chat.ts</code> 的 <code>handleSend()</code>，严格按优先级提前返回。</p>
+      </div>
+
+      <div class="flow" aria-label="发送前置处理与引擎选择">
+        <div class="flow-node"><span class="t">① 前置校验</span><span class="s">空内容且无附件 · 无会话 · 该会话已有请求 · 附件尚未就绪 → 直接返回</span></div>
+        <div class="flow-arrow" aria-hidden="true"></div>
+        <div class="flow-node"><span class="t">② 引用消息拼接</span><span class="s">quotedMessages 以 blockquote 前缀并入用户消息</span></div>
+        <div class="flow-arrow" aria-hidden="true"></div>
+        <div class="flow-node"><span class="t">③ 附件分类与任务路由</span><span class="s">csv-analysis（CSV 本地分析件）· file（通用文件）· classifyPiTask 正则判断「联网意向 / 文件上下文引用」</span></div>
+        <div class="flow-arrow" aria-hidden="true"></div>
+        <div class="flow-node"><span class="t">④ 记忆检索</span><span class="s">selectMemoryContext → 当前会话摘要 + 相关历史（≤3）+ 稳定偏好（≤6）→ memoryPrompt（≤2000 字符）</span></div>
+        <div class="flow-arrow" aria-hidden="true"></div>
+        <div class="flow-node cond"><span class="t">⑤ 引擎选择（第一个命中）</span><span class="s">条件见下方四张卡片，命中后写入用户消息 + 占位助手消息并立即返回</span></div>
+      </div>
+
+      <div class="engines">
+        <article class="engine-card p1">
+          <h3>Pi Agent 工具循环 <small>P1</small></h3>
+          <div class="condition">enableThinking || requestsWebSearch || genericFileAttachments &gt; 0 || shouldUseFileContexts</div>
+          <p><code>handlePiThinkingSend()</code> → 浏览器端 Agent 多回合运行，模型经 <code>/api/stream</code> 代理。</p>
+          <p>开启 Thinking、明确要求联网、或携带通用文件附件时，整条消息切换为引擎 1 —— thinking 是架构开关而非参数。</p>
+        </article>
+
+        <article class="engine-card p2">
+          <h3>新 CSV 本地分析 <small>P2</small></h3>
+          <div class="condition">csvAnalysisAttachments.length &gt; 0</div>
+          <p><code>handleCsvAnalysisSend()</code> → 对每个新上传 CSV 执行「模型规划查询 → Worker 本地执行」循环，多文件最后综合。</p>
+          <p>仅当未命中 P1 时进入；发送前要求字段画像已就绪（profiled）。</p>
+        </article>
+
+        <article class="engine-card p3">
+          <h3>CSV 上下文追问 <small>P3</small></h3>
+          <div class="condition">activeCsvContexts.length &gt; 0</div>
+          <p><code>handleCsvContextFollowup()</code> → 复用页面生命周期内保存的 CSV Worker 与已有查询结果，继续有界查询。</p>
+          <p>上下文存于 <code>csvContextsRef</code>（按 sessionId 分桶），刷新页面后不可恢复。</p>
+        </article>
+
+        <article class="engine-card p4">
+          <h3>普通对话 SSE <small>P4</small></h3>
+          <div class="condition">otherwise</div>
+          <p><code>POST /api/chat</code> → 无工具时直接流式；Agent 配置 <code>enableSearch</code> 时由服务端执行工具协商。</p>
+          <p>最短路径：客户端消费归一化的 reasoning / content / done 事件。</p>
+        </article>
+      </div>
+
+      <div class="important-note">
+        <strong>容易误解的「双搜索入口」：</strong>
+        用户显式说「联网 / 搜索新闻」会被正则送入 P1（浏览器端 <code>web_search</code> 工具 + Tavily 代理）；
+        而选择「市场分析 / 营销策划」等 Agent 且未提联网词时走 P4，由服务端 <code>enableSearch</code> 驱动
+        <code>search_web</code> tool-calling。两条链路调用同一个 Tavily 搜索，但协商位置不同。
+      </div>
+    </section>
+
+    <!-- ============ 4. sequences ============ -->
+    <section id="sequences">
+      <div class="section-head">
+        <h2>四条执行链路时序</h2>
+        <p>切页查看每条链路的参与者、动作与产物；角色颜色：本地（蓝）· 服务端（青）· 外部（琥珀）。</p>
+      </div>
+
+      <div class="tabs" role="tablist" aria-label="运行时序类型">
+        <button class="tab-button" type="button" role="tab" id="tab-normal" aria-controls="panel-normal" aria-selected="true" data-tab="normal">普通 SSE</button>
+        <button class="tab-button" type="button" role="tab" id="tab-pi" aria-controls="panel-pi" aria-selected="false" data-tab="pi">Pi Agent</button>
+        <button class="tab-button" type="button" role="tab" id="tab-csv" aria-controls="panel-csv" aria-selected="false" data-tab="csv">CSV 本地分析</button>
+        <button class="tab-button" type="button" role="tab" id="tab-memory" aria-controls="panel-memory" aria-selected="false" data-tab="memory">长期记忆</button>
+      </div>
+
+      <!-- 普通 SSE -->
+      <div class="tab-panel" role="tabpanel" id="panel-normal" aria-labelledby="tab-normal" data-panel="normal">
+        <div class="ribbon" aria-hidden="true">
+          <span class="rc local">Chat UI</span><span class="sep">→</span>
+          <span class="rc local">useChat</span><span class="sep">→</span>
+          <span class="rc server">/api/chat</span><span class="sep">→</span>
+          <span class="rc external">DeepSeek</span><span class="sep">→</span>
+          <span class="rc local">SSE → Zustand</span><span class="sep">→</span>
+          <span class="rc local">记忆队列</span>
+        </div>
+        <div class="trace">
+          <div class="trace-head"><span>#</span><span>执行者</span><span>动作</span><span>产物</span></div>
+          <div class="trace-row"><span class="trace-index">1</span><span class="trace-actor">useChat</span><span class="trace-action">创建 user 消息 + 空 assistant 占位，立即写入当前会话。</span><span class="trace-output">updatedMessages</span></div>
+          <div class="trace-row"><span class="trace-index">2</span><span class="trace-actor">useChat</span><span class="trace-action">组装 system prompt；存在当前会话记忆时历史压缩到最近 12 条；附件 content 拼入用户消息。</span><span class="trace-output">messages[]</span></div>
+          <div class="trace-row"><span class="trace-index">3</span><span class="trace-actor">/api/chat</span><span class="trace-action">无搜索 → 直接请求 DeepSeek 流；启用搜索 → 先非流式工具协商 ≤5 轮：模型返回 tool_calls 或完整答复（含 DSML 格式兼容解析）。</span><span class="trace-output">DeepSeek response</span></div>
+          <div class="trace-row"><span class="trace-index">4</span><span class="trace-actor">/api/chat</span><span class="trace-action">执行 search_web（≤5 次重试、3s→6s 退避、≤10 条结果、单条详情 ≤2200 字符），并把供应商 SSE 归一化为 reasoning / content / done / error。</span><span class="trace-output">text/event-stream</span></div>
+          <div class="trace-row"><span class="trace-index">5</span><span class="trace-actor">useChat</span><span class="trace-action">按行解析 data:，累加 reasoning 与 content，每个增量更新同一个 assistant 消息。</span><span class="trace-output">Zustand update</span></div>
+          <div class="trace-row"><span class="trace-index">6</span><span class="trace-actor">Memory</span><span class="trace-action">答案非错误时后台排队生成会话摘要，主回复不等待记忆写入。</span><span class="trace-output">scheduleMemoryUpdate()</span></div>
+        </div>
+      </div>
+
+      <!-- Pi Agent -->
+      <div class="tab-panel" role="tabpanel" id="panel-pi" aria-labelledby="tab-pi" data-panel="pi" hidden>
+        <div class="ribbon" aria-hidden="true">
+          <span class="rc local">Browser Agent</span><span class="sep">→</span>
+          <span class="rc server">/api/stream</span><span class="sep">→</span>
+          <span class="rc external">DeepSeek</span><span class="sep">→</span>
+          <span class="rc local">工具执行</span><span class="sep">→</span>
+          <span class="rc local">下一回合</span><span class="sep">→</span>
+          <span class="rc local">最终答案</span>
+        </div>
+        <div class="trace">
+          <div class="trace-head"><span>#</span><span>执行者</span><span>动作</span><span>产物</span></div>
+          <div class="trace-row"><span class="trace-index">1</span><span class="trace-actor">runPiAgent</span><span class="trace-action">读服务端预算（/api/pi-agent/config），创建浏览器 Agent；系统提示词追加循环规则、预算约束、文件目录。</span><span class="trace-output">Agent state</span></div>
+          <div class="trace-row"><span class="trace-index">2</span><span class="trace-actor">streamProxy</span><span class="trace-action">每个模型回合把 context POST 到 /api/stream；服务端持密钥调用 DeepSeek 并把 AI 事件转成代理事件。</span><span class="trace-output">SSE proxy events</span></div>
+          <div class="trace-row"><span class="trace-index">3</span><span class="trace-actor">Browser Agent</span><span class="trace-action">turn_start / thinking_delta / text_delta 实时回写消息；toolcall 交给客户端工具执行（可并行）。</span><span class="trace-output">AgentEvent</span></div>
+          <div class="trace-row"><span class="trace-index">4</span><span class="trace-actor">客户端工具</span><span class="trace-action">web_search（Tavily 代理）· query_large_file（旧版大 CSV）· inspect/search/read/query_file（通用文件）· run_analysis_script（QuickJS 沙箱，32MB/1.5s）。</span><span class="trace-output">bounded JSON</span></div>
+          <div class="trace-row"><span class="trace-index">5</span><span class="trace-actor">Budget</span><span class="trace-action">beforeToolCall 拦截：12 模型回合 / 24 工具调用 / 5 次搜索，超限时向模型给出「用现有证据作答」的指令。</span><span class="trace-output">blocked reason</span></div>
+          <div class="trace-row"><span class="trace-index">6</span><span class="trace-actor">Browser Agent</span><span class="trace-action">无更多工具结果、达到预算或被 abort 时收束；turn_end 汇总当前话，agent_end 取最后助手文本。</span><span class="trace-output">finalContent + reasoning</span></div>
+        </div>
+      </div>
+
+      <!-- CSV -->
+      <div class="tab-panel" role="tabpanel" id="panel-csv" aria-labelledby="tab-csv" data-panel="csv" hidden>
+        <div class="ribbon" aria-hidden="true">
+          <span class="rc local">CSV Worker 画像</span><span class="sep">→</span>
+          <span class="rc server">/analysis/query</span><span class="sep">→</span>
+          <span class="rc local">Worker 查询</span><span class="sep">→</span>
+          <span class="rc server">query / combine</span><span class="sep">→</span>
+          <span class="rc local">最终答案</span>
+        </div>
+        <div class="trace">
+          <div class="trace-head"><span>#</span><span>执行者</span><span>动作</span><span>产物</span></div>
+          <div class="trace-row"><span class="trace-index">1</span><span class="trace-actor">CSV Worker</span><span class="trace-action">上传即在浏览器解析 ≤50MB CSV：字段类型/语义识别、样例 20 行、数据质量画像（耗时、列名、编码、缺失）。</span><span class="trace-output">CsvProfile + rows</span></div>
+          <div class="trace-row"><span class="trace-index">2</span><span class="trace-actor">/analysis/query</span><span class="trace-action">只收压缩画像 + 问题 + 已有结果 + 阶段摘要；模型返回 ≤8 个有界查询（校验并补全）或直接 finalAnswer；含 force_final 与本地后备聚合。</span><span class="trace-output">QueryDecision</span></div>
+          <div class="trace-row"><span class="trace-index">3</span><span class="trace-actor">CSV Worker</span><span class="trace-action">本地执行 rows / columns / filterRows / distinctValues / columnStats / aggregate；原始 CSV 不上传。</span><span class="trace-output">CsvDataQueryResult[]</span></div>
+          <div class="trace-row"><span class="trace-index">4</span><span class="trace-actor">useChat</span><span class="trace-action">把结果压缩为阶段性结论，去重查询键，再请求模型；单文件最多 12 轮。</span><span class="trace-output">stageSummaries[]</span></div>
+          <div class="trace-row"><span class="trace-index">5</span><span class="trace-actor">/analysis/combine</span><span class="trace-action">多文件时逐文件分析完成后，把各文件压缩结论交给模型交叉综合；无密钥时用本地兜底摘要。</span><span class="trace-output">combined summary</span></div>
+          <div class="trace-row"><span class="trace-index">6</span><span class="trace-actor">useChat</span><span class="trace-action">更新上下文（csvContextsRef）供追问复用；清空待发送附件；后台排程记忆更新。</span><span class="trace-output">ActiveCsvContext[]</span></div>
+        </div>
+      </div>
+
+      <!-- Memory -->
+      <div class="tab-panel" role="tabpanel" id="panel-memory" aria-labelledby="tab-memory" data-panel="memory" hidden>
+        <div class="ribbon" aria-hidden="true">
+          <span class="rc local">发送前检索</span><span class="sep">→</span>
+          <span class="rc local">注入 Prompt</span><span class="sep">→</span>
+          <span class="rc external">生成答案</span><span class="sep">→</span>
+          <span class="rc server">摘要 API</span><span class="sep">→</span>
+          <span class="rc local">localStorage</span>
+        </div>
+        <div class="trace">
+          <div class="trace-head"><span>#</span><span>执行者</span><span>动作</span><span>产物</span></div>
+          <div class="trace-row"><span class="trace-index">1</span><span class="trace-actor">Retrieval</span><span class="trace-action">发送前按 ownerKey（teams:tenant:user 或 browser）筛选 180 天内的记忆：当前会话摘要 + 相关历史 ≤3 + 稳定偏好 ≤6。</span><span class="trace-output">MemorySelection</span></div>
+          <div class="trace-row"><span class="trace-index">2</span><span class="trace-actor">Scoring</span><span class="trace-action">基于标签/词项包含 + 时效（30 天衰减）+ 相同 Agent + confidence 的加权评分；不是向量检索。</span><span class="trace-output">score &gt; 0</span></div>
+          <div class="trace-row"><span class="trace-index">3</span><span class="trace-actor">Prompt</span><span class="trace-action">以「历史用户参考信息（不可信）」追加到 system prompt，≤2000 字符；存在当前摘要时历史压缩到最近 12 条。</span><span class="trace-output">memoryPrompt</span></div>
+          <div class="trace-row"><span class="trace-index">4</span><span class="trace-actor">Queue</span><span class="trace-action">成功回复后按 owner+session 串行排队，仅增量总结 sourceMessageIds 之后的新消息（≤16 条、≤500 字符/条）。</span><span class="trace-output">sourceMessages</span></div>
+          <div class="trace-row"><span class="trace-index">5</span><span class="trace-actor">Summarizer</span><span class="trace-action">服务端要求输出结构化 JSON（summary/goals/preferences/constraints/decisions/openItems/tags/confidence），过滤密钥、邮箱、Webhook、引用文本与行级业务数据；失败重试 2 次。</span><span class="trace-output">ConversationMemory</span></div>
+          <div class="trace-row"><span class="trace-index">6</span><span class="trace-actor">Retention</span><span class="trace-action">按 owner 隔离，每 owner ≤100 条、保留 180 天；关闭开关时丢弃草稿并失效所有在途摘要任务。</span><span class="trace-output">chat-memory-store</span></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ 5. state ============ -->
+    <section id="state">
+      <div class="section-head">
+        <h2>状态与存储矩阵</h2>
+        <p>判断「刷新后还在不在」比理解组件树更关键：状态分散在四类存储中。</p>
+      </div>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>数据</th><th>位置</th><th>生命周期</th><th>关键行为</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>会话、消息、Agent、草稿、引用、语言、Thinking</td>
+              <td><code>chat-store</code> / sessionStorage</td>
+              <td><span class="badge persist">同标签页会话</span></td>
+              <td>手动 rehydrate；≤20 会话；第一条用户消息自动成为标题；每条消息保留 attachments 中的文件摘要。</td>
+            </tr>
+            <tr>
+              <td>长期记忆</td>
+              <td><code>chat-memory-store</code> / localStorage</td>
+              <td><span class="badge persist">跨刷新与重开</span></td>
+              <td>按 Teams 用户或 browser owner 隔离；100 条 / 180 天；用于发送前的记忆 Prompt。</td>
+            </tr>
+            <tr>
+              <td>Dev 提示词覆盖</td>
+              <td><code>prompt-override-store</code> / localStorage</td>
+              <td><span class="badge persist">长期本地</span></td>
+              <td>覆盖全局规则或单个 Agent 专属提示词，DevPanel 中可编辑。</td>
+            </tr>
+            <tr>
+              <td>待发送附件（已注册文件）</td>
+              <td><code>useSessionAttachments</code> React state</td>
+              <td><span class="badge volatile">页面内存</span></td>
+              <td>按 session 分桶；切换会话保留，页面卸载即丢。</td>
+            </tr>
+            <tr>
+              <td>原始通用文件（File 对象）</td>
+              <td>每文件一个 File Worker</td>
+              <td><span class="badge local">页面生命周期</span></td>
+              <td>发送后仅持久化 descriptor（含 ≤2000 字符样例）；刷新后追问需重新上传。</td>
+            </tr>
+            <tr>
+              <td>CSV 全量 rows 与画像</td>
+              <td>每 CSV 一个 Worker</td>
+              <td><span class="badge local">页面生命周期</span></td>
+              <td>Worker 内执行有界查询；持久化消息不含原始 rows。</td>
+            </tr>
+            <tr>
+              <td>活动 CSV / 文件上下文</td>
+              <td><code>csvContextsRef</code> / <code>fileContextsRef</code></td>
+              <td><span class="badge volatile">页面内存</span></td>
+              <td>用于追问；删除会话或卸载时释放对应 Worker。</td>
+            </tr>
+            <tr>
+              <td>进行中请求 + AbortController</td>
+              <td><code>SessionRequestRegistry</code></td>
+              <td><span class="badge volatile">请求期间</span></td>
+              <td>每会话同时只允许 1 个请求；不同会话可并发生成；停止只影响当前会话。</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ============ 6. modules ============ -->
+    <section id="modules">
+      <div class="section-head">
+        <h2>模块地图</h2>
+        <p>按「入口 → 编排 → 引擎 → 服务端 → 存储」顺序阅读，最快建立完整调用链。</p>
+      </div>
+
+      <div class="file-groups">
+        <div class="file-group">
+          <h3>入口与 UI（纯展示）</h3>
+          <div class="file-item"><a href="../src/app/tab/chat/page.tsx">src/app/tab/chat/page.tsx</a><span>会话列表侧栏、消息滚动、DevPanel 联动；不含业务规则。</span></div>
+          <div class="file-item"><a href="../src/components/chat/types.ts">src/components/chat/types.ts</a><span>Message / AgentOption / FileAttachment / QuotedMessage。</span></div>
+          <div class="file-item"><a href="../src/components/chat/i18n.ts">src/components/chat/i18n.ts</a><span>4 个 Agent 定义、专属 system prompt、enableSearch 开关、双语文案。</span></div>
+          <div class="file-item"><a href="../src/components/chat/system-prompts.ts">src/components/chat/system-prompts.ts</a><span>GLOBAL_EMPHASIS 全局规则 + 联网角色提示词常量。</span></div>
+          <div class="file-item"><a href="../src/components/chat/dev-panel.tsx">src/components/chat/dev-panel.tsx</a><span>调试面板：请求体、系统提示词、记忆状态。</span></div>
+        </div>
+
+        <div class="file-group">
+          <h3>编排层（复杂度集中点）</h3>
+          <div class="file-item"><a href="../src/hooks/use-chat.ts">src/hooks/use-chat.ts</a><span>发送分流、提示词组装、SSE 消费、CSV/文件工作流、取消。</span></div>
+          <div class="file-item"><a href="../src/lib/chat/session-request-registry.ts">src/lib/chat/session-request-registry.ts</a><span>每会话互斥请求、AbortController、跨会话并发隔离。</span></div>
+          <div class="file-item"><a href="../src/hooks/use-session-attachments.ts">src/hooks/use-session-attachments.ts</a><span>待发送附件按会话分桶管理。</span></div>
+          <div class="file-item"><a href="../src/store/chat-store.ts">src/store/chat-store.ts</a><span>会话模型、标题生成、草稿、引用与 sessionStorage 持久化。</span></div>
+        </div>
+
+        <div class="file-group">
+          <h3>Pi Agent 引擎</h3>
+          <div class="file-item"><a href="../src/lib/pi-agent/run-client-agent.ts">src/lib/pi-agent/run-client-agent.ts</a><span>浏览器 Agent 初始化、事件订阅、历史转换、预算与 abort 联动。</span></div>
+          <div class="file-item"><a href="../src/lib/pi-agent/tools.ts">src/lib/pi-agent/tools.ts</a><span>web_search / query_large_file / run_analysis_script 工具与 TypeBox 参数校验。</span></div>
+          <div class="file-item"><a href="../src/lib/pi-agent/task-routing.ts">src/lib/pi-agent/task-routing.ts</a><span>正则判定「联网意向 / 文件上下文引用」。</span></div>
+          <div class="file-item"><a href="../src/lib/pi-agent/budget.ts">src/lib/pi-agent/budget.ts</a><span>回合 / 工具 / 搜索三层预算与「停止调用、直接作答」提示。</span></div>
+          <div class="file-item"><a href="../src/lib/pi-agent/script-sandbox.ts">src/lib/pi-agent/script-sandbox.ts</a><span>QuickJS 沙箱：16k 代码、32MB 内存、1.5s 超时、无网络/文件系统。</span></div>
+        </div>
+
+        <div class="file-group">
+          <h3>本地文件引擎（Web Worker）</h3>
+          <div class="file-item"><a href="../src/lib/file-agent/file-worker-client.ts">src/lib/file-agent/file-worker-client.ts</a><span>通用文件 Worker 注册、inspect/search/read/query 请求与取消。</span></div>
+          <div class="file-item"><a href="../src/lib/file-agent/file-worker.ts">src/lib/file-agent/file-worker.ts</a><span>文本 / 表格适配器分发：CSV、TSV、JSON、JSONL、文本的检索与聚合。</span></div>
+          <div class="file-item"><a href="../src/lib/file-agent/detect.ts">src/lib/file-agent/detect.ts</a><span>魔数 + 扩展名 + 内容嗅探 + 编码识别，产出能力矩阵（inspect/search/read/query）。</span></div>
+          <div class="file-item"><a href="../src/lib/file-agent/pi-tools.ts">src/lib/file-agent/pi-tools.ts</a><span>给 Pi Agent 暴露 inspect_file / search_file / read_file_chunk / query_file。</span></div>
+          <div class="file-item"><a href="../src/lib/client-analysis/csv-worker.ts">src/lib/client-analysis/csv-worker.ts</a><span>CSV rows 内存持有者与本地查询执行入口（旧版核心引擎）。</span></div>
+          <div class="file-item"><a href="../src/lib/client-analysis/csv-plan-executor.ts">src/lib/client-analysis/csv-plan-executor.ts</a><span>分析计划执行与本地聚合（plan→execute 旧流程仍保留）。</span></div>
+        </div>
+
+        <div class="file-group">
+          <h3>服务端 API（BFF + 网关）</h3>
+          <div class="file-item"><a href="../src/app/api/chat/route.ts">src/app/api/chat/route.ts</a><span>普通 SSE；可选服务端 search_web 工具协商 + DSML 兼容解析 + 重试退避。</span></div>
+          <div class="file-item"><a href="../src/app/api/stream/route.ts">src/app/api/stream/route.ts</a><span>Pi Agent 单回合流式代理：deepseekProvider + 事件转换 + 4MB/256 条/16 工具上限。</span></div>
+          <div class="file-item"><a href="../src/app/api/pi-agent/tools/web-search/route.ts">src/app/api/pi-agent/tools/web-search/route.ts</a><span>Tavily 代理（500 字符查询、5 结果、2500 字符截断）。</span></div>
+          <div class="file-item"><a href="../src/app/api/chat/analysis/query/route.ts">src/app/api/chat/analysis/query/route.ts</a><span>CSV 查询规划器：决策输出校验、补全守卫、force_final、模型失败兜底。</span></div>
+          <div class="file-item"><a href="../src/app/api/chat/analysis/combine/route.ts">src/app/api/chat/analysis/combine/route.ts</a><span>多文件交叉综合摘要，无密钥时本地保底。</span></div>
+          <div class="file-item"><a href="../src/app/api/chat/memory/summarize/route.ts">src/app/api/chat/memory/summarize/route.ts</a><span>增量记忆摘要：JSON 模式、敏感信息过滤、128KB 上限、重试 2 次。</span></div>
+        </div>
+
+        <div class="file-group">
+          <h3>记忆与存储</h3>
+          <div class="file-item"><a href="../src/hooks/use-chat-memory.ts">src/hooks/use-chat-memory.ts</a><span>记忆检索接入、owner+session 串行摘要队列、失效保护（generation/forgotten）。</span></div>
+          <div class="file-item"><a href="../src/lib/chat-memory/retrieval.ts">src/lib/chat-memory/retrieval.ts</a><span>加权评分、历史压缩、记忆 Prompt 构造。</span></div>
+          <div class="file-item"><a href="../src/lib/chat-memory/normalize.ts">src/lib/chat-memory/normalize.ts</a><span>摘要内容规范化、敏感字段与指令注入清洗。</span></div>
+          <div class="file-item"><a href="../src/store/chat-memory-store.ts">src/store/chat-memory-store.ts</a><span>localStorage 持久化 + pruneMemories（100 条 / 180 天）。</span></div>
+          <div class="file-item"><a href="../src/store/prompt-override-store.ts">src/store/prompt-override-store.ts</a><span>DevPanel 的提示词覆盖持久化。</span></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ 7. insights ============ -->
+    <section id="insights">
+      <div class="section-head">
+        <h2>关键设计与风险</h2>
+        <p>这些行为最容易在排查问题或扩展能力时被忽略。</p>
+      </div>
+
+      <div class="insight-grid">
+        <article class="insight fact">
+          <h3>Thinking 是架构开关</h3>
+          <p>它不只是给同一请求加推理参数：开启后普通消息也会改走浏览器端 Pi Agent，多一次配置请求，并进入多回合工具运行时。</p>
+        </article>
+        <article class="insight fact">
+          <h3>多会话请求可并行</h3>
+          <p>请求注册表以 sessionId 为键。切换会话不会中止旧请求，旧请求仍写回自己的会话；停止按钮只影响当前活动会话。</p>
+        </article>
+        <article class="insight fact">
+          <h3>隐私边界是「原文不整体上传」</h3>
+          <p>文件描述含 ≤2000 字符样例，工具返回的片段/聚合结果也会发给模型。准确表述：原始完整文件留在浏览器，模型只看到有界样本。</p>
+        </article>
+        <article class="insight fact">
+          <h3>CSV 多文件逐个、串行分析</h3>
+          <p>上传画像可并行（Promise.all），但发送后的 for...of 查询分析串行；所有单文件完成后才进入 combine 交叉综合。</p>
+        </article>
+        <article class="insight fact">
+          <h3>DSML 工具调用兼容</h3>
+          <p>/api/chat 会解析 DeepSeek 偶发输出在 content 中的 〈invoke〉DSML 标记，手动转为 tool_calls，避免搜索协商失效。</p>
+        </article>
+        <article class="insight risk">
+          <h3>刷新会切断文件追问能力</h3>
+          <p>消息与文件摘要还在，但 Worker 与 refs 已丢失。通用文件路径会提示重新上传；CSV 活动上下文同样无法从持久化消息重建。</p>
+        </article>
+        <article class="insight risk">
+          <h3>停止生成并非端到端取消</h3>
+          <p>/api/stream 将 request.signal 传给 DeepSeek；而 /api/chat 与 CSV 分析端点的上游 fetch 未统一绑定客户端 signal，客户端停止后上游可能继续消耗。</p>
+        </article>
+        <article class="insight risk">
+          <h3>流式更新频繁持久化</h3>
+          <p>每个 reasoning/content 增量都触发 updateSessionMessages；因 store 启用 persist，中长回答会产生密集的 sessionStorage 序列化。</p>
+        </article>
+        <article class="insight risk">
+          <h3>useChat 是主要复杂度集中点</h3>
+          <p>UI 已组件化，但 ~2,300 行 Hook 同时负责路由、SSE、Agent、附件、CSV 与记忆。新增第四种执行器前应优先抽离统一 request lifecycle。</p>
+        </article>
+        <article class="insight risk">
+          <h3>双搜索路径维护成本</h3>
+          <p>P1 的 web_search（Tavily 代理 + 预算）与 P4 的 search_web（服务端协商 + 退避）职责重叠，改造搜索时需同时更新两处。</p>
+        </article>
+      </div>
+    </section>
+
+    <footer>
+      本文档描述当前工作区源码的实际调用关系（依据 src/ 静态分析），不代表外部服务 SLA。纯静态 HTML、零外部依赖，可直接用浏览器打开或通过 `python3 -m http.server` 预览。
+    </footer>
+  </main>
+</div>
+
+<script>
+  (() => {
+    // 时序 Tab
+    const buttons = Array.from(document.querySelectorAll("[data-tab]"));
+    const panels = Array.from(document.querySelectorAll("[data-panel]"));
+    function activateTab(name, focus) {
+      buttons.forEach((button) => {
+        const active = button.dataset.tab === name;
+        button.setAttribute("aria-selected", String(active));
+        button.tabIndex = active ? 0 : -1;
+        if (active && focus) button.focus();
+      });
+      panels.forEach((panel) => {
+        panel.hidden = panel.dataset.panel !== name;
+      });
+    }
+    buttons.forEach((button, index) => {
+      button.addEventListener("click", () => activateTab(button.dataset.tab, false));
+      button.addEventListener("keydown", (event) => {
+        if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+        event.preventDefault();
+        const offset = event.key === "ArrowRight" ? 1 : -1;
+        const next = (index + offset + buttons.length) % buttons.length;
+        activateTab(buttons[next].dataset.tab, true);
+      });
+    });
+    activateTab("normal", false);
+
+    // 目录滚动高亮
+    const links = Array.from(document.querySelectorAll(".nav-list a"));
+    const sections = links
+      .map((link) => document.querySelector(link.getAttribute("href")))
+      .filter(Boolean);
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const visible = entries
+          .filter((entry) => entry.isIntersecting)
+          .sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
+        if (!visible) return;
+        links.forEach((link) => {
+          link.setAttribute(
+            "aria-current",
+            String(link.getAttribute("href") === `#${visible.target.id}`),
+          );
+        });
+      },
+      { rootMargin: "-15% 0px -70% 0px", threshold: [0, 0.25, 0.5] },
+    );
+    sections.forEach((section) => observer.observe(section));
+  })();
+</script>
+</body>
+</html>

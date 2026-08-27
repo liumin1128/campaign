@@ -18,6 +18,7 @@ import type {
 } from "@/components/chat/types";
 import { createPiAgentBudget } from "./budget";
 import { fetchPiAgentLimits } from "./client-config";
+import { createLatestFrameNotifier } from "./frame-update-notifier";
 import { PI_AGENT_MODEL } from "./model";
 import { createPiAgentTools } from "./tools";
 import { createGenericFileAgentTools } from "@/lib/file-agent/pi-tools";
@@ -87,8 +88,9 @@ export async function runPiAgent(
     shouldStopAfterTurn: () => budget.shouldStopAfterTurn(),
   });
 
+  const updateNotifier = createLatestFrameNotifier(args.onUpdate);
   const notify = () => {
-    args.onUpdate({
+    updateNotifier.push({
       content: finalContent || currentTurnText,
       reasoning,
       budget: budget.snapshot(),
@@ -190,6 +192,7 @@ export async function runPiAgent(
   } finally {
     unsubscribe();
     args.signal.removeEventListener("abort", handleExternalAbort);
+    updateNotifier.flush();
   }
 }
 

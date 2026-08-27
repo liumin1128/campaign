@@ -9,8 +9,44 @@ import { toProxyAssistantEvent } from "../src/lib/pi-agent/proxy-events";
 import { executeAnalysisScriptInSandbox } from "../src/lib/pi-agent/script-sandbox";
 import { getServerPiAgentLimits } from "../src/lib/pi-agent/server-limits";
 import { classifyPiTask } from "../src/lib/pi-agent/task-routing";
+import { createLatestFrameNotifier } from "../src/lib/pi-agent/frame-update-notifier";
+
+function testFrameUpdateNotifier() {
+  let nextFrameId = 1;
+  const callbacks = new Map<number, () => void>();
+  const updates: number[] = [];
+  const notifier = createLatestFrameNotifier(
+    (value: number) => updates.push(value),
+    {
+      request(callback) {
+        const frameId = nextFrameId++;
+        callbacks.set(frameId, callback);
+        return frameId;
+      },
+      cancel(frameId) {
+        callbacks.delete(frameId);
+      },
+    },
+  );
+
+  for (let value = 0; value < 100; value++) notifier.push(value);
+  assert.equal(callbacks.size, 1);
+  assert.deepEqual(updates, []);
+
+  const firstFrame = callbacks.entries().next().value;
+  assert.ok(firstFrame);
+  callbacks.delete(firstFrame[0]);
+  firstFrame[1]();
+  assert.deepEqual(updates, [99]);
+
+  notifier.push(100);
+  notifier.flush();
+  assert.equal(callbacks.size, 0);
+  assert.deepEqual(updates, [99, 100]);
+}
 
 async function main() {
+  testFrameUpdateNotifier();
   assert.deepEqual(normalizePiAgentLimits(null), DEFAULT_PI_AGENT_LIMITS);
   assert.deepEqual(
     normalizePiAgentLimits({
