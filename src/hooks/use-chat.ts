@@ -51,12 +51,16 @@ import { getRecentChatMessages } from "@/lib/chat-memory/retrieval";
 import { useActiveSession, useChatStore } from "@/store/chat-store";
 import { usePromptOverrideStore } from "@/store/prompt-override-store";
 import { useChatMemory } from "@/hooks/use-chat-memory";
+import { useSessionRequests } from "@/hooks/use-session-requests";
+import { useSessionAttachments } from "@/hooks/use-session-attachments";
+import { useChatStoreHydration } from "@/hooks/use-chat-store-hydration";
 
 type ActiveCsvContext = PiCsvContext;
 
 const QUERY_ROUND_PROGRESS_DENOMINATOR = MAX_QUERY_ITERATIONS;
 
 export function useChat() {
+  useChatStoreHydration();
   const {
     session,
     sessions,
@@ -79,11 +83,32 @@ export function useChat() {
 
   const sessionMessages = session?.messages;
   const messages = useMemo(() => sessionMessages ?? [], [sessionMessages]);
-  const messageVersion = messages.length + (messages.at(-1)?.id ?? "");
   const agents = getLocalizedAgents(language);
   const selectedAgent =
     agents.find((a) => a.id === session?.selectedAgentId) ?? agents[0];
   const sessionId = session?.id;
+  const {
+    activeSessionIds: loadingSessionIds,
+    beginRequest,
+    finishRequest,
+    abortRequest,
+    cancelRequest,
+    hasActiveRequest,
+  } = useSessionRequests();
+  const {
+    attachments: fileAttachments,
+    preparingSessionIds,
+    append: appendSessionAttachments,
+    clear: clearSessionAttachments,
+    removeAt: removeSessionAttachment,
+    patchById: patchSessionAttachment,
+    get: getSessionAttachments,
+    beginPreparing: beginPreparingAttachments,
+    finishPreparing: finishPreparingAttachments,
+    dropSession: dropSessionAttachments,
+  } = useSessionAttachments(sessionId);
+  const isLoading = loadingSessionIds.includes(sessionId ?? "");
+  const isPreparingAttachments = preparingSessionIds.includes(sessionId ?? "");
   const {
     enabled: memoryEnabled,
     memories: memoryItems,
@@ -97,28 +122,18 @@ export function useChat() {
   } = useChatMemory();
 
   const [input, setInput] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
-  const [fileAttachments, setFileAttachments] = useState<FileAttachment[]>([]);
   const [devMode, setDevMode] = useState(false);
   const [lastMemoryPrompt, setLastMemoryPrompt] = useState("");
   const [lastUsedMemoryIds, setLastUsedMemoryIds] = useState<string[]>([]);
   const [lastHistoryCompacted, setLastHistoryCompacted] = useState(false);
-  const abortRef = useRef<AbortController | null>(null);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const largeCsvInputRef = useRef<HTMLInputElement>(null);
   const csvContextsRef = useRef<Record<string, ActiveCsvContext[]>>({});
   const fileContextsRef = useRef<Record<string, GenericFileContext[]>>({});
 
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messageVersion]);
-
   // 切换会话时加载目标会话的草稿
   useEffect(() => {
-    setFileAttachments([]);
-    setIsLoading(false);
     setLastMemoryPrompt("");
     setLastUsedMemoryIds([]);
     setLastHistoryCompacted(false);
@@ -128,10 +143,8 @@ export function useChat() {
   }, [sessionId]);
 
   const handleStop = useCallback(() => {
-    abortRef.current?.abort();
-    abortRef.current = null;
-    setIsLoading(false);
-  }, []);
+    if (sessionId) abortRequest(sessionId);
+  }, [abortRequest, sessionId]);
 
   useEffect(() => {
     return () => {
@@ -144,11 +157,19 @@ export function useChat() {
 
   const handleSetSelectedAgent = useCallback(
     (agent: AgentOption) => {
-      if (sessionId) {
+      if (sessionId && !hasActiveRequest(sessionId)) {
         updateSessionAgent(sessionId, agent.id);
       }
     },
-    [sessionId, updateSessionAgent],
+    [hasActiveRequest, sessionId, updateSessionAgent],
+  );
+
+  const handleInputChange = useCallback(
+    (value: string) => {
+      setInput(value);
+      if (sessionId) setDraftInput(sessionId, value);
+    },
+    [sessionId, setDraftInput],
   );
 
   /** 切换会话时保存当前输入草稿 */
@@ -199,6 +220,15 @@ export function useChat() {
 
   const handleDeleteSession = useCallback(
     (id: string) => {
+      cancelRequest(id);
+      for (const attachment of getSessionAttachments(id)) {
+        if (attachment.type === "csv-analysis" && attachment.id) {
+          resetCsvWorker(attachment.id);
+        }
+        if (attachment.type === "file" && attachment.id) {
+          resetGenericFile(attachment.id);
+        }
+      }
       for (const context of csvContextsRef.current[id] ?? []) {
         resetCsvWorker(context.id);
       }
@@ -207,10 +237,17 @@ export function useChat() {
       }
       delete csvContextsRef.current[id];
       delete fileContextsRef.current[id];
+      dropSessionAttachments(id);
       forgetSession(id);
       deleteSession(id);
     },
-    [deleteSession, forgetSession],
+    [
+      cancelRequest,
+      deleteSession,
+      dropSessionAttachments,
+      forgetSession,
+      getSessionAttachments,
+    ],
   );
 
   /** 语言回复指令 */
@@ -325,7 +362,12 @@ export function useChat() {
 
   async function handleSend() {
     const trimmed = input.trim();
-    if ((!trimmed && fileAttachments.length === 0) || isLoading || !sessionId)
+    if (
+      (!trimmed && fileAttachments.length === 0) ||
+      !sessionId ||
+      hasActiveRequest(sessionId) ||
+      isPreparingAttachments
+    )
       return;
 
     // 如果有引用的消息，将多条以 blockquote 格式拼入消息内容
@@ -466,16 +508,21 @@ export function useChat() {
       id: crypto.randomUUID(),
       role: "user",
       content: quotePrefix + trimmed,
-      attachments: fileAttachments.length > 0 ? fileAttachments : undefined,
+      attachments:
+        fileAttachments.length > 0
+          ? fileAttachments.map(toStoredAttachment)
+          : undefined,
     };
 
     const sid = sessionId;
+    const request = beginRequest(sid);
+    if (!request) return;
     const updatedMessages = [...messages, userMsg];
     updateSessionMessages(sid, updatedMessages);
     setInput("");
-    setFileAttachments([]);
+    clearSessionAttachments(sid);
+    clearQuotedMessages();
     setDraftInput(sid, "");
-    setIsLoading(true);
 
     const assistantId = crypto.randomUUID();
     const assistantMsg: Message = {
@@ -487,8 +534,8 @@ export function useChat() {
     const withAssistant = [...updatedMessages, assistantMsg];
     updateSessionMessages(sid, withAssistant);
 
-    const controller = new AbortController();
-    abortRef.current = controller;
+    let accumulatedReasoning = "";
+    let accumulatedContent = "";
 
     try {
       const resp = await fetch("/api/chat", {
@@ -503,7 +550,7 @@ export function useChat() {
           enable_search: selectedAgent?.enableSearch ?? false,
           enable_thinking: enableThinking,
         }),
-        signal: controller.signal,
+        signal: request.controller.signal,
       });
 
       if (!resp.ok) {
@@ -519,7 +566,6 @@ export function useChat() {
               : m,
           ),
         );
-        setIsLoading(false);
         return;
       }
 
@@ -533,15 +579,11 @@ export function useChat() {
               : m,
           ),
         );
-        setIsLoading(false);
         return;
       }
 
       const decoder = new TextDecoder();
       let buffer = "";
-      let accumulatedReasoning = "";
-      let accumulatedContent = "";
-
       function flushMessage() {
         updateSessionMessages(
           sid,
@@ -616,7 +658,13 @@ export function useChat() {
           sid,
           withAssistant.map((m) =>
             m.id === assistantId
-              ? { ...m, content: m.content + `\n\n_${t(language, "stopped")}_` }
+              ? {
+                  ...m,
+                  reasoning: accumulatedReasoning,
+                  content: [accumulatedContent, t(language, "stopped")]
+                    .filter(Boolean)
+                    .join("\n\n"),
+                }
               : m,
           ),
         );
@@ -634,8 +682,7 @@ export function useChat() {
         );
       }
     } finally {
-      setIsLoading(false);
-      abortRef.current = null;
+      finishRequest(request);
     }
   }
 
@@ -647,9 +694,11 @@ export function useChat() {
     history: Message[],
     requestSystemPrompt: string,
   ) {
-    if (!sessionId || isLoading) return;
+    if (!sessionId || hasActiveRequest(sessionId)) return;
 
     const sid = sessionId;
+    const request = beginRequest(sid);
+    if (!request) return;
     const assistantId = crypto.randomUUID();
     const storedAttachments = attachments.map(toStoredAttachment);
     const userMsg: Message = {
@@ -671,10 +720,7 @@ export function useChat() {
     updateSessionMessages(sid, updatedMessages);
     setInput("");
     setDraftInput(sid, "");
-    setIsLoading(true);
-
-    const controller = new AbortController();
-    abortRef.current = controller;
+    clearQuotedMessages();
 
     try {
       const result = await runPiAgent({
@@ -684,7 +730,7 @@ export function useChat() {
         prompt: buildPiUserPrompt(userContent, storedAttachments),
         csvContexts,
         fileContexts: genericFileContexts,
-        signal: controller.signal,
+        signal: request.controller.signal,
         onUpdate: (update) => {
           latestContent = update.content;
           latestReasoning = update.reasoning;
@@ -728,7 +774,7 @@ export function useChat() {
       if (genericFileContexts.length > 0) {
         replaceFileContexts(sid, genericFileContexts);
       }
-      setFileAttachments([]);
+      clearSessionAttachments(sid);
       if (result.content.trim()) {
         scheduleMemoryUpdate({
           sessionId: sid,
@@ -752,7 +798,7 @@ export function useChat() {
             ? {
                 ...message,
                 content: aborted
-                  ? `${latestContent}\n\n_${errorMessage}_`
+                  ? `${latestContent}\n\n${errorMessage}`
                   : `❌ ${errorMessage}`,
                 reasoning: latestReasoning,
               }
@@ -760,71 +806,102 @@ export function useChat() {
         ),
       );
     } finally {
-      setIsLoading(false);
-      abortRef.current = null;
+      finishRequest(request);
     }
   }
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
-    if (e.key === "Enter" && !e.shiftKey) {
+    if (
+      e.key === "Enter" &&
+      !e.shiftKey &&
+      !e.nativeEvent.isComposing
+    ) {
       e.preventDefault();
-      handleSend();
+      if (!isLoading && !isPreparingAttachments) handleSend();
     }
   }
 
   async function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files ?? []);
     e.target.value = "";
-    if (files.length === 0) return;
+    const targetSessionId = sessionId;
+    if (files.length === 0 || !targetSessionId) return;
 
-    const limits = await fetchFileAgentLimits();
-    const results = await Promise.all(
-      files.map(async (file) => {
-        try {
-          const descriptor = await registerGenericFile(file, limits);
-          return {
-            id: descriptor.id,
-            name: descriptor.name,
-            content: formatGenericFileAttachmentContent(descriptor),
-            type: "file" as const,
-            size: descriptor.size,
-            descriptor,
-          } satisfies FileAttachment;
-        } catch (error) {
-          alert(`文件注册失败：${file.name}。${formatErrorMessage(error)}`);
-          return null;
+    const operationId = beginPreparingAttachments(targetSessionId);
+    try {
+      const limits = await fetchFileAgentLimits();
+      const results = await Promise.all(
+        files.map(async (file) => {
+          try {
+            const descriptor = await registerGenericFile(file, limits);
+            return {
+              id: descriptor.id,
+              name: descriptor.name,
+              content: formatGenericFileAttachmentContent(descriptor),
+              type: "file" as const,
+              size: descriptor.size,
+              descriptor,
+            } satisfies FileAttachment;
+          } catch (error) {
+            alert(`文件注册失败：${file.name}。${formatErrorMessage(error)}`);
+            return null;
+          }
+        }),
+      );
+      const attachments: FileAttachment[] = results.flatMap((attachment) =>
+        attachment ? [attachment] : [],
+      );
+      const unsupportedAttachments = attachments.filter(
+        (attachment) => !attachment.descriptor?.capabilities.includes("read"),
+      );
+      if (unsupportedAttachments.length > 0) {
+        alert(
+          language === "zh"
+            ? `以下文件当前只能识别类型，请先转换为 UTF-8 文本、CSV、TSV、JSON 或 JSONL：${unsupportedAttachments.map((item) => item.name).join("、")}`
+            : `These files must be converted to UTF-8 text, CSV, TSV, JSON, or JSONL first: ${unsupportedAttachments.map((item) => item.name).join(", ")}`,
+        );
+        for (const attachment of unsupportedAttachments) {
+          if (attachment.id) resetGenericFile(attachment.id);
         }
-      }),
-    );
-    const attachments: FileAttachment[] = results.flatMap((attachment) =>
-      attachment ? [attachment] : [],
-    );
-    const unsupportedNames = attachments
-      .filter((attachment) => !attachment.descriptor?.capabilities.includes("read"))
-      .map((attachment) => attachment.name);
-    if (unsupportedNames.length > 0) {
+      }
+
+      const supportedAttachments = attachments.filter(
+        (attachment) => attachment.descriptor?.capabilities.includes("read"),
+      );
+      const targetStillExists = useChatStore
+        .getState()
+        .sessions.some((item) => item.id === targetSessionId);
+      if (!targetStillExists) {
+        for (const attachment of supportedAttachments) {
+          if (attachment.id) resetGenericFile(attachment.id);
+        }
+        return;
+      }
+      appendSessionAttachments(targetSessionId, supportedAttachments);
+    } catch (error) {
       alert(
         language === "zh"
-          ? `以下文件当前只能识别类型，请先转换为 UTF-8 文本、CSV、TSV、JSON 或 JSONL：${unsupportedNames.join("、")}`
-          : `These files must be converted to UTF-8 text, CSV, TSV, JSON, or JSONL first: ${unsupportedNames.join(", ")}`,
+          ? `读取附件配置失败：${formatErrorMessage(error)}`
+          : `Failed to prepare attachments: ${formatErrorMessage(error)}`,
       );
-    }
-    if (attachments.length > 0) {
-      setFileAttachments((previous) => [...previous, ...attachments]);
+    } finally {
+      finishPreparingAttachments(targetSessionId, operationId);
     }
   }
 
   async function handleLargeCsvSelect(e: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files ?? []);
     e.target.value = "";
+    const targetSessionId = sessionId;
 
-    if (files.length === 0) return;
+    if (files.length === 0 || !targetSessionId) return;
 
     const validAttachments: Array<{ file: File; attachment: FileAttachment }> =
       [];
 
     for (const file of files) {
-      const isCSV = file.name.endsWith(".csv") || file.type === "text/csv";
+      const isCSV =
+        file.name.toLowerCase().endsWith(".csv") || file.type === "text/csv";
       if (!isCSV) {
         alert(`不支持的文件类型：${file.name}，已跳过。`);
         continue;
@@ -857,59 +934,63 @@ export function useChat() {
 
     if (validAttachments.length === 0) return;
 
-    setFileAttachments((prev) => [
-      ...prev,
-      ...validAttachments.map((item) => item.attachment),
-    ]);
-
-    await Promise.all(
-      validAttachments.map(async ({ file, attachment }) => {
-        const id = attachment.id!;
-        try {
-          const profile = await profileCsvInWorker(
-            id,
-            file,
-            undefined,
-            (progress) => {
-              updateAnalysisAttachment(id, {
-                status: "profiling",
-                progress,
-              });
-            },
-          );
-          const profileSummary = summarizeProfile(profile);
-          const content = buildAnalysisAttachmentContent({ profileSummary });
-
-          updateAnalysisAttachment(id, {
-            status: "profiled",
-            progress: 1,
-            profile,
-            profileSummary,
-            content,
-          });
-        } catch (error) {
-          const errorMessage = formatErrorMessage(error);
-          updateAnalysisAttachment(id, {
-            status: "failed",
-            error: errorMessage,
-            content: `[CSV 本地分析：${file.name}]\n分析失败：${errorMessage}`,
-          });
-        }
-      }),
+    appendSessionAttachments(
+      targetSessionId,
+      validAttachments.map((item) => item.attachment),
     );
+
+    const operationId = beginPreparingAttachments(targetSessionId);
+    try {
+      await Promise.all(
+        validAttachments.map(async ({ file, attachment }) => {
+          const id = attachment.id!;
+          try {
+            const profile = await profileCsvInWorker(
+              id,
+              file,
+              undefined,
+              (progress) => {
+                updateAnalysisAttachment(targetSessionId, id, {
+                  status: "profiling",
+                  progress,
+                });
+              },
+            );
+            const profileSummary = summarizeProfile(profile);
+            const content = buildAnalysisAttachmentContent({ profileSummary });
+
+            updateAnalysisAttachment(targetSessionId, id, {
+              status: "profiled",
+              progress: 1,
+              profile,
+              profileSummary,
+              content,
+            });
+          } catch (error) {
+            const errorMessage = formatErrorMessage(error);
+            updateAnalysisAttachment(targetSessionId, id, {
+              status: "failed",
+              error: errorMessage,
+              content: `[CSV 本地分析：${file.name}]\n分析失败：${errorMessage}`,
+            });
+          }
+        }),
+      );
+    } finally {
+      finishPreparingAttachments(targetSessionId, operationId);
+    }
   }
 
   function handleRemoveFile(index: number) {
-    setFileAttachments((prev) => {
-      const removed = prev[index];
-      if (removed?.type === "csv-analysis" && removed.id) {
-        resetCsvWorker(removed.id);
-      }
-      if (removed?.type === "file" && removed.id) {
-        resetGenericFile(removed.id);
-      }
-      return prev.filter((_, i) => i !== index);
-    });
+    if (!sessionId || hasActiveRequest(sessionId)) return;
+    const removed = fileAttachments[index];
+    if (removed?.type === "csv-analysis" && removed.id) {
+      resetCsvWorker(removed.id);
+    }
+    if (removed?.type === "file" && removed.id) {
+      resetGenericFile(removed.id);
+    }
+    removeSessionAttachment(sessionId, index);
   }
 
   async function handleCsvAnalysisSend(
@@ -917,7 +998,7 @@ export function useChat() {
     csvAnalysisAttachments: FileAttachment[],
     memoryContext: string,
   ) {
-    if (!sessionId || isLoading) return;
+    if (!sessionId || hasActiveRequest(sessionId)) return;
 
     const notReadyAttachment = csvAnalysisAttachments.find(
       (attachment) =>
@@ -949,6 +1030,8 @@ export function useChat() {
     }
 
     const sid = sessionId;
+    const request = beginRequest(sid);
+    if (!request) return;
     const assistantId = crypto.randomUUID();
     const userId = crypto.randomUUID();
     const initialStoredAttachments =
@@ -975,10 +1058,7 @@ export function useChat() {
     updateSessionMessages(sid, updatedMessages);
     setInput("");
     setDraftInput(sid, "");
-    setIsLoading(true);
-
-    const controller = new AbortController();
-    abortRef.current = controller;
+    clearQuotedMessages();
 
     try {
       const domain = getCsvAnalysisDomain(selectedAgent?.id);
@@ -1010,7 +1090,7 @@ export function useChat() {
         const profile = analysisAttachment.analysis!.profile!;
         const profileSummary = analysisAttachment.analysis!.profileSummary!;
 
-        updateAnalysisAttachment(attachmentId, { status: "planning" });
+        updateAnalysisAttachment(sid, attachmentId, { status: "planning" });
         reportStatus(index, "模型正在决定要查询哪些数据…");
 
         const queryAnalysis = await runFreeCsvQueryAnalysis({
@@ -1021,7 +1101,7 @@ export function useChat() {
           domain,
           enableThinking,
           memoryContext,
-          signal: controller.signal,
+          signal: request.controller.signal,
           relatedFiles: baseRelatedFiles.filter(
             (file) => file.name !== analysisAttachment.name,
           ),
@@ -1029,7 +1109,7 @@ export function useChat() {
             reportStatus(index, message);
           },
           onAttachmentPatch: (patch) => {
-            updateAnalysisAttachment(attachmentId, patch);
+            updateAnalysisAttachment(sid, attachmentId, patch);
           },
         });
         const { summary, queryResults, stageSummaries, content } = queryAnalysis;
@@ -1049,7 +1129,7 @@ export function useChat() {
           content,
         };
 
-        updateAnalysisAttachment(attachmentId, {
+        updateAnalysisAttachment(sid, attachmentId, {
           status: "completed",
           queryResults,
           stageSummaries,
@@ -1073,7 +1153,7 @@ export function useChat() {
               domain,
               enableThinking,
               memoryContext,
-              signal: controller.signal,
+              signal: request.controller.signal,
             })
           : (finalContexts[0]?.summary ?? "");
       const finalMessages = updatedMessages.map((message) => {
@@ -1098,7 +1178,7 @@ export function useChat() {
 
       updateSessionMessages(sid, finalMessages);
       replaceCsvContexts(sid, finalContexts);
-      setFileAttachments([]);
+      clearSessionAttachments(sid);
       if (summary.trim()) {
         scheduleMemoryUpdate({
           sessionId: sid,
@@ -1120,19 +1200,24 @@ export function useChat() {
         sid,
         updatedMessages.map((message) =>
           message.id === assistantId
-            ? { ...message, content: `❌ ${errorMessage}` }
+            ? {
+                ...message,
+                content: aborted ? errorMessage : `❌ ${errorMessage}`,
+              }
             : message,
         ),
       );
       for (const attachment of csvAnalysisAttachments) {
-        updateAnalysisAttachment(attachment.id, {
-          status: "failed",
-          error: errorMessage,
-        });
+        updateAnalysisAttachment(
+          sid,
+          attachment.id,
+          aborted
+            ? { status: "profiled", progress: 1, error: undefined }
+            : { status: "failed", error: errorMessage },
+        );
       }
     } finally {
-      setIsLoading(false);
-      abortRef.current = null;
+      finishRequest(request);
     }
   }
 
@@ -1141,9 +1226,11 @@ export function useChat() {
     csvContexts: ActiveCsvContext[],
     memoryContext: string,
   ) {
-    if (!sessionId || isLoading) return;
+    if (!sessionId || hasActiveRequest(sessionId)) return;
 
     const sid = sessionId;
+    const request = beginRequest(sid);
+    if (!request) return;
     const assistantId = crypto.randomUUID();
     const userMsg: Message = {
       id: crypto.randomUUID(),
@@ -1164,10 +1251,7 @@ export function useChat() {
     updateSessionMessages(sid, updatedMessages);
     setInput("");
     setDraftInput(sid, "");
-    setIsLoading(true);
-
-    const controller = new AbortController();
-    abortRef.current = controller;
+    clearQuotedMessages();
 
     try {
       const domain = getCsvAnalysisDomain(selectedAgent?.id);
@@ -1203,7 +1287,7 @@ export function useChat() {
           domain,
           enableThinking,
           memoryContext,
-          signal: controller.signal,
+          signal: request.controller.signal,
           onStatus: (message) => {
             reportStatus(index, message);
           },
@@ -1229,7 +1313,7 @@ export function useChat() {
               domain,
               enableThinking,
               memoryContext,
-              signal: controller.signal,
+              signal: request.controller.signal,
             })
           : (nextContexts[0]?.summary ?? "");
 
@@ -1261,41 +1345,39 @@ export function useChat() {
         sid,
         updatedMessages.map((message) =>
           message.id === assistantId
-            ? { ...message, content: `❌ ${errorMessage}` }
+            ? {
+                ...message,
+                content: aborted ? errorMessage : `❌ ${errorMessage}`,
+              }
             : message,
         ),
       );
     } finally {
-      setIsLoading(false);
-      abortRef.current = null;
+      finishRequest(request);
     }
   }
 
   function updateAnalysisAttachment(
+    targetSessionId: string,
     id: string | undefined,
     patch: Partial<CsvAnalysisState> & { content?: string },
   ) {
     if (!id) return;
 
-    setFileAttachments((prev) =>
-      prev.map((attachment) => {
-        if (attachment.id !== id || attachment.type !== "csv-analysis") {
-          return attachment;
-        }
-
-        return {
-          ...attachment,
-          content: patch.content ?? attachment.content,
-          analysis: {
-            ...(attachment.analysis ?? {
-              status: "profiling" as CsvAnalysisStatus,
-            }),
-            ...patch,
-            id,
-          },
-        };
-      }),
-    );
+    patchSessionAttachment(targetSessionId, id, (attachment) => {
+      if (attachment.type !== "csv-analysis") return attachment;
+      return {
+        ...attachment,
+        content: patch.content ?? attachment.content,
+        analysis: {
+          ...(attachment.analysis ?? {
+            status: "profiling" as CsvAnalysisStatus,
+          }),
+          ...patch,
+          id,
+        },
+      };
+    });
   }
 
   return {
@@ -1303,6 +1385,8 @@ export function useChat() {
     messages,
     input,
     isLoading,
+    isPreparingAttachments,
+    loadingSessionIds,
     selectedAgent,
     fileAttachments,
     language,
@@ -1327,12 +1411,11 @@ export function useChat() {
     removeMemory: handleRemoveMemory,
     clearMemories: handleClearMemories,
     // refs
-    messagesEndRef,
     inputRef,
     fileInputRef,
     largeCsvInputRef,
     // 操作
-    setInput,
+    setInput: handleInputChange,
     setLanguage,
     setEnableThinking,
     setSelectedAgent: handleSetSelectedAgent,

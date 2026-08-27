@@ -15,7 +15,7 @@ type MarkdownDisplayProps = {
 export default function MarkdownDisplay({ content }: MarkdownDisplayProps) {
   const components: Components = {
     // 代码块（带语言标记）
-    code({ className, children, ...props }) {
+    code({ className, children }) {
       const isInline = !className;
       const codeText = String(children).replace(/\n$/, "");
 
@@ -23,7 +23,6 @@ export default function MarkdownDisplay({ content }: MarkdownDisplayProps) {
         return (
           <code
             className="rounded bg-gray-200/70 px-1.5 py-0.5 text-sm font-medium text-indigo-700 dark:bg-slate-700 dark:text-indigo-300"
-            {...props}
           >
             {children}
           </code>
@@ -41,12 +40,15 @@ export default function MarkdownDisplay({ content }: MarkdownDisplayProps) {
             </div>
           )}
           <pre className="overflow-x-auto bg-gray-50 p-3 text-sm dark:bg-slate-900/50">
-            <code className={className} {...props}>
+            <code className={className}>
               {codeText}
             </code>
           </pre>
         </div>
       );
+    },
+    pre({ children }) {
+      return <>{children}</>;
     },
 
     // 标题

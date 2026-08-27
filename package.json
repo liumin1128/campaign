@@ -16,6 +16,7 @@
     "test:pi-agent": "tsx scripts/test-pi-agent.ts",
     "test:file-agent": "tsx scripts/test-file-agent.ts",
     "test:chat-memory": "tsx scripts/test-chat-memory.ts",
+    "test:chat-ui-state": "tsx scripts/test-chat-ui-state.ts",
     "package": "node scripts/package-manifest.mjs"
   },
   "dependencies": {

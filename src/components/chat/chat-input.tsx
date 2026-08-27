@@ -1,7 +1,9 @@
 "use client";
 
+import { useLayoutEffect } from "react";
 import {
   Brain,
+  Close,
   Database,
   FileImport,
   PaperPlane,
@@ -16,6 +18,7 @@ import { formatBytes } from "@/lib/client-analysis/csv-analysis-prompts";
 interface ChatInputProps {
   input: string;
   isLoading: boolean;
+  isPreparingAttachments: boolean;
   language: Language;
   enableThinking: boolean;
   fileAttachments: FileAttachment[];
@@ -38,6 +41,7 @@ interface ChatInputProps {
 export function ChatInput({
   input,
   isLoading,
+  isPreparingAttachments,
   language,
   enableThinking,
   fileAttachments,
@@ -56,11 +60,18 @@ export function ChatInput({
   onThinkingChange,
   onRemoveQuote,
 }: ChatInputProps) {
-  const fileInputId = "chat-file-attachments-input";
-  const largeCsvInputId = "chat-large-csv-analysis-input";
+  useLayoutEffect(() => {
+    const textarea = inputRef.current;
+    if (!textarea) return;
+
+    textarea.style.height = "0px";
+    const nextHeight = Math.min(Math.max(textarea.scrollHeight, 80), 160);
+    textarea.style.height = `${nextHeight}px`;
+    textarea.style.overflowY = textarea.scrollHeight > 160 ? "auto" : "hidden";
+  }, [input, inputRef]);
 
   return (
-    <div className="px-4 py-2">
+    <div className="mx-auto w-full max-w-4xl px-3 py-2 sm:px-4">
       {/* 引用预览 */}
       <QuotePreview
         quotedMessages={quotedMessages}
@@ -72,7 +83,7 @@ export function ChatInput({
         <div className="mb-2 flex flex-wrap gap-2">
           {fileAttachments.map((att, idx) => (
             <div
-              key={idx}
+              key={att.id ?? `${att.name}-${idx}`}
               className={`flex max-w-full items-center gap-2 rounded-lg border px-2.5 py-1 ${
                 att.type === "csv-analysis"
                   ? "border-emerald-200 bg-emerald-50 dark:border-emerald-800 dark:bg-emerald-950/30"
@@ -105,25 +116,16 @@ export function ChatInput({
               <button
                 type="button"
                 onClick={() => onRemoveFile(idx)}
-                className={`flex size-4 shrink-0 items-center justify-center rounded-full ${
+                disabled={isLoading}
+                aria-label={`${t(language, "file_remove")}: ${att.name}`}
+                title={t(language, "file_remove")}
+                className={`flex size-6 shrink-0 items-center justify-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 disabled:cursor-not-allowed disabled:opacity-40 ${
                   att.type === "csv-analysis"
                     ? "text-emerald-500 hover:bg-emerald-200 hover:text-emerald-700 dark:hover:bg-emerald-800 dark:hover:text-emerald-200"
                     : "text-indigo-400 hover:bg-indigo-200 hover:text-indigo-700 dark:hover:bg-indigo-800 dark:hover:text-indigo-200"
                 }`}
               >
-                <svg
-                  className="size-3"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M6 18L18 6M6 6l12 12"
-                  />
-                </svg>
+                <Close aria-hidden="true" className="size-3.5" />
               </button>
             </div>
           ))}
@@ -131,6 +133,7 @@ export function ChatInput({
       )}
 
       <div
+        aria-busy={isLoading || isPreparingAttachments}
         className={`relative rounded-xl border bg-white transition-colors ${
           isLoading
             ? "border-gray-200 dark:border-slate-700"
@@ -142,24 +145,28 @@ export function ChatInput({
           value={input}
           onChange={(e) => onInputChange(e.target.value)}
           onKeyDown={onKeyDown}
-          disabled={isLoading}
           rows={1}
+          aria-label={t(language, "chat_input_placeholder")}
           placeholder={
             isLoading
               ? t(language, "chat_input_loading_placeholder")
               : t(language, "chat_input_placeholder")
           }
-          className="h-auto max-h-20 min-h-9 w-full resize-none bg-transparent px-3 pb-8 pt-2 text-sm text-gray-900 outline-none placeholder:text-gray-400 disabled:opacity-50 dark:text-slate-100 dark:placeholder-slate-500"
+          className="min-h-20 w-full resize-none bg-transparent px-3 pb-11 pt-3 text-sm text-gray-900 outline-none placeholder:text-gray-400 dark:text-slate-100 dark:placeholder-slate-500"
         />
 
-        <div className="absolute bottom-0 left-0 right-0 flex items-center justify-between px-1.5 py-1">
+        <div className="absolute bottom-1 left-1 right-1 flex h-9 items-center justify-between">
           <div className="flex items-center gap-0.5">
             {/* 语言切换 */}
             <button
               type="button"
               onClick={() => onLanguageChange(language === "zh" ? "en" : "zh")}
               disabled={isLoading}
-              className="flex size-6 items-center justify-center rounded-md text-[10px] font-semibold text-gray-400 transition hover:bg-gray-100 hover:text-gray-600 disabled:opacity-40 dark:hover:bg-slate-700 dark:hover:text-slate-300"
+              aria-label={t(
+                language,
+                language === "zh" ? "lang_switch_to_en" : "lang_switch_to_zh",
+              )}
+              className="flex size-8 items-center justify-center rounded-md text-[10px] font-semibold text-gray-500 transition hover:bg-gray-100 hover:text-gray-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 disabled:opacity-40 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-slate-200"
               title={t(
                 language,
                 language === "zh" ? "lang_switch_to_en" : "lang_switch_to_zh",
@@ -172,7 +179,11 @@ export function ChatInput({
               onClick={() => onThinkingChange(!enableThinking)}
               disabled={isLoading}
               aria-pressed={enableThinking}
-              className={`flex size-6 items-center justify-center rounded-md transition disabled:opacity-40 ${
+              aria-label={t(
+                language,
+                enableThinking ? "thinking_on_title" : "thinking_off_title",
+              )}
+              className={`flex size-8 items-center justify-center rounded-md transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 disabled:opacity-40 ${
                 enableThinking
                   ? "bg-indigo-100 text-indigo-600 hover:bg-indigo-200 dark:bg-indigo-900/40 dark:text-indigo-300 dark:hover:bg-indigo-900/60"
                   : "text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-slate-700 dark:hover:text-slate-300"
@@ -189,7 +200,6 @@ export function ChatInput({
           {/* 右侧操作按钮 */}
           <div className="flex items-center gap-0.5">
             <input
-              id={fileInputId}
               ref={fileInputRef}
               type="file"
               multiple
@@ -198,7 +208,6 @@ export function ChatInput({
               tabIndex={-1}
             />
             <input
-              id={largeCsvInputId}
               ref={largeCsvInputRef}
               type="file"
               multiple
@@ -208,42 +217,59 @@ export function ChatInput({
               tabIndex={-1}
             />
 
+            {isPreparingAttachments && (
+              <span
+                role="status"
+                className="mr-1 hidden text-[11px] text-gray-500 sm:inline dark:text-slate-400"
+              >
+                {t(language, "files_preparing")}
+              </span>
+            )}
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={isLoading || isPreparingAttachments}
+              aria-label={t(language, "upload_file_title")}
+              title={t(language, "upload_file_title")}
+              className="flex size-8 items-center justify-center rounded-md text-gray-500 transition hover:bg-gray-100 hover:text-gray-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 disabled:cursor-not-allowed disabled:opacity-40 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-slate-200"
+            >
+              <FileImport aria-hidden="true" className="size-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => largeCsvInputRef.current?.click()}
+              disabled={isLoading || isPreparingAttachments}
+              aria-label={t(language, "upload_large_csv_title")}
+              title={t(language, "upload_large_csv_title")}
+              className="flex size-8 items-center justify-center rounded-md text-gray-500 transition hover:bg-gray-100 hover:text-gray-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 disabled:cursor-not-allowed disabled:opacity-40 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-slate-200"
+            >
+              <Database aria-hidden="true" className="size-4" />
+            </button>
+
             {isLoading ? (
               <button
                 type="button"
                 onClick={onStop}
-                className="flex size-6 items-center justify-center rounded-md bg-red-500 text-white transition hover:bg-red-400"
+                aria-label={t(language, "stop_title")}
+                className="flex size-8 items-center justify-center rounded-md bg-red-500 text-white transition hover:bg-red-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-1"
                 title={t(language, "stop_title")}
               >
-                <Stop className="size-3.5" />
+                <Stop aria-hidden="true" className="size-4" />
               </button>
             ) : (
-              <>
-                <label
-                  htmlFor={fileInputId}
-                  aria-disabled={isLoading}
-                  className="flex size-6 items-center justify-center rounded-md text-gray-400 transition hover:bg-gray-100 hover:text-gray-600 disabled:opacity-40 dark:hover:bg-slate-700 dark:hover:text-slate-300"
-                  title={t(language, "upload_file_title")}
-                >
-                  <FileImport className="size-3.5" />
-                </label>
-                <label
-                  htmlFor={largeCsvInputId}
-                  aria-disabled={isLoading}
-                  className="flex size-6 items-center justify-center rounded-md text-gray-400 transition hover:bg-gray-100 hover:text-gray-600 disabled:opacity-40 dark:hover:bg-slate-700 dark:hover:text-slate-300"
-                  title={t(language, "upload_large_csv_title")}
-                >
-                  <Database className="size-3.5" />
-                </label>
-                <button
-                  type="button"
-                  onClick={onSend}
-                  disabled={!input.trim() && fileAttachments.length === 0}
-                  className="flex size-6 items-center justify-center rounded-md bg-indigo-600 text-white transition hover:bg-indigo-500 disabled:opacity-40 disabled:hover:bg-indigo-600"
-                >
-                  <PaperPlane className="size-3.5" />
-                </button>
-              </>
+              <button
+                type="button"
+                onClick={onSend}
+                disabled={
+                  isPreparingAttachments ||
+                  (!input.trim() && fileAttachments.length === 0)
+                }
+                aria-label={t(language, "send_title")}
+                title={t(language, "send_title")}
+                className="flex size-8 items-center justify-center rounded-md bg-indigo-600 text-white transition hover:bg-indigo-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-1 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-indigo-600"
+              >
+                <PaperPlane aria-hidden="true" className="size-4" />
+              </button>
             )}
           </div>
         </div>

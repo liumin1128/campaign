@@ -5,9 +5,12 @@ import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 import { Bars, Close } from "flowbite-react-icons/outline";
 import NavBar from "@/components/navbar";
+import { usePathname } from "next/navigation";
 
 export default function TabLayout({ children }: { children: ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const pathname = usePathname();
+  const pageTitle = getPageTitle(pathname);
 
   useEffect(() => {
     if (!sidebarOpen) {
@@ -30,7 +33,7 @@ export default function TabLayout({ children }: { children: ReactNode }) {
   return (
     <>
       <TeamsUserSync />
-      <div>
+      <div className="min-h-dvh">
         {sidebarOpen ? (
           <div
             className="relative z-50 lg:hidden"
@@ -66,7 +69,7 @@ export default function TabLayout({ children }: { children: ReactNode }) {
                       /> */}
                   </div>
 
-                  <NavBar />
+                  <NavBar onNavigate={() => setSidebarOpen(false)} />
                 </div>
               </div>
             </div>
@@ -89,30 +92,30 @@ export default function TabLayout({ children }: { children: ReactNode }) {
           </div>
         </div>
 
-        <div className="sticky top-0 z-40 flex items-center gap-x-6 bg-white px-4 py-4 shadow-xs sm:px-6 lg:hidden dark:bg-slate-950">
+        <div className="sticky top-0 z-40 flex h-14 items-center gap-x-4 bg-white px-4 shadow-xs sm:px-6 lg:hidden dark:bg-slate-950">
           <button
             type="button"
             onClick={() => setSidebarOpen(true)}
-            className="-m-2.5 p-2.5 text-gray-700 hover:text-gray-900 lg:hidden dark:text-slate-300 dark:hover:text-white"
+            aria-label="Open navigation"
+            className="flex size-9 items-center justify-center rounded-md text-gray-700 hover:bg-gray-100 hover:text-gray-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 lg:hidden dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white"
           >
             <span className="sr-only">Open sidebar</span>
             <Bars aria-hidden="true" className="size-6" />
           </button>
           <div className="flex-1 text-sm/6 font-semibold text-gray-900 dark:text-slate-100">
-            Dashboard
+            {pageTitle}
           </div>
-          <a href="#">
-            <span className="sr-only">Your profile</span>
-            {/* <img
-                alt=""
-                src="https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?ixlib=rb-1.2.1&ixid=eyJhcHBfaWQiOjEyMDd9&auto=format&fit=facearea&facepad=2&w=256&h=256&q=80"
-                className="size-8 rounded-full bg-gray-50 outline -outline-offset-1 outline-black/5"
-              /> */}
-          </a>
         </div>
 
-        <main className="lg:pl-72">{children}</main>
+        <main className="min-w-0 lg:pl-72">{children}</main>
       </div>
     </>
   );
+}
+
+function getPageTitle(pathname: string) {
+  if (pathname.startsWith("/tab/chat")) return "Chat";
+  if (pathname.startsWith("/tab/settings")) return "Settings";
+  if (pathname.startsWith("/tab/config")) return "Configuration";
+  return "Campaigns";
 }

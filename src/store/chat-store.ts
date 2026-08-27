@@ -12,6 +12,7 @@ export const MAX_SESSIONS = 20;
 export interface ChatSession {
   id: string;
   title: string;
+  titleCustomized?: boolean;
   messages: Message[];
   selectedAgentId: string;
   createdAt: number;
@@ -27,7 +28,7 @@ interface ChatStoreState {
   quotedMessages: QuotedMessage[];
   setLanguage: (lang: Language) => void;
   setEnableThinking: (enabled: boolean) => void;
-  createSession: (agentId?: string) => string;
+  createSession: (agentId?: string) => string | null;
   switchSession: (id: string) => void;
   deleteSession: (id: string) => void;
   updateSessionMessages: (id: string, messages: Message[]) => void;
@@ -54,6 +55,7 @@ function createNewSession(
   return {
     id: crypto.randomUUID(),
     title: getNewSessionTitle(language),
+    titleCustomized: false,
     messages: [getWelcomeMessage(language)],
     selectedAgentId: agentId ?? getLocalizedAgents(language)[0].id,
     createdAt: Date.now(),
@@ -71,24 +73,40 @@ export const useChatStore = create<ChatStoreState>()(
       draftInputs: {},
       quotedMessages: [],
 
-      setLanguage: (lang) => set({ language: lang }),
+      setLanguage: (lang) =>
+        set((state) => ({
+          language: lang,
+          sessions: state.sessions.map((session) => {
+            const hasUserMessage = session.messages.some(
+              (message) => message.role === "user",
+            );
+            if (hasUserMessage || session.titleCustomized) return session;
+
+            return {
+              ...session,
+              title: getNewSessionTitle(lang),
+              messages: [getWelcomeMessage(lang)],
+            };
+          }),
+        })),
       setEnableThinking: (enabled) => set({ enableThinking: enabled }),
 
       createSession: (agentId) => {
-        let lang = "zh" as Language;
+        let createdSessionId: string | null = null;
         set((state) => {
-          lang = state.language;
-          return state;
+          if (state.sessions.length >= MAX_SESSIONS) return state;
+
+          const session = createNewSession(
+            typeof agentId === "string" ? agentId : undefined,
+            state.language,
+          );
+          createdSessionId = session.id;
+          return {
+            sessions: [session, ...state.sessions],
+            activeSessionId: session.id,
+          };
         });
-        const session = createNewSession(
-          typeof agentId === "string" ? agentId : undefined,
-          lang,
-        );
-        set((state) => {
-          const sessions = [session, ...state.sessions].slice(0, MAX_SESSIONS);
-          return { sessions, activeSessionId: session.id };
-        });
-        return session.id;
+        return createdSessionId;
       },
 
       switchSession: (id) => {
@@ -123,8 +141,14 @@ export const useChatStore = create<ChatStoreState>()(
         set((state) => {
           const sessions = state.sessions.map((s) => {
             if (s.id !== id) return s;
+            const hadUserMessage = s.messages.some(
+              (message) => message.role === "user",
+            );
+            const hasUserMessage = messages.some(
+              (message) => message.role === "user",
+            );
             const title =
-              s.title === getNewSessionTitle(state.language)
+              !s.titleCustomized && !hadUserMessage && hasUserMessage
                 ? generateTitle(messages, state.language)
                 : s.title;
             return { ...s, messages, title, updatedAt: Date.now() };
@@ -144,9 +168,18 @@ export const useChatStore = create<ChatStoreState>()(
       },
 
       renameSession: (id, title) => {
+        const normalizedTitle = title.trim();
+        if (!normalizedTitle) return;
         set((state) => ({
           sessions: state.sessions.map((s) =>
-            s.id === id ? { ...s, title, updatedAt: Date.now() } : s,
+            s.id === id
+              ? {
+                  ...s,
+                  title: normalizedTitle,
+                  titleCustomized: true,
+                  updatedAt: Date.now(),
+                }
+              : s,
           ),
         }));
       },
@@ -175,6 +208,7 @@ export const useChatStore = create<ChatStoreState>()(
     {
       name: "chat-store",
       storage: createJSONStorage(() => sessionStorage),
+      skipHydration: true,
       partialize: (state) => ({
         sessions: state.sessions,
         activeSessionId: state.activeSessionId,
@@ -187,24 +221,15 @@ export const useChatStore = create<ChatStoreState>()(
   ),
 );
 
-// 持久化 hydration 完成后，确保始终有一个活跃会话
-if (typeof window !== "undefined" && useChatStore.persist) {
-  const ensureActiveSession = () => {
-    const state = useChatStore.getState();
-    const hasActiveSession = state.sessions.some(
-      (s) => s.id === state.activeSessionId,
-    );
-    if (!hasActiveSession) {
-      // 无活跃会话时自动创建（即使有遗留会话但 activeSessionId 失效也重建）
-      state.createSession();
-    }
-  };
+export function ensureActiveChatSession() {
+  const state = useChatStore.getState();
+  const hasActiveSession = state.sessions.some(
+    (session) => session.id === state.activeSessionId,
+  );
+  if (hasActiveSession) return;
 
-  if (useChatStore.persist.hasHydrated()) {
-    ensureActiveSession();
-  } else {
-    useChatStore.persist.onFinishHydration(ensureActiveSession);
-  }
+  if (state.sessions.length > 0) state.switchSession(state.sessions[0].id);
+  else state.createSession();
 }
 
 /** 获取当前活跃会话 */
@@ -218,7 +243,7 @@ export function useActiveSession(): {
   quotedMessages: QuotedMessage[];
   setLanguage: (lang: Language) => void;
   setEnableThinking: (enabled: boolean) => void;
-  createSession: (agentId?: string) => string;
+  createSession: (agentId?: string) => string | null;
   switchSession: (id: string) => void;
   deleteSession: (id: string) => void;
   updateSessionMessages: (id: string, messages: Message[]) => void;

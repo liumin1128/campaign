@@ -13,9 +13,13 @@ import { formatBytes } from "@/lib/client-analysis/csv-analysis-prompts";
 function LoadingDots() {
   return (
     <span className="inline-flex gap-1">
-      <span className="animate-bounce">.</span>
-      <span className="animate-bounce [animation-delay:0.2s]">.</span>
-      <span className="animate-bounce [animation-delay:0.4s]">.</span>
+      <span className="animate-bounce motion-reduce:animate-none">.</span>
+      <span className="animate-bounce [animation-delay:0.2s] motion-reduce:animate-none">
+        .
+      </span>
+      <span className="animate-bounce [animation-delay:0.4s] motion-reduce:animate-none">
+        .
+      </span>
     </span>
   );
 }
@@ -42,15 +46,17 @@ export function MessageBubble({
   onToggleQuote,
 }: MessageBubbleProps) {
   const content = message.content || "";
-  const showActions = !isLoading && content.length > 0;
+  const showActions = content.length > 0 && !(isLoading && isLatest);
 
   return (
     <div
       className={`flex group ${message.role === "user" ? "justify-end" : "justify-start"}`}
     >
       <div
-        className={`max-w-[80%] space-y-1 ${
-          message.role === "assistant" ? "order-first" : ""
+        className={`space-y-1 ${
+          message.role === "assistant"
+            ? "order-first max-w-full sm:max-w-[92%]"
+            : "max-w-[88%] sm:max-w-[80%]"
         }`}
       >
         {message.role === "assistant" && message.reasoning && (
@@ -61,15 +67,15 @@ export function MessageBubble({
           {message.role === "assistant" &&
           message.content &&
           isMarkdownContent(message.content) ? (
-            <div className="rounded-2xl bg-white px-4 py-3 text-gray-900 dark:bg-slate-800 dark:text-slate-100">
+            <div className="rounded-xl border border-gray-200/80 bg-white px-4 py-3 text-gray-900 shadow-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100">
               <MarkdownDisplay content={message.content} />
             </div>
           ) : (
             <div
-              className={`rounded-2xl px-4 py-3 text-sm leading-relaxed whitespace-pre-wrap ${
+              className={`px-4 py-3 text-sm leading-relaxed whitespace-pre-wrap ${
                 message.role === "user"
-                  ? "bg-indigo-600 text-white"
-                  : "bg-white text-gray-900 dark:bg-slate-800 dark:text-slate-100"
+                  ? "rounded-2xl bg-indigo-600 text-white"
+                  : "rounded-xl border border-gray-200/80 bg-white text-gray-900 shadow-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
               }`}
             >
               {message.content ||
@@ -85,9 +91,10 @@ export function MessageBubble({
               sessionId={sessionId}
               sessionTitle={sessionTitle}
               quotedMessages={quotedMessages}
+              language={language}
               onToggleQuote={onToggleQuote}
             />
-            <CopyButton content={content} />
+            <CopyButton content={content} language={language} />
           </div>
         )}
 
@@ -95,7 +102,7 @@ export function MessageBubble({
           <div className="mt-1.5 space-y-1">
             {message.attachments.map((att, idx) => (
               <div
-                key={idx}
+                key={att.id ?? `${att.name}-${idx}`}
                 className={`flex items-center gap-2 rounded-xl border px-3 py-2 text-xs ${
                   message.role === "user"
                     ? "border-indigo-300/50 bg-indigo-500/20 text-indigo-100"

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import type { Language } from "./types";
 import { t } from "./i18n";
+import { ChevronRight } from "flowbite-react-icons/outline";
 
 export function ReasoningBlock({
   text,
@@ -19,19 +20,13 @@ export function ReasoningBlock({
       <button
         type="button"
         onClick={() => setExpanded(!expanded)}
-        className="flex w-full items-center gap-1.5 px-3 py-2 text-amber-700 hover:text-amber-900 dark:text-amber-400 dark:hover:text-amber-200"
+        aria-expanded={expanded}
+        className="flex w-full items-center gap-1.5 px-3 py-2 text-amber-700 hover:text-amber-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-amber-500 dark:text-amber-400 dark:hover:text-amber-200"
       >
-        <svg
+        <ChevronRight
+          aria-hidden="true"
           className={`size-3 transition-transform ${expanded ? "rotate-90" : ""}`}
-          viewBox="0 0 20 20"
-          fill="currentColor"
-        >
-          <path
-            fillRule="evenodd"
-            d="M7.21 14.77a.75.75 0 01.02-1.06L11.168 10 7.23 6.29a.75.75 0 111.04-1.08l4.5 4.25a.75.75 0 010 1.08l-4.5 4.25a.75.75 0 01-1.06-.02z"
-            clipRule="evenodd"
-          />
-        </svg>
+        />
         <span className="font-medium">{t(language, "reasoning_title")}</span>
         {!expanded && isLong && (
           <span className="text-amber-500">

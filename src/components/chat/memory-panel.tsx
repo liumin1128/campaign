@@ -42,6 +42,11 @@ export function MemoryPanel({
             type="checkbox"
             checked={enabled}
             onChange={(event) => onEnabledChange(event.target.checked)}
+            aria-label={
+              enabled
+                ? t(language, "memory_enabled")
+                : t(language, "memory_disabled")
+            }
             className="peer sr-only"
           />
           <span className="h-5 w-9 rounded-full bg-gray-200 transition peer-checked:bg-indigo-500 peer-focus-visible:ring-2 peer-focus-visible:ring-indigo-300 dark:bg-slate-700" />

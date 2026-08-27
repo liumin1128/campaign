@@ -6,6 +6,7 @@ import { t } from "./i18n";
 import { usePromptOverrideStore } from "@/store/prompt-override-store";
 import type { ConversationMemory } from "@/lib/chat-memory/types";
 import { MemoryPanel } from "./memory-panel";
+import { Close } from "flowbite-react-icons/outline";
 
 // ---------- Types ----------
 
@@ -126,7 +127,7 @@ export function DevPanel({
   }
 
   return (
-    <div className="flex w-96 shrink-0 flex-col border-l border-gray-200 bg-white dark:border-slate-700 dark:bg-slate-900">
+    <div className="flex h-full min-h-0 w-full flex-col border-l border-gray-200 bg-white dark:border-slate-700 dark:bg-slate-900">
       {/* Header */}
       <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3 dark:border-slate-700">
         <div className="min-w-0 flex-1">
@@ -141,33 +142,28 @@ export function DevPanel({
         <button
           type="button"
           onClick={onClose}
-          className="shrink-0 rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-slate-800 dark:hover:text-slate-300"
-          aria-label="Close"
+          className="flex size-8 shrink-0 items-center justify-center rounded-md text-gray-500 hover:bg-gray-100 hover:text-gray-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+          aria-label={t(language, "dev_mode_close")}
         >
-          <svg
-            className="size-4"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M6 18L18 6M6 6l12 12"
-            />
-          </svg>
+          <Close aria-hidden="true" className="size-4" />
         </button>
       </div>
 
       {/* Tabs */}
-      <div className="flex border-b border-gray-200 dark:border-slate-700">
+      <div
+        role="tablist"
+        className="flex border-b border-gray-200 dark:border-slate-700"
+      >
         {tabs.map((tab) => (
           <button
             key={tab.id}
             type="button"
+            id={`dev-tab-${tab.id}`}
+            role="tab"
+            aria-selected={activeTab === tab.id}
+            aria-controls="dev-tab-panel"
             onClick={() => setActiveTab(tab.id)}
-            className={`flex-1 px-3 py-2 text-xs font-medium transition ${
+            className={`flex-1 px-2 py-2 text-xs font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-indigo-500 ${
               activeTab === tab.id
                 ? "border-b-2 border-indigo-500 text-indigo-600 dark:border-indigo-400 dark:text-indigo-400"
                 : "text-gray-500 hover:text-gray-700 dark:text-slate-400 dark:hover:text-slate-300"
@@ -179,7 +175,12 @@ export function DevPanel({
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-y-auto">
+      <div
+        id="dev-tab-panel"
+        role="tabpanel"
+        aria-labelledby={`dev-tab-${activeTab}`}
+        className="min-h-0 flex-1 overflow-y-auto"
+      >
         {activeTab === "system" && (
           <SystemTab
             data={data}

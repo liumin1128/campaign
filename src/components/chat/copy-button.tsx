@@ -2,6 +2,8 @@
 
 import { useState, useCallback } from "react";
 import { FileCopy, Check } from "flowbite-react-icons/outline";
+import type { Language } from "./types";
+import { t } from "./i18n";
 
 /** 将 markdown 文本转换为简易 HTML（用于富文本粘贴） */
 function mdToHtml(md: string): string {
@@ -39,10 +41,15 @@ function escapeHtml(text: string): string {
 
 interface CopyButtonProps {
   content: string;
+  language: Language;
   className?: string;
 }
 
-export function CopyButton({ content, className = "" }: CopyButtonProps) {
+export function CopyButton({
+  content,
+  language,
+  className = "",
+}: CopyButtonProps) {
   const [copied, setCopied] = useState(false);
 
   const handleCopy = useCallback(async () => {
@@ -78,17 +85,18 @@ export function CopyButton({ content, className = "" }: CopyButtonProps) {
     <button
       type="button"
       onClick={handleCopy}
-      className={`inline-flex items-center justify-center rounded-md p-1 text-xs transition ${
+      className={`inline-flex size-8 items-center justify-center rounded-md text-xs transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 ${
         copied
           ? "text-emerald-500"
-          : "text-gray-400 opacity-0 group-hover:opacity-100 hover:bg-gray-200 hover:text-gray-600 dark:hover:bg-slate-700 dark:hover:text-slate-300"
+          : "text-gray-500 opacity-100 hover:bg-gray-200 hover:text-gray-700 sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-slate-200"
       } ${className}`}
-      title={copied ? "已复制" : "复制内容"}
+      aria-label={t(language, copied ? "copied_title" : "copy_title")}
+      title={t(language, copied ? "copied_title" : "copy_title")}
     >
       {copied ? (
-        <Check className="size-3.5" />
+        <Check aria-hidden="true" className="size-4" />
       ) : (
-        <FileCopy className="size-3.5" />
+        <FileCopy aria-hidden="true" className="size-4" />
       )}
     </button>
   );

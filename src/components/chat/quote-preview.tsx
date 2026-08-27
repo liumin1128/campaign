@@ -37,7 +37,10 @@ export function QuotePreview({
             className="flex items-start gap-2 rounded-lg border border-indigo-200 bg-indigo-50/80 px-3 py-2 dark:border-indigo-800/50 dark:bg-indigo-950/20"
           >
             {/* 左侧引用竖线 */}
-            <div className="mt-0.5 w-0.5 shrink-0 self-stretch rounded-full bg-indigo-400 dark:bg-indigo-500" />
+            <div
+              aria-hidden="true"
+              className="mt-0.5 w-0.5 shrink-0 self-stretch rounded-full bg-indigo-400 dark:bg-indigo-500"
+            />
 
             <div className="min-w-0 flex-1">
               {/* 来源信息 */}
@@ -60,10 +63,11 @@ export function QuotePreview({
             <button
               type="button"
               onClick={() => onRemove(qm.id)}
-              className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded text-indigo-400 transition hover:bg-indigo-200 hover:text-indigo-700 dark:hover:bg-indigo-800 dark:hover:text-indigo-200"
+              aria-label={t(language, "quote_remove")}
+              className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-md text-indigo-500 transition hover:bg-indigo-200 hover:text-indigo-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:hover:bg-indigo-800 dark:hover:text-indigo-200"
               title={t(language, "quote_remove")}
             >
-              <Close className="size-3.5" />
+              <Close aria-hidden="true" className="size-4" />
             </button>
           </div>
         );

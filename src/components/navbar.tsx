@@ -6,6 +6,7 @@ import { Cog, Home, MessageDots } from "flowbite-react-icons/outline";
 import { classNames } from "@/utils/common";
 import { useTeamsUserStore } from "@/store/teams-user-store";
 import { usePathname } from "next/navigation";
+import Link from "next/link";
 
 const navigation = [
   { name: "Campaigns", href: "/tab", icon: Home },
@@ -17,12 +18,6 @@ const navigation = [
   // { name: "Reports", href: "#", icon: ChartPie, current: false },
   { name: "Settings", href: "/tab/settings", icon: Cog },
 ];
-const teams = [
-  { id: 1, name: "Heroicons", href: "#", initial: "H", current: false },
-  { id: 2, name: "Tailwind Labs", href: "#", initial: "T", current: false },
-  { id: 3, name: "Workcation", href: "#", initial: "W", current: false },
-];
-
 function getUserInitials(displayName: string) {
   const initials = displayName
     .split(/\s+/)
@@ -115,7 +110,7 @@ function ThemeModeSwitch() {
   );
 }
 
-export function Navbar() {
+export function Navbar({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
   const [profileOpen, setProfileOpen] = useState(false);
   const context = useTeamsUserStore((state) => state.context);
@@ -155,8 +150,9 @@ export function Navbar() {
                     const current = isCurrent(item.href);
                     return (
                       <li key={item.name}>
-                        <a
+                        <Link
                           href={item.href}
+                          onClick={onNavigate}
                           className={classNames(
                             current
                               ? "bg-gray-50 text-indigo-600 dark:bg-slate-800 dark:text-indigo-300"
@@ -174,7 +170,7 @@ export function Navbar() {
                             )}
                           />
                           {item.name}
-                        </a>
+                        </Link>
                       </li>
                     );
                   })}

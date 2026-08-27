@@ -1,7 +1,8 @@
 "use client";
 
 import { Quote } from "flowbite-react-icons/outline";
-import type { QuotedMessage } from "./types";
+import type { Language, QuotedMessage } from "./types";
+import { t } from "./i18n";
 
 interface QuoteButtonProps {
   message: {
@@ -12,6 +13,7 @@ interface QuoteButtonProps {
   sessionId: string;
   sessionTitle: string;
   quotedMessages: QuotedMessage[];
+  language: Language;
   onToggleQuote: (msg: QuotedMessage) => void;
   className?: string;
 }
@@ -21,6 +23,7 @@ export function QuoteButton({
   sessionId,
   sessionTitle,
   quotedMessages,
+  language,
   onToggleQuote,
   className = "",
 }: QuoteButtonProps) {
@@ -42,14 +45,19 @@ export function QuoteButton({
     <button
       type="button"
       onClick={handleClick}
-      className={`inline-flex items-center justify-center rounded-md p-1 text-xs transition ${
+      className={`inline-flex size-8 items-center justify-center rounded-md text-xs transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 ${
         isCurrentlyQuoted
           ? "text-indigo-500"
-          : "text-gray-400 opacity-0 group-hover:opacity-100 hover:bg-gray-200 hover:text-gray-600 dark:hover:bg-slate-700 dark:hover:text-slate-300"
+          : "text-gray-500 opacity-100 hover:bg-gray-200 hover:text-gray-700 sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-slate-200"
       } ${className}`}
-      title={isCurrentlyQuoted ? "取消引用" : "引用此消息"}
+      aria-pressed={isCurrentlyQuoted}
+      aria-label={t(
+        language,
+        isCurrentlyQuoted ? "quote_cancel" : "quote_title",
+      )}
+      title={t(language, isCurrentlyQuoted ? "quote_cancel" : "quote_title")}
     >
-      <Quote className="size-3.5" />
+      <Quote aria-hidden="true" className="size-4" />
     </button>
   );
 }
