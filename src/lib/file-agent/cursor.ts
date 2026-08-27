@@ -1,6 +1,7 @@
 export type FileCursor =
   | { type: "byte"; offset: number }
-  | { type: "line"; line: number };
+  | { type: "line"; line: number }
+  | { type: "sheet-row"; sheetIndex: number; row: number };
 
 const PREFIX = "f1:";
 
@@ -27,6 +28,17 @@ export function decodeFileCursor(value: string | undefined): FileCursor | undefi
   }
   if (parsed.type === "line" && isPositiveInteger(parsed.line)) {
     return { type: "line", line: parsed.line };
+  }
+  if (
+    parsed.type === "sheet-row" &&
+    isNonNegativeInteger(parsed.sheetIndex) &&
+    isPositiveInteger(parsed.row)
+  ) {
+    return {
+      type: "sheet-row",
+      sheetIndex: parsed.sheetIndex,
+      row: parsed.row,
+    };
   }
   throw new Error("Invalid file cursor");
 }

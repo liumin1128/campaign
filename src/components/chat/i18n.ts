@@ -25,8 +25,8 @@ const translations = {
     // 输入框
     chat_input_placeholder: "输入消息，Shift+Enter 换行...",
     chat_input_loading_placeholder: "可继续输入下一条消息...",
-    upload_file_title: "上传本地文件（文本类可直接检索，复杂格式需预处理）",
-    upload_large_csv_title: "添加大 CSV 本地分析",
+    upload_file_title: "上传本地文件（支持 XLSX 和文本类文件）",
+    upload_large_csv_title: "添加 CSV / XLSX 本地分析",
     thinking_on_title: "关闭 thinking 模式",
     thinking_off_title: "开启 thinking 模式",
     stop_title: "停止生成",
@@ -147,8 +147,8 @@ const translations = {
 
     chat_input_placeholder: "Type a message, Shift+Enter for new line...",
     chat_input_loading_placeholder: "Compose your next message...",
-    upload_file_title: "Upload local files (text formats are searchable)",
-    upload_large_csv_title: "Add large CSV for local analysis",
+    upload_file_title: "Upload local files (XLSX and text formats supported)",
+    upload_large_csv_title: "Add CSV / XLSX for local analysis",
     thinking_on_title: "Turn thinking mode off",
     thinking_off_title: "Turn thinking mode on",
     stop_title: "Stop generating",

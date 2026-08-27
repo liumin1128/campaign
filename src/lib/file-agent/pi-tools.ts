@@ -91,6 +91,9 @@ function createSearchTool(contexts: GenericFileContext[]) {
       query: Type.String(),
       mode: Type.Optional(Type.Union([Type.Literal("literal"), Type.Literal("regex")])),
       ignoreCase: Type.Optional(Type.Boolean()),
+      sheet: Type.Optional(
+        Type.String({ description: "Worksheet name for XLSX files; omit to search all sheets" }),
+      ),
       cursor: Type.Optional(Type.String()),
       limit: Type.Optional(Type.Number()),
     },
@@ -100,7 +103,7 @@ function createSearchTool(contexts: GenericFileContext[]) {
     name: "search_file",
     label: "Search File",
     description:
-      "Search a supported text file without returning the whole file. Use literal mode by default or regex when needed. Results contain bounded matching lines and an optional nextCursor for continuation.",
+      "Search a supported text file or XLSX workbook without returning the whole file. Use literal mode by default or regex when needed. For XLSX, omit sheet to search the workbook or pass a worksheet name. Results contain bounded matches and an optional nextCursor for continuation.",
     parameters,
     async execute(_toolCallId, params, signal) {
       requireContext(contexts, params.fileId);
@@ -110,6 +113,7 @@ function createSearchTool(contexts: GenericFileContext[]) {
           query: params.query,
           mode: params.mode,
           ignoreCase: params.ignoreCase,
+          sheet: params.sheet,
           cursor: params.cursor,
           limit: params.limit,
         },
@@ -127,6 +131,9 @@ function createReadTool(contexts: GenericFileContext[]) {
   const parameters = Type.Object(
     {
       fileId: Type.String({ description: "File id from the attached-file catalog" }),
+      sheet: Type.Optional(
+        Type.String({ description: "Worksheet name for XLSX files; defaults to the first sheet" }),
+      ),
       cursor: Type.Optional(Type.String()),
       maxBytes: Type.Optional(Type.Number()),
     },
@@ -136,13 +143,13 @@ function createReadTool(contexts: GenericFileContext[]) {
     name: "read_file_chunk",
     label: "Read File Chunk",
     description:
-      "Read one bounded chunk from a supported text file. Never request the whole large file. Continue only when the returned nextCursor is relevant to the user's question.",
+      "Read one bounded chunk from a supported text file or one bounded set of rows from an XLSX worksheet. For XLSX, pass a worksheet name from inspect_file. Never read a whole large file sequentially.",
     parameters,
     async execute(_toolCallId, params, signal) {
       requireContext(contexts, params.fileId);
       const result = await readGenericFile(
         params.fileId,
-        { cursor: params.cursor, maxBytes: params.maxBytes },
+        { sheet: params.sheet, cursor: params.cursor, maxBytes: params.maxBytes },
         signal,
       );
       return {
@@ -157,6 +164,9 @@ function createQueryTool(contexts: GenericFileContext[]) {
   const parameters = Type.Object(
     {
       fileId: Type.String({ description: "File id from the attached-file catalog" }),
+      sheet: Type.Optional(
+        Type.String({ description: "Worksheet name for XLSX files; defaults to the first sheet" }),
+      ),
       operation: Type.Union([
         Type.Literal("profile"),
         Type.Literal("count"),
@@ -182,7 +192,7 @@ function createQueryTool(contexts: GenericFileContext[]) {
     name: "query_file",
     label: "Query File",
     description:
-      "Run a bounded local query over CSV, TSV, JSONL, or reasonably sized JSON. Supports profile, count, distinct, stats, filter, aggregate, and top operations. Prefer this over reading raw rows when the question needs totals or comparisons.",
+      "Run a bounded local query over XLSX, CSV, TSV, JSONL, or reasonably sized JSON. For XLSX, pass the worksheet name from inspect_file. Supports profile, count, distinct, stats, filter, aggregate, and top operations. Prefer this over reading raw rows when the question needs totals or comparisons.",
     parameters,
     executionMode: "sequential",
     async execute(_toolCallId, params, signal) {
@@ -191,6 +201,7 @@ function createQueryTool(contexts: GenericFileContext[]) {
         params.fileId,
         {
           operation: params.operation,
+          sheet: params.sheet,
           column: params.column,
           columns: params.columns,
           filters: params.filters,

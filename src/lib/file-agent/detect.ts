@@ -21,7 +21,7 @@ export async function detectGenericFile(
 
   if (kind === "binary") {
     warnings.push("Unsupported binary format. Convert it to UTF-8 text, CSV, TSV, JSON, or JSONL before upload.");
-  } else if (["xlsx", "pdf", "docx", "image", "zip"].includes(kind)) {
+  } else if (["pdf", "docx", "image", "zip"].includes(kind)) {
     warnings.push(`The ${kind} format is not parsed in this release. Convert it to text or a supported structured text format.`);
   }
 
@@ -57,7 +57,12 @@ function detectByExtensionAndContent(
   mimeType: string,
   text: string | null,
 ): GenericFileKind {
-  if (extension === "xlsx") return "xlsx";
+  if (
+    extension === "xlsx" ||
+    mimeType === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+  ) {
+    return "xlsx";
+  }
   if (extension === "docx") return "docx";
   if (extension === "pdf") return "pdf";
   if (extension === "zip" || mimeType === "application/zip") return "zip";
@@ -80,7 +85,6 @@ function detectByExtensionAndContent(
 function capabilitiesForKind(kind: GenericFileKind): FileCapability[] {
   switch (kind) {
     case "image":
-    case "xlsx":
     case "pdf":
     case "docx":
     case "binary":
@@ -91,6 +95,7 @@ function capabilitiesForKind(kind: GenericFileKind): FileCapability[] {
     case "tsv":
     case "json":
     case "jsonl":
+    case "xlsx":
       return ["inspect", "search", "read", "query"];
     default:
       return ["inspect", "search", "read"];

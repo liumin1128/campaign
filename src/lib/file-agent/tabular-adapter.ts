@@ -4,12 +4,18 @@ import type {
   GenericFileDescriptor,
 } from "./types";
 import { iterateTextLines } from "./text-adapter";
+import {
+  iterateXlsxRows,
+  type XlsxWorkbook,
+} from "./xlsx-workbook";
 
 export async function* iterateTabularRows(args: {
   file: File;
   descriptor: GenericFileDescriptor;
   limits: FileAgentLimits;
   isCancelled: () => boolean;
+  workbook?: XlsxWorkbook;
+  sheet?: string;
 }): AsyncGenerator<{ rowNumber: number; row: FileQueryItem }> {
   switch (args.descriptor.kind) {
     case "csv":
@@ -27,6 +33,14 @@ export async function* iterateTabularRows(args: {
       return;
     case "json":
       yield* iterateJsonDocument(args);
+      return;
+    case "xlsx":
+      if (!args.workbook) throw new Error("XLSX workbook has not been parsed");
+      yield* iterateXlsxRows({
+        workbook: args.workbook,
+        sheet: args.sheet,
+        isCancelled: args.isCancelled,
+      });
       return;
     default:
       throw new Error(`File type ${args.descriptor.kind} does not support structured queries`);

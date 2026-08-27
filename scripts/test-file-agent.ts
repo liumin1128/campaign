@@ -4,6 +4,11 @@ import { DEFAULT_FILE_AGENT_LIMITS } from "../src/lib/file-agent/limits";
 import { getServerFileAgentLimits } from "../src/lib/file-agent/server-limits";
 import { queryTextDataFile } from "../src/lib/file-agent/query-adapter";
 import { inspectTextFile, readTextFileChunk, searchTextFile } from "../src/lib/file-agent/text-adapter";
+import { readXlsxFileChunk, searchXlsxFile } from "../src/lib/file-agent/xlsx-adapter";
+import {
+  createXlsxWorkbook,
+  inspectXlsxWorkbook,
+} from "../src/lib/file-agent/xlsx-workbook";
 
 async function main() {
   process.env.FILE_AGENT_MAX_TOOL_RESULT_BYTES = "40960";
@@ -153,6 +158,71 @@ async function main() {
     isCancelled: () => false,
   });
   assert.equal(top.items[0].type, "event");
+
+  const xlsxFile = new File([new Uint8Array([0x50, 0x4b, 0x03, 0x04])], "sales.xlsx", {
+    type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  });
+  let xlsxDescriptor = await detectGenericFile("xlsx-1", xlsxFile);
+  const workbook = createXlsxWorkbook([
+    {
+      sheet: "Sales",
+      data: [
+        ["region", "revenue", "active", "date"],
+        ["AU", 10, true, new Date("2026-08-01T00:00:00.000Z")],
+        ["NZ", 20, false, new Date("2026-08-02T00:00:00.000Z")],
+        ["AU", 15, true, new Date("2026-08-03T00:00:00.000Z")],
+      ],
+    },
+    {
+      sheet: "Notes",
+      data: [["note"], ["launch campaign"]],
+    },
+  ]);
+  xlsxDescriptor = inspectXlsxWorkbook(xlsxDescriptor, workbook);
+  assert.equal(xlsxDescriptor.kind, "xlsx");
+  assert.deepEqual(xlsxDescriptor.capabilities, ["inspect", "search", "read", "query"]);
+  assert.equal(xlsxDescriptor.structure.sheets?.[0].name, "Sales");
+  assert.deepEqual(xlsxDescriptor.structure.columns, [
+    "region",
+    "revenue",
+    "active",
+    "date",
+  ]);
+
+  const xlsxRead = await readXlsxFileChunk({
+    workbook,
+    descriptor: xlsxDescriptor,
+    request: { sheet: "Notes" },
+    limits: DEFAULT_FILE_AGENT_LIMITS,
+    isCancelled: () => false,
+  });
+  assert.equal(xlsxRead.items[1].text, '["launch campaign"]');
+
+  const xlsxSearch = await searchXlsxFile({
+    workbook,
+    descriptor: xlsxDescriptor,
+    request: { query: "campaign" },
+    limits: DEFAULT_FILE_AGENT_LIMITS,
+    isCancelled: () => false,
+  });
+  assert.equal(xlsxSearch.items[0].location, "Notes!row 2");
+
+  const xlsxAggregate = await queryTextDataFile({
+    file: xlsxFile,
+    workbook,
+    descriptor: xlsxDescriptor,
+    request: {
+      sheet: "Sales",
+      operation: "aggregate",
+      groupBy: ["region"],
+      metrics: [{ name: "total_revenue", field: "revenue", operation: "sum" }],
+      sortBy: "total_revenue",
+      direction: "desc",
+    },
+    limits: DEFAULT_FILE_AGENT_LIMITS,
+    isCancelled: () => false,
+  });
+  assert.deepEqual(xlsxAggregate.items[0], { region: "AU", total_revenue: 25 });
 
   const binaryFile = new File([new Uint8Array([0, 1, 0, 2, 0, 3])], "archive.bin");
   const binaryDescriptor = await detectGenericFile("binary-1", binaryFile);

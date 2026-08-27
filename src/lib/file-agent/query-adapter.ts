@@ -10,6 +10,7 @@ import type {
   GenericFileFilter,
   GenericFileMetric,
 } from "./types";
+import type { XlsxWorkbook } from "./xlsx-workbook";
 
 const MAX_COLUMNS = 200;
 const MAX_GROUPS = 50_000;
@@ -40,6 +41,7 @@ export async function queryTextDataFile(args: {
   request: FileQueryRequest;
   limits: FileAgentLimits;
   isCancelled: () => boolean;
+  workbook?: XlsxWorkbook;
 }): Promise<FileQueryResult> {
   switch (args.request.operation) {
     case "profile":
@@ -256,10 +258,14 @@ type QueryArgs = {
   request: FileQueryRequest;
   limits: FileAgentLimits;
   isCancelled: () => boolean;
+  workbook?: XlsxWorkbook;
 };
 
 function rows(args: QueryArgs) {
-  return iterateTabularRows(args);
+  return iterateTabularRows({
+    ...args,
+    sheet: args.request.sheet,
+  });
 }
 
 function envelope(

@@ -1,6 +1,12 @@
 import { detectGenericFile } from "./detect";
 import { queryTextDataFile } from "./query-adapter";
 import { inspectTextFile, readTextFileChunk, searchTextFile } from "./text-adapter";
+import { readXlsxFileChunk, searchXlsxFile } from "./xlsx-adapter";
+import {
+  inspectXlsxWorkbook,
+  loadXlsxWorkbook,
+  type XlsxWorkbook,
+} from "./xlsx-workbook";
 import type {
   FileAgentLimits,
   FileWorkerRequest,
@@ -11,6 +17,7 @@ import type {
 let file: File | undefined;
 let descriptor: GenericFileDescriptor | undefined;
 let limits: FileAgentLimits | undefined;
+let workbook: XlsxWorkbook | undefined;
 const cancelledRequests = new Set<string>();
 
 self.onmessage = async (event: MessageEvent<FileWorkerRequest>) => {
@@ -46,8 +53,25 @@ async function handleRequest(
     }
     file = request.file;
     limits = request.limits;
+    workbook = undefined;
     descriptor = await detectGenericFile(request.fileId, request.file);
-    if (descriptor.capabilities.includes("read")) {
+    if (
+      descriptor.kind === "xlsx" &&
+      request.file.size > request.limits.maxStructuredParseBytes
+    ) {
+      descriptor = {
+        ...descriptor,
+        capabilities: ["inspect"],
+        warnings: [
+          ...descriptor.warnings,
+          `XLSX exceeds the ${request.limits.maxStructuredParseBytes} byte parsing limit. Split the workbook or convert the required worksheet to CSV.`,
+        ],
+      };
+    } else if (descriptor.kind === "xlsx") {
+      const isCancelled = () => cancelledRequests.has(request.id);
+      workbook = await loadXlsxWorkbook(request.file, isCancelled);
+      descriptor = inspectXlsxWorkbook(descriptor, workbook);
+    } else if (descriptor.capabilities.includes("read")) {
       descriptor = await inspectTextFile(request.file, descriptor);
     }
     if (
@@ -75,12 +99,26 @@ async function handleRequest(
   }
   if (request.type === "search") {
     requireCapability(state.descriptor, "search");
-    const result = await searchTextFile({ ...state, request: request.request, isCancelled });
+    const result = state.workbook
+      ? await searchXlsxFile({
+          ...state,
+          workbook: state.workbook,
+          request: request.request,
+          isCancelled,
+        })
+      : await searchTextFile({ ...state, request: request.request, isCancelled });
     return { id: request.id, ok: true, type: "search", result };
   }
   if (request.type === "read") {
     requireCapability(state.descriptor, "read");
-    const result = await readTextFileChunk({ ...state, request: request.request, isCancelled });
+    const result = state.workbook
+      ? await readXlsxFileChunk({
+          ...state,
+          workbook: state.workbook,
+          request: request.request,
+          isCancelled,
+        })
+      : await readTextFileChunk({ ...state, request: request.request, isCancelled });
     return { id: request.id, ok: true, type: "read", result };
   }
 
@@ -91,7 +129,7 @@ async function handleRequest(
 
 function requireState() {
   if (!file || !descriptor || !limits) throw new Error("File worker has not been registered");
-  return { file, descriptor, limits };
+  return { file, descriptor, limits, workbook };
 }
 
 function requireCapability(
@@ -100,7 +138,7 @@ function requireCapability(
 ) {
   if (!current.capabilities.includes(capability)) {
     throw new Error(
-      `${current.name} (${current.kind}) cannot be ${capability === "query" ? "queried" : `${capability}ed`} in this release. Convert it to UTF-8 text, CSV, TSV, JSON, or JSONL first.`,
+      `${current.name} (${current.kind}) cannot be ${capability === "query" ? "queried" : `${capability}ed`} in this release. Convert it to UTF-8 text, CSV, TSV, JSON, JSONL, or XLSX first.`,
     );
   }
 }

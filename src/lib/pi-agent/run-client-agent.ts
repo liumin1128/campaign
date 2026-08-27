@@ -226,7 +226,7 @@ function buildAgentSystemPrompt(
 
 # Pi Agent 思考循环
 
-你可以自主决定是否以及何时调用工具。需要实时事实时使用 web_search。处理通用文件时，先调用 inspect_file，再根据 capabilities 选择 search_file、read_file_chunk 或 query_file；不要顺序读取整个大文件。旧版大 CSV 使用 query_large_file。只有本地查询不足以完成二次计算时才使用 run_analysis_script。收集到足够证据后，停止调用工具并直接给出最终答案。
+你可以自主决定是否以及何时调用工具。需要实时事实时使用 web_search。处理通用文件时，先调用 inspect_file，再根据 capabilities 选择 search_file、read_file_chunk 或 query_file；不要顺序读取整个大文件。处理 XLSX 时先从 structure.sheets 确定工作表，再通过 sheet 参数读取或查询。旧版大 CSV 使用 query_large_file。只有本地查询不足以完成二次计算时才使用 run_analysis_script。收集到足够证据后，停止调用工具并直接给出最终答案。
 
 约束：最多 ${limits.maxModelTurns} 个模型回合、${limits.maxToolCalls} 次工具调用、${limits.maxWebSearches} 次 Web Search。不要为了耗尽预算而调用工具，也不要重复相同查询。工具失败时应调整方法或基于已有证据作答。
 

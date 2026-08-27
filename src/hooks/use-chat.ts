@@ -827,6 +827,10 @@ export function useChat() {
     const targetSessionId = sessionId;
     if (files.length === 0 || !targetSessionId) return;
 
+    await addGenericFiles(files, targetSessionId);
+  }
+
+  async function addGenericFiles(files: File[], targetSessionId: string) {
     const operationId = beginPreparingAttachments(targetSessionId);
     try {
       const limits = await fetchFileAgentLimits();
@@ -857,8 +861,8 @@ export function useChat() {
       if (unsupportedAttachments.length > 0) {
         alert(
           language === "zh"
-            ? `以下文件当前只能识别类型，请先转换为 UTF-8 文本、CSV、TSV、JSON 或 JSONL：${unsupportedAttachments.map((item) => item.name).join("、")}`
-            : `These files must be converted to UTF-8 text, CSV, TSV, JSON, or JSONL first: ${unsupportedAttachments.map((item) => item.name).join(", ")}`,
+            ? `以下文件当前只能识别类型，请先转换为 UTF-8 文本、CSV、TSV、JSON、JSONL 或 XLSX：${unsupportedAttachments.map((item) => item.name).join("、")}`
+            : `These files must be converted to UTF-8 text, CSV, TSV, JSON, JSONL, or XLSX first: ${unsupportedAttachments.map((item) => item.name).join(", ")}`,
         );
         for (const attachment of unsupportedAttachments) {
           if (attachment.id) resetGenericFile(attachment.id);
@@ -896,10 +900,22 @@ export function useChat() {
 
     if (files.length === 0 || !targetSessionId) return;
 
+    const xlsxFiles = files.filter(isXlsxFile);
+    if (xlsxFiles.length > 0) {
+      await addGenericFiles(xlsxFiles, targetSessionId);
+    }
+
+    const csvFiles = files.filter((file) => !isXlsxFile(file));
+    if (csvFiles.length === 0) return;
+    const targetStillExists = useChatStore
+      .getState()
+      .sessions.some((item) => item.id === targetSessionId);
+    if (!targetStillExists) return;
+
     const validAttachments: Array<{ file: File; attachment: FileAttachment }> =
       [];
 
-    for (const file of files) {
+    for (const file of csvFiles) {
       const isCSV =
         file.name.toLowerCase().endsWith(".csv") || file.type === "text/csv";
       if (!isCSV) {
@@ -1472,6 +1488,14 @@ function formatGenericFileAttachmentContent(
     ? `\n提示：${descriptor.warnings.join("；")}`
     : "";
   return `[本地文件：${descriptor.name}]\n类型：${descriptor.kind}\n大小：${descriptor.size} 字节\n可用能力：${descriptor.capabilities.join(", ") || "inspect"}${warningText}`;
+}
+
+function isXlsxFile(file: File) {
+  return (
+    file.name.toLowerCase().endsWith(".xlsx") ||
+    file.type ===
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+  );
 }
 
 function getReadyCsvContexts(

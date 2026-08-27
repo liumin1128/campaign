@@ -211,7 +211,7 @@ export function ChatInput({
               ref={largeCsvInputRef}
               type="file"
               multiple
-              accept=".csv,text/csv"
+              accept=".csv,text/csv,.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
               onChange={onLargeCsvSelect}
               className="sr-only"
               tabIndex={-1}

@@ -17,10 +17,21 @@ export type FileCapability =
   | "read"
   | "query";
 
+export interface GenericSpreadsheetSheet {
+  name: string;
+  rowCount: number;
+  columnCount: number;
+  headerRow?: number;
+  columns: string[];
+}
+
 export interface GenericFileStructure {
   columns?: string[];
   lineCount?: number;
+  rowCount?: number;
   rootType?: "object" | "array" | "scalar";
+  activeSheet?: string;
+  sheets?: GenericSpreadsheetSheet[];
 }
 
 export interface GenericFileDescriptor {
@@ -55,6 +66,7 @@ export interface FileSearchRequest {
   query: string;
   mode?: FileSearchMode;
   ignoreCase?: boolean;
+  sheet?: string;
   cursor?: string;
   limit?: number;
 }
@@ -63,9 +75,11 @@ export interface FileSearchMatch {
   location: string;
   text: string;
   line?: number;
+  sheet?: string;
 }
 
 export interface FileReadRequest {
+  sheet?: string;
   cursor?: string;
   maxBytes?: number;
 }
@@ -75,6 +89,8 @@ export interface FileReadChunk {
   text: string;
   start?: number;
   end?: number;
+  row?: number;
+  sheet?: string;
 }
 
 export type FileReadResult = FileResultEnvelope<FileReadChunk>;
@@ -103,6 +119,7 @@ export interface GenericFileMetric {
 
 export interface FileQueryRequest {
   operation: "profile" | "count" | "distinct" | "stats" | "filter" | "aggregate" | "top";
+  sheet?: string;
   column?: string;
   columns?: string[];
   filters?: GenericFileFilter[];
